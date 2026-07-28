@@ -52,7 +52,7 @@
 ### 1. 克隆并安装依赖
 
 ```bash
-git clone <repo-url>
+git clone git@github.com:brofea/laigequnhao.git
 cd laigequnhao
 pnpm install
 ```
@@ -70,17 +70,18 @@ cp .dev.vars.example .dev.vars
 ### 3. 创建本地 D1 数据库并运行迁移
 
 ```bash
-# 首次运行需要创建 D1 数据库（若已创建可跳过）
+# 首次运行需要创建 D1 数据库
 npx wrangler d1 create laigequnhao-db
 
 # 运行数据库迁移
 pnpm db:migrate:local
 ```
 
-> **注意**：如果提示 `table already exists`，说明迁移已执行过，可忽略。如需从头开始，运行：
-> ```bash
-> pnpm db:reset:local && pnpm db:migrate:local
-> ```
+如需从头开始，运行：
+
+```bash
+pnpm db:reset:local && pnpm db:migrate:local
+```
 
 ### 4. 启动开发服务器
 
