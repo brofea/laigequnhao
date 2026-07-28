@@ -33,16 +33,18 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string, schema: z.ZodType<T>) => request(path, schema, { method: "GET" }),
+  get: <T>(path: string, schema: z.ZodType<T>, extraHeaders?: Record<string, string>) =>
+    request(path, schema, { method: "GET", headers: extraHeaders }),
 
-  post: <T>(path: string, schema: z.ZodType<T>, body: unknown) =>
-    request(path, schema, { method: "POST", body: JSON.stringify(body) }),
+  post: <T>(path: string, schema: z.ZodType<T>, body: unknown, extraHeaders?: Record<string, string>) =>
+    request(path, schema, { method: "POST", body: JSON.stringify(body), headers: extraHeaders }),
 
-  put: <T>(path: string, schema: z.ZodType<T>, body?: unknown) =>
-    request(path, schema, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(path: string, schema: z.ZodType<T>, body?: unknown, extraHeaders?: Record<string, string>) =>
+    request(path, schema, { method: "PUT", body: body ? JSON.stringify(body) : undefined, headers: extraHeaders }),
 
-  delete: <T>(path: string, schema: z.ZodType<T>) => request(path, schema, { method: "DELETE" }),
+  delete: <T>(path: string, schema: z.ZodType<T>, extraHeaders?: Record<string, string>) =>
+    request(path, schema, { method: "DELETE", headers: extraHeaders }),
 
-  patch: <T>(path: string, schema: z.ZodType<T>, body: unknown) =>
-    request(path, schema, { method: "PATCH", body: JSON.stringify(body) }),
+  patch: <T>(path: string, schema: z.ZodType<T>, body: unknown, extraHeaders?: Record<string, string>) =>
+    request(path, schema, { method: "PATCH", body: JSON.stringify(body), headers: extraHeaders }),
 };

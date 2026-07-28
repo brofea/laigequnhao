@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import type { AdminGroupDto } from "@shared/contracts/group";
 
 const props = defineProps<{
@@ -13,12 +13,30 @@ const emit = defineEmits<{
 }>();
 
 const form = ref({
-  title: props.group?.title ?? "",
-  description: props.group?.description ?? "",
-  kind: props.group?.kind ?? "interest",
-  platform: props.group?.platform ?? "",
-  status: props.group?.status ?? "pending",
+  title: "",
+  description: "",
+  kind: "interest" as string,
+  platform: "",
+  status: "pending" as string,
 });
+
+// 打开弹窗或切换编辑目标时，重置表单
+watch(
+  () => [props.open, props.group] as const,
+  ([isOpen, g]) => {
+    if (isOpen && g) {
+      form.value = {
+        title: g.title,
+        description: g.description,
+        kind: g.kind,
+        platform: g.platform,
+        status: g.status,
+      };
+    } else if (isOpen && !g) {
+      form.value = { title: "", description: "", kind: "interest", platform: "", status: "pending" };
+    }
+  },
+);
 
 function handleSave() {
   emit("save", { ...form.value, version: props.group?.version });

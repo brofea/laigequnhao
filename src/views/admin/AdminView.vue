@@ -56,7 +56,7 @@ async function handleSave(data: Record<string, unknown>) {
   if (editingGroup.value) {
     await updateGroup(editingGroup.value.id, data);
   }
-  void fetchGroups();
+  // updateGroup 已经就地更新了 groups 数组中的对应项，不需要 re-fetch
 }
 
 // Trash dialog

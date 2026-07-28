@@ -151,7 +151,7 @@ adminGroupsRoute.delete("/:id", csrfProtection(), async (c) => {
   const repo = createGroupRepository(c.env.DB);
   await repo.softDelete(id);
 
-  return c.json(apiSuccessSchema(adminGroupDtoSchema).parse({ ok: true, data: { id }, requestId }));
+  return c.json({ ok: true, data: { id }, requestId });
 });
 
 /** POST /admin/groups/:id/restore — 恢复 */
@@ -203,5 +203,5 @@ adminGroupsRoute.delete("/trash/groups/:id", csrfProtection(), async (c) => {
   const repo = createGroupRepository(c.env.DB);
   await repo.permanentDelete(id);
 
-  return c.json(apiSuccessSchema(adminGroupDtoSchema).parse({ ok: true, data: { id }, requestId }));
+  return c.json({ ok: true, data: { id }, requestId });
 });
