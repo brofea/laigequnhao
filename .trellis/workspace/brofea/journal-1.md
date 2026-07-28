@@ -303,3 +303,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 实现群组聚合编辑：原子 CRUD + 响应式抽屉
+
+**Date**: 2026-07-28
+**Task**: 实现群组聚合编辑：原子 CRUD + 响应式抽屉
+**Branch**: `main`
+
+### Summary
+
+1. 新增 GroupCreateSchema/GroupUpdateSchema 判别联合写入契约；2. 重写 Repository create()/update() 支持 D1 batch + version 乐观锁；3. AdminGroupDrawer 响应式右侧抽屉替代旧模态框，含 dirty guard、焦点管理、Tag/JoinMethod 编辑器；4. useAdminGroupDraft 草稿状态管理；5. useAdminGroups 新增 createGroup()，修复列表回写；6. +14 契约测试，60/60 pass；lint/typecheck/build 全绿。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f8a2fa6` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
