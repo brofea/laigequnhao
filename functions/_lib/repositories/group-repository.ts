@@ -287,6 +287,170 @@ export function createGroupRepository(db: D1Database) {
 
       return (await this.getById(id))!;
     },
+
+    // ─── 管理员方法 ────────────────────────────────────────
+
+    /** 管理员全量列表 */
+    async listAll(params: {
+      status?: string;
+      deleted?: boolean;
+      cursor?: string;
+      limit: number;
+    }): Promise<{ items: AdminGroupDto[]; total: number }> {
+      const { status, deleted, limit } = params;
+      const conditions: string[] = [];
+      const bindings: unknown[] = [];
+
+      if (status) {
+        conditions.push("g.status = ?");
+        bindings.push(status);
+      }
+      if (deleted) {
+        conditions.push("g.deleted_at IS NOT NULL");
+      } else {
+        conditions.push("g.deleted_at IS NULL");
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const countResult = await db
+        .prepare(`SELECT COUNT(*) as total FROM groups g ${whereClause}`)
+        .bind(...bindings)
+        .first<{ total: number }>();
+      const total = countResult?.total ?? 0;
+
+      if (total === 0) return { items: [], total: 0 };
+
+      const rows = await db
+        .prepare(`SELECT g.* FROM groups g ${whereClause} ORDER BY g.created_at DESC LIMIT ?`)
+        .bind(...bindings, limit)
+        .all<GroupRow>();
+
+      const groupIds = rows.results.map((r) => r.id);
+      if (groupIds.length === 0) return { items: [], total };
+
+      const [tagsResult, methodsResult, detailsResult] = await Promise.all([
+        db
+          .prepare(
+            `SELECT group_id, tag, sort_order FROM group_tags WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
+          )
+          .bind(...groupIds)
+          .all<{ group_id: string } & TagRow>(),
+        db
+          .prepare(
+            `SELECT group_id, type, value, sort_order FROM join_methods WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
+          )
+          .bind(...groupIds)
+          .all<{ group_id: string } & JoinMethodRow>(),
+        db
+          .prepare(
+            `SELECT group_id, contact, notes FROM submission_details WHERE group_id IN (${groupIds.map(() => "?").join(",")})`,
+          )
+          .bind(...groupIds)
+          .all<{ group_id: string } & SubmissionDetailRow>(),
+      ]);
+
+      const tagsByGroup = new Map<string, TagRow[]>();
+      for (const r of tagsResult.results) {
+        if (!tagsByGroup.has(r.group_id)) tagsByGroup.set(r.group_id, []);
+        tagsByGroup.get(r.group_id)!.push({ tag: r.tag, sort_order: r.sort_order });
+      }
+      const methodsByGroup = new Map<string, JoinMethodRow[]>();
+      for (const r of methodsResult.results) {
+        if (!methodsByGroup.has(r.group_id)) methodsByGroup.set(r.group_id, []);
+        methodsByGroup
+          .get(r.group_id)!
+          .push({ type: r.type, value: r.value, sort_order: r.sort_order });
+      }
+      const detailsByGroup = new Map<string, SubmissionDetailRow>();
+      for (const r of detailsResult.results) {
+        detailsByGroup.set(r.group_id, { contact: r.contact, notes: r.notes });
+      }
+
+      const items = rows.results.map((g) =>
+        mapToAdminDto(
+          g,
+          tagsByGroup.get(g.id) ?? [],
+          methodsByGroup.get(g.id) ?? [],
+          detailsByGroup.get(g.id) ?? null,
+        ),
+      );
+
+      return { items, total };
+    },
+
+    /** 乐观锁更新 */
+    async update(id: string, fields: Record<string, unknown>): Promise<AdminGroupDto> {
+      const now = new Date().toISOString();
+      const setters: string[] = ["updated_at = ?"];
+      const bindings: unknown[] = [now];
+
+      const allowedFields = [
+        "title",
+        "description",
+        "kind",
+        "platform",
+        "status",
+        "logo_url",
+        "logo_width",
+        "logo_height",
+        "logo_byte_length",
+      ];
+      for (const key of allowedFields) {
+        if (key in fields) {
+          setters.push(`${key} = ?`);
+          bindings.push(fields[key]);
+        }
+      }
+
+      // 版本递增
+      setters.push("version = version + 1");
+      bindings.push(id);
+
+      await db
+        .prepare(`UPDATE groups SET ${setters.join(", ")} WHERE id = ?`)
+        .bind(...bindings)
+        .run();
+
+      return (await this.getById(id))!;
+    },
+
+    /** 软删除 */
+    async softDelete(id: string): Promise<void> {
+      const now = new Date().toISOString();
+      await db
+        .prepare(
+          "UPDATE groups SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+        )
+        .bind(now, now, id)
+        .run();
+    },
+
+    /** 恢复 */
+    async restore(id: string): Promise<AdminGroupDto | null> {
+      const now = new Date().toISOString();
+      const result = await db
+        .prepare(
+          "UPDATE groups SET deleted_at = NULL, updated_at = ? WHERE id = ? AND deleted_at IS NOT NULL",
+        )
+        .bind(now, id)
+        .run();
+
+      if (!result.success) return null;
+      return this.getById(id);
+    },
+
+    /** 永久删除 */
+    async permanentDelete(id: string): Promise<void> {
+      const batch: D1PreparedStatement[] = [
+        db.prepare("DELETE FROM likes WHERE group_id = ?").bind(id),
+        db.prepare("DELETE FROM group_tags WHERE group_id = ?").bind(id),
+        db.prepare("DELETE FROM join_methods WHERE group_id = ?").bind(id),
+        db.prepare("DELETE FROM submission_details WHERE group_id = ?").bind(id),
+        db.prepare("DELETE FROM groups WHERE id = ?").bind(id),
+      ];
+      await db.batch(batch);
+    },
   };
 }
 

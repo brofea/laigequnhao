@@ -1,0 +1,11 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/api-guidelines.md", "reason": "管理员路由表、认证与请求安全、CSRF token、限流规则"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误码 — AUTH_REQUIRED/AUTH_FAILED/FORBIDDEN/VERSION_CONFLICT/NOT_FOUND"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "D1 不变量 — 软删除 deleted_at、永久清理 purge_state、version 乐观锁"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Functions 目录 — routes/services/repositories 边界"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Vue 组件 — AdminGroupTable/AdminGroupForm 遵循 props/emits/样式/无障碍"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "Composable — useAdminAuth/useAdminGroups 请求生命周期/CSRF token 管理"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "类型安全 — AdminGroupDto 解析、禁止 any/非空断言"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "状态 — 认证状态 composable、不持久化 CSRF token 到 localStorage"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "测试 — auth service 单元测试 + Workers 集成测试 + Vue 组件测试"}
+{"file": ".trellis/spec/guides/index.md", "reason": "思考指南 — 跨层安全思考、代码复用"}

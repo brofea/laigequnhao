@@ -42,4 +42,7 @@ export const api = {
     request(path, schema, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
 
   delete: <T>(path: string, schema: z.ZodType<T>) => request(path, schema, { method: "DELETE" }),
+
+  patch: <T>(path: string, schema: z.ZodType<T>, body: unknown) =>
+    request(path, schema, { method: "PATCH", body: JSON.stringify(body) }),
 };

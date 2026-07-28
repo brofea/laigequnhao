@@ -5,10 +5,13 @@ import { errorHandler } from "./middleware/error-handler";
 import { groupsRoute } from "./routes/groups";
 import { submissionsRoute } from "./routes/submissions";
 import { likesRoute } from "./routes/likes";
+import { adminSessionRoute } from "./routes/admin-session";
+import { adminGroupsRoute } from "./routes/admin-groups";
 import type { Env } from "./env";
 
 type Variables = {
   requestId: string;
+  sessionId: string;
 };
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -34,5 +37,7 @@ app.get("/api/v1/health", (c) => {
 app.route("/api/v1/groups", groupsRoute);
 app.route("/api/v1/submissions", submissionsRoute);
 app.route("/api/v1/groups", likesRoute);
+app.route("/api/v1/admin", adminSessionRoute);
+app.route("/api/v1/admin", adminGroupsRoute);
 
 export default app;
