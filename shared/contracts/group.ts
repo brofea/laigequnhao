@@ -65,10 +65,7 @@ const adminJoinMethodSchema = publicJoinMethodSchema.extend({
   /** asset 字节数 */
   assetByteLength: z.number().int().positive().nullable().optional(),
   /** asset 生命周期状态 */
-  assetStatus: z
-    .enum(["staged", "ready", "delete_pending", "delete_failed"])
-    .nullable()
-    .optional(),
+  assetStatus: z.enum(["staged", "ready", "delete_pending", "delete_failed"]).nullable().optional(),
 });
 
 export const adminGroupDtoSchema = publicGroupDtoSchema.extend({
@@ -153,3 +150,116 @@ export const adminGroupListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type AdminGroupListResponse = z.infer<typeof adminGroupListResponseSchema>;
+
+// ─── 管理员创建/更新输入 ─────────────────────────────────
+
+/** 加群方式输入（判别联合） */
+export const joinMethodInputSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("group_number"),
+    value: z.string().min(1, "群号不能为空"),
+    sortOrder: z.number().int().min(0),
+  }),
+  z.object({
+    type: z.literal("url"),
+    url: z.string().url().startsWith("https://", "链接必须以 https:// 开头"),
+    sortOrder: z.number().int().min(0),
+  }),
+  z.object({
+    type: z.literal("qr_code"),
+    assetId: z.string().uuid("无效的二维码资源 ID"),
+    sortOrder: z.number().int().min(0),
+  }),
+]);
+export type JoinMethodInput = z.infer<typeof joinMethodInputSchema>;
+
+/** 群组创建输入 */
+export const groupCreateSchema = z
+  .object({
+    title: z.string().min(1, "标题不能为空").max(200),
+    description: z.string().max(2000).optional().default(""),
+    kind: groupKindSchema,
+    platform: z.string().min(1, "平台不能为空"),
+    status: groupStatusSchema,
+    tags: z
+      .array(z.string().transform((s) => s.trim()))
+      .max(5, "最多 5 个标签")
+      .optional()
+      .default([]),
+    joinMethods: z.array(joinMethodInputSchema).min(1, "至少需要一个加群方式"),
+    auditNotes: z.string().max(2000).nullable().optional().default(null),
+  })
+  .refine(
+    (data) => {
+      // 去空、大小写不敏感去重
+      const seen = new Set<string>();
+      for (const tag of data.tags) {
+        if (!tag) continue;
+        if (seen.has(tag.toLowerCase())) return false;
+        seen.add(tag.toLowerCase());
+      }
+      return true;
+    },
+    { message: "标签存在重复（大小写不敏感）", path: ["tags"] },
+  )
+  .refine(
+    (data) => {
+      // joinMethods 不能有完全重复的项
+      const keys = data.joinMethods.map((m) =>
+        m.type === "group_number"
+          ? `${m.type}:${m.value}`
+          : m.type === "url"
+            ? `${m.type}:${m.url}`
+            : `${m.type}:${m.assetId}`,
+      );
+      return new Set(keys).size === keys.length;
+    },
+    { message: "加群方式存在完全重复的项", path: ["joinMethods"] },
+  );
+export type GroupCreateInput = z.infer<typeof groupCreateSchema>;
+
+/** 群组更新输入 */
+export const groupUpdateSchema = z
+  .object({
+    title: z.string().min(1, "标题不能为空").max(200).optional(),
+    description: z.string().max(2000).optional(),
+    kind: groupKindSchema.optional(),
+    platform: z.string().min(1, "平台不能为空").optional(),
+    status: groupStatusSchema.optional(),
+    tags: z
+      .array(z.string().transform((s) => s.trim()))
+      .max(5, "最多 5 个标签")
+      .optional(),
+    joinMethods: z.array(joinMethodInputSchema).min(1, "至少需要一个加群方式").optional(),
+    auditNotes: z.string().max(2000).nullable().optional(),
+    /** 乐观锁版本号（必传） */
+    version: z.number().int().nonnegative("版本号必须是非负整数"),
+  })
+  .refine(
+    (data) => {
+      if (!data.tags) return true;
+      const seen = new Set<string>();
+      for (const tag of data.tags) {
+        if (!tag) continue;
+        if (seen.has(tag.toLowerCase())) return false;
+        seen.add(tag.toLowerCase());
+      }
+      return true;
+    },
+    { message: "标签存在重复（大小写不敏感）", path: ["tags"] },
+  )
+  .refine(
+    (data) => {
+      if (!data.joinMethods) return true;
+      const keys = data.joinMethods.map((m) =>
+        m.type === "group_number"
+          ? `${m.type}:${m.value}`
+          : m.type === "url"
+            ? `${m.type}:${m.url}`
+            : `${m.type}:${m.assetId}`,
+      );
+      return new Set(keys).size === keys.length;
+    },
+    { message: "加群方式存在完全重复的项", path: ["joinMethods"] },
+  );
+export type GroupUpdateInput = z.infer<typeof groupUpdateSchema>;

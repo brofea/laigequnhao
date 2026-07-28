@@ -5,7 +5,7 @@ import { useRouter } from "vue-router";
 import { useAdminAuth } from "@/features/admin/composables/useAdminAuth";
 import { useAdminGroups } from "@/features/admin/composables/useAdminGroups";
 import AdminGroupTable from "@/features/admin/components/AdminGroupTable.vue";
-import AdminGroupForm from "@/features/admin/components/AdminGroupForm.vue";
+import AdminGroupDrawer from "@/features/admin/components/AdminGroupDrawer.vue";
 import AdminStatusFilters from "@/features/admin/components/AdminStatusFilters.vue";
 import AdminGroupSearch from "@/features/admin/components/AdminGroupSearch.vue";
 import TrashConfirmDialog from "@/features/admin/components/TrashConfirmDialog.vue";
@@ -27,23 +27,55 @@ onMounted(async () => {
   void admin.fetchGroups();
 });
 
-// Form state
-const formOpen = ref(false);
+// Drawer state
+const drawerOpen = ref(false);
 const editingGroup = ref<AdminGroupDto | null>(null);
+const saving = ref(false);
+const drawerFieldErrors = ref<Record<string, string[]> | undefined>(undefined);
+const drawerGlobalError = ref("");
 
 function openCreate() {
+  if (admin.deleted.value) return;
   editingGroup.value = null;
-  formOpen.value = true;
+  drawerFieldErrors.value = undefined;
+  drawerGlobalError.value = "";
+  drawerOpen.value = true;
 }
 
 function openEdit(group: AdminGroupDto) {
+  if (admin.deleted.value) return;
   editingGroup.value = group;
-  formOpen.value = true;
+  drawerFieldErrors.value = undefined;
+  drawerGlobalError.value = "";
+  drawerOpen.value = true;
 }
 
 async function handleSave(data: Record<string, unknown>) {
-  if (editingGroup.value) {
-    await admin.updateGroup(editingGroup.value.id, data);
+  saving.value = true;
+  drawerFieldErrors.value = undefined;
+  drawerGlobalError.value = "";
+  try {
+    if (editingGroup.value) {
+      const result = await admin.updateGroup(editingGroup.value.id, data);
+      if (result.ok) {
+        drawerOpen.value = false;
+        editingGroup.value = null;
+      } else if (result.versionConflict) {
+        drawerGlobalError.value = "群聊已被其他会话修改，请刷新列表后重新编辑。";
+      } else if (result.fieldErrors) {
+        drawerFieldErrors.value = result.fieldErrors;
+      }
+    } else {
+      const result = await admin.createGroup(data);
+      if (result.ok) {
+        drawerOpen.value = false;
+        editingGroup.value = null;
+      } else if (result.fieldErrors) {
+        drawerFieldErrors.value = result.fieldErrors;
+      }
+    }
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -170,11 +202,14 @@ async function handleLogout() {
           @load-more="void admin.loadMore()"
         />
 
-        <!-- 编辑表单 -->
-        <AdminGroupForm
+        <!-- 编辑抽屉 -->
+        <AdminGroupDrawer
           :group="editingGroup"
-          :open="formOpen"
-          @update:open="formOpen = $event"
+          :open="drawerOpen"
+          :saving="saving"
+          :server-field-errors="drawerFieldErrors"
+          :server-error="drawerGlobalError"
+          @update:open="drawerOpen = $event"
           @save="handleSave"
         />
 

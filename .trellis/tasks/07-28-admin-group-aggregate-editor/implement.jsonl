@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/api-guidelines.md", "reason": "实现专用管理员创建/更新契约、CSRF 和版本冲突。"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "实现群组、标签、加群方式和私有详情的原子 D1 写入。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "实现字段、状态、版本和依赖错误的稳定映射。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "实现响应式抽屉、动态编辑器、焦点和 dirty guard。"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "拆分列表与草稿状态，管理保存和 staged asset 生命周期。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "实现判别联合 join method、专用输入 schema 和穷尽分支。"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "覆盖管理员表单、原子 CRUD、软删除/恢复和 E2E。"}

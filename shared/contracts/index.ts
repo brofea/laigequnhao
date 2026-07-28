@@ -8,8 +8,20 @@ export {
 } from "./api";
 export type { ApiSuccess, ApiError, ApiResponse, ErrorCode as ErrorCodeType } from "./api";
 
-export { publicGroupDtoSchema, adminGroupDtoSchema } from "./group";
-export type { PublicGroupDto, AdminGroupDto } from "./group";
+export {
+  publicGroupDtoSchema,
+  adminGroupDtoSchema,
+  groupCreateSchema,
+  groupUpdateSchema,
+  joinMethodInputSchema,
+} from "./group";
+export type {
+  PublicGroupDto,
+  AdminGroupDto,
+  GroupCreateInput,
+  GroupUpdateInput,
+  JoinMethodInput,
+} from "./group";
 
 export { submissionRequestSchema, submissionReceiptSchema } from "./submission";
 export type { SubmissionRequest, SubmissionReceipt } from "./submission";
@@ -35,9 +47,4 @@ export {
   LOGO_MAX_BYTES,
   QR_CODE_MAX_BYTES,
 } from "./asset";
-export type {
-  AssetUploadMeta,
-  AssetInfo,
-  AdminAssetDto,
-  PublicAssetMeta,
-} from "./asset";
+export type { AssetUploadMeta, AssetInfo, AdminAssetDto, PublicAssetMeta } from "./asset";

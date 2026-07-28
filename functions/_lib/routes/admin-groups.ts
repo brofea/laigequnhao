@@ -3,6 +3,8 @@ import {
   adminGroupDtoSchema,
   adminGroupListQuerySchema,
   adminGroupListResponseSchema,
+  groupCreateSchema,
+  groupUpdateSchema,
 } from "@shared/contracts/group";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createGroupRepository } from "../repositories/group-repository";
@@ -10,6 +12,7 @@ import { createAssetService } from "../services/asset-service";
 import { createR2Adapter } from "../adapters/r2-adapter";
 import { authRequired, csrfProtection } from "../middleware/auth";
 import type { Env } from "../env";
+import type { SiteConfig } from "@shared/domain";
 
 type Vars = { requestId: string; sessionId: string };
 export const adminGroupsRoute = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -71,14 +74,15 @@ adminGroupsRoute.get("/", async (c) => {
 adminGroupsRoute.post("/", csrfProtection(), async (c) => {
   const requestId = c.get("requestId");
   const body = await c.req.json<unknown>();
-  const parsed = adminGroupDtoSchema.partial().safeParse(body);
+
+  const parsed = groupCreateSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
         error: {
           code: "VALIDATION_FAILED",
-          message: "Invalid data.",
+          message: "请求数据无效。",
           fieldErrors: parsed.error.flatten().fieldErrors,
         },
         requestId,
@@ -87,15 +91,121 @@ adminGroupsRoute.post("/", csrfProtection(), async (c) => {
     );
   }
 
+  const input = parsed.data;
+
+  // 平台校验
+  const config = (await import("../../../site.config")).default as SiteConfig;
+  const platformConfig = config.platforms.find((p) => p.id === input.platform);
+  if (!platformConfig) {
+    return c.json(
+      apiErrorSchema.parse({
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "无效的平台。",
+          fieldErrors: { platform: [`平台 "${input.platform}" 不在配置中`] },
+        },
+        requestId,
+      }),
+      400,
+    );
+  }
+
+  // 平台兼容性检查
+  const incompatibleMethods: number[] = [];
+  for (let i = 0; i < input.joinMethods.length; i++) {
+    const m = input.joinMethods[i]!;
+    if (!platformConfig.allowedJoinMethods.includes(m.type)) {
+      incompatibleMethods.push(i);
+    }
+  }
+  if (incompatibleMethods.length > 0) {
+    return c.json(
+      apiErrorSchema.parse({
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: `平台 "${platformConfig.name}" 不支持所选加群方式。`,
+          fieldErrors: {
+            joinMethods: incompatibleMethods.map(
+              (i) =>
+                `第 ${i + 1} 个加群方式类型 "${input.joinMethods[i]!.type}" 不兼容平台 "${platformConfig.name}"`,
+            ),
+          },
+        },
+        requestId,
+      }),
+      400,
+    );
+  }
+
   const repo = createGroupRepository(c.env.DB);
+
+  // 收集需要 adopt 的 staged asset（qr_code 引用）
+  const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+  const qrAssetIds = input.joinMethods
+    .filter((m) => m.type === "qr_code")
+    .map((m) => (m as { assetId: string }).assetId);
+
+  // 验证所有 asset 存在且为 staged
+  for (const assetId of qrAssetIds) {
+    const asset = await assetService.getById(assetId);
+    if (!asset) {
+      return c.json(
+        apiErrorSchema.parse({
+          ok: false,
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "二维码资源不存在。",
+            fieldErrors: { joinMethods: [`Asset "${assetId}" 不存在`] },
+          },
+          requestId,
+        }),
+        400,
+      );
+    }
+    if (asset.purpose !== "qr_code") {
+      return c.json(
+        apiErrorSchema.parse({
+          ok: false,
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "资源用途不正确。",
+            fieldErrors: { joinMethods: [`Asset "${assetId}" 用途不是 qr_code`] },
+          },
+          requestId,
+        }),
+        400,
+      );
+    }
+  }
+
+  // 创建群聊（含 asset adoption）
   const result = await repo.create({
-    title: parsed.data.title ?? "",
-    kind: parsed.data.kind ?? "interest",
-    platform: parsed.data.platform ?? "",
-    tags: parsed.data.tags ?? [],
-    joinMethods:
-      parsed.data.joinMethods?.map((m) => ({ type: m.type, value: m.value ?? "" })) ?? [],
+    title: input.title,
+    description: input.description,
+    kind: input.kind,
+    platform: input.platform,
+    status: input.status,
+    tags: input.tags,
+    joinMethods: input.joinMethods.map((m, i) => ({
+      type: m.type,
+      value: m.type === "group_number" ? m.value : m.type === "url" ? m.url : undefined,
+      assetId: m.type === "qr_code" ? m.assetId : undefined,
+      sortOrder: i,
+    })),
+    auditNotes: input.auditNotes,
+    logoR2Key: null,
   });
+
+  // Adopt staged assets after successful creation
+  for (const assetId of qrAssetIds) {
+    try {
+      await assetService.adopt(assetId);
+    } catch {
+      // Asset adoption failure after create: asset remains staged, cleanup will handle it
+    }
+  }
 
   return c.json(
     apiSuccessSchema(adminGroupDtoSchema).parse({ ok: true, data: result, requestId }),
@@ -111,42 +221,170 @@ adminGroupsRoute.patch("/:id", csrfProtection(), async (c) => {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
-        error: { code: "NOT_FOUND", message: "Group not found." },
+        error: { code: "NOT_FOUND", message: "群聊不存在。" },
         requestId,
       }),
       404,
     );
   }
 
-  const body = await c.req.json<{ version?: number } & Record<string, unknown>>();
-  const version = typeof body.version === "number" ? body.version : undefined;
+  const body = await c.req.json<unknown>();
+  const parsed = groupUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      apiErrorSchema.parse({
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "请求数据无效。",
+          fieldErrors: parsed.error.flatten().fieldErrors,
+        },
+        requestId,
+      }),
+      400,
+    );
+  }
 
+  const input = parsed.data;
   const repo = createGroupRepository(c.env.DB);
-  const existing = await repo.getById(id);
-  if (!existing) {
-    return c.json(
-      apiErrorSchema.parse({
-        ok: false,
-        error: { code: "NOT_FOUND", message: "Group not found." },
-        requestId,
-      }),
-      404,
-    );
+
+  // 平台校验（如果提供了 platform）
+  if (input.platform) {
+    const config = (await import("../../../site.config")).default as SiteConfig;
+    const platformConfig = config.platforms.find((p) => p.id === input.platform);
+    if (!platformConfig) {
+      return c.json(
+        apiErrorSchema.parse({
+          ok: false,
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "无效的平台。",
+            fieldErrors: { platform: [`平台 "${input.platform}" 不在配置中`] },
+          },
+          requestId,
+        }),
+        400,
+      );
+    }
+
+    // 平台兼容检查（如果提供了 joinMethods）
+    if (input.joinMethods) {
+      const incompatibleMethods: number[] = [];
+      for (let i = 0; i < input.joinMethods.length; i++) {
+        const m = input.joinMethods[i]!;
+        if (!platformConfig.allowedJoinMethods.includes(m.type)) {
+          incompatibleMethods.push(i);
+        }
+      }
+      if (incompatibleMethods.length > 0) {
+        return c.json(
+          apiErrorSchema.parse({
+            ok: false,
+            error: {
+              code: "VALIDATION_FAILED",
+              message: `平台 "${platformConfig.name}" 不支持所选加群方式。`,
+              fieldErrors: {
+                joinMethods: incompatibleMethods.map(
+                  (i) =>
+                    `第 ${i + 1} 个加群方式类型 "${input.joinMethods![i]!.type}" 不兼容平台 "${platformConfig.name}"`,
+                ),
+              },
+            },
+            requestId,
+          }),
+          400,
+        );
+      }
+    }
   }
 
-  if (version !== undefined && version !== existing.version) {
+  // 收集 qr_code asset IDs（用于 adopt）
+  const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+  const qrAssetIds = input.joinMethods
+    ? input.joinMethods
+        .filter((m) => m.type === "qr_code")
+        .map((m) => (m as { assetId: string }).assetId)
+    : [];
+
+  // 验证所有 asset 存在
+  for (const assetId of qrAssetIds) {
+    const asset = await assetService.getById(assetId);
+    if (!asset) {
+      return c.json(
+        apiErrorSchema.parse({
+          ok: false,
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "二维码资源不存在。",
+            fieldErrors: { joinMethods: [`Asset "${assetId}" 不存在`] },
+          },
+          requestId,
+        }),
+        400,
+      );
+    }
+    if (asset.purpose !== "qr_code") {
+      return c.json(
+        apiErrorSchema.parse({
+          ok: false,
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "资源用途不正确。",
+            fieldErrors: { joinMethods: [`Asset "${assetId}" 用途不是 qr_code`] },
+          },
+          requestId,
+        }),
+        400,
+      );
+    }
+  }
+
+  const result = await repo.update(id, {
+    title: input.title,
+    description: input.description,
+    kind: input.kind,
+    platform: input.platform,
+    status: input.status,
+    tags: input.tags,
+    joinMethods: input.joinMethods?.map((m, i) => ({
+      type: m.type,
+      value: m.type === "group_number" ? m.value : m.type === "url" ? m.url : undefined,
+      assetId: m.type === "qr_code" ? m.assetId : undefined,
+      sortOrder: i,
+    })),
+    auditNotes: input.auditNotes,
+    version: input.version,
+    adoptAssetIds: qrAssetIds.length > 0 ? qrAssetIds : undefined,
+  });
+
+  if (result.versionConflict) {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
-        error: { code: "VERSION_CONFLICT", message: "Group was modified by another session." },
+        error: {
+          code: "VERSION_CONFLICT",
+          message: "群聊已被其他会话修改，请刷新后重试。",
+        },
         requestId,
       }),
       409,
     );
   }
 
-  const result = await repo.update(id, body as Record<string, unknown>);
-  return c.json(apiSuccessSchema(adminGroupDtoSchema).parse({ ok: true, data: result, requestId }));
+  if (!result.dto) {
+    return c.json(
+      apiErrorSchema.parse({
+        ok: false,
+        error: { code: "NOT_FOUND", message: "群聊不存在。" },
+        requestId,
+      }),
+      404,
+    );
+  }
+
+  return c.json(
+    apiSuccessSchema(adminGroupDtoSchema).parse({ ok: true, data: result.dto, requestId }),
+  );
 });
 
 /** DELETE /admin/groups/:id — 软删除 */

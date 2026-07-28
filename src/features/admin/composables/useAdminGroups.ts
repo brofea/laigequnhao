@@ -189,28 +189,84 @@ export function useAdminGroups(csrfToken: () => string) {
 
   // ── CRUD operations (in-place update, no full refresh) ──
 
-  async function updateGroup(id: string, fields: Record<string, unknown>): Promise<boolean> {
-    const result = await api.patch(
-      `/admin/${id}`,
-      adminGroupDtoSchema,
-      fields,
-      csrfHeaders(),
-    );
+  async function createGroup(
+    fields: Record<string, unknown>,
+  ): Promise<{ ok: boolean; dto?: AdminGroupDto; fieldErrors?: Record<string, string[]> }> {
+    const result = await api.post(`/admin`, adminGroupDtoSchema, fields, csrfHeaders());
     if (result.ok) {
-      const idx = groups.value.findIndex((g) => g.id === id);
-      if (idx !== -1) groups.value[idx] = result.data;
-      return true;
+      // 如果当前筛选匹配，插入到列表
+      const dto = result.data;
+      if (matchesCurrentFilter(dto)) {
+        groups.value = [dto, ...groups.value];
+        total.value += 1;
+      }
+      return { ok: true, dto };
     }
     error.value = result.error.message;
-    return false;
+    return {
+      ok: false,
+      fieldErrors: (result.error as Record<string, unknown>).fieldErrors as
+        Record<string, string[]> | undefined,
+    };
+  }
+
+  async function updateGroup(
+    id: string,
+    fields: Record<string, unknown>,
+  ): Promise<{
+    ok: boolean;
+    dto?: AdminGroupDto;
+    versionConflict?: boolean;
+    fieldErrors?: Record<string, string[]>;
+  }> {
+    const result = await api.patch(`/admin/${id}`, adminGroupDtoSchema, fields, csrfHeaders());
+    if (result.ok) {
+      // 用权威 DTO 替换列表中的项
+      const dto = result.data;
+      if (matchesCurrentFilter(dto)) {
+        const idx = groups.value.findIndex((g) => g.id === id);
+        if (idx !== -1) {
+          groups.value[idx] = dto;
+        } else {
+          groups.value = [dto, ...groups.value];
+          total.value += 1;
+        }
+      } else {
+        // 不匹配当前筛选，移除
+        groups.value = groups.value.filter((g) => g.id !== id);
+        total.value -= 1;
+      }
+      return { ok: true, dto };
+    }
+
+    const errCode = (result.error as Record<string, unknown>).code as string | undefined;
+    if (errCode === "VERSION_CONFLICT") {
+      return { ok: false, versionConflict: true };
+    }
+
+    error.value = result.error.message;
+    return {
+      ok: false,
+      fieldErrors: (result.error as Record<string, unknown>).fieldErrors as
+        Record<string, string[]> | undefined,
+    };
+  }
+
+  /** 检查 DTO 是否匹配当前筛选条件 */
+  function matchesCurrentFilter(dto: AdminGroupDto): boolean {
+    // 回收站模式
+    if (deleted.value) {
+      return dto.deletedAt !== null;
+    }
+    // 正常模式：检查状态是否在筛选列表中
+    if (!statuses.value.includes(dto.status)) return false;
+    // 非软删除
+    if (dto.deletedAt !== null) return false;
+    return true;
   }
 
   async function softDelete(id: string): Promise<boolean> {
-    const result = await api.delete(
-      `/admin/${id}`,
-      deleteResponseSchema,
-      csrfHeaders(),
-    );
+    const result = await api.delete(`/admin/${id}`, deleteResponseSchema, csrfHeaders());
     if (result.ok) {
       groups.value = groups.value.filter((g) => g.id !== id);
       return true;
@@ -219,12 +275,7 @@ export function useAdminGroups(csrfToken: () => string) {
   }
 
   async function restore(id: string): Promise<boolean> {
-    const result = await api.post(
-      `/admin/${id}/restore`,
-      adminGroupDtoSchema,
-      {},
-      csrfHeaders(),
-    );
+    const result = await api.post(`/admin/${id}/restore`, adminGroupDtoSchema, {}, csrfHeaders());
     if (result.ok) {
       const idx = groups.value.findIndex((g) => g.id === id);
       if (idx !== -1) {
@@ -279,6 +330,7 @@ export function useAdminGroups(csrfToken: () => string) {
     loadMore,
     fetchGroups,
     // CRUD
+    createGroup,
     updateGroup,
     softDelete,
     restore,

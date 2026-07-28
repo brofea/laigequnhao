@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查表单错误、抽屉无障碍、响应式和 E2E 门禁。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查事务、鉴权、CSRF、私有字段和 Worker 测试。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 DTO/命令分离、判别联合和动态项 key。"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "检查完整 CRUD、版本冲突和跨层数据往返。"}

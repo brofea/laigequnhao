@@ -87,20 +87,23 @@ function mapToAdminDto(
         type: m.type,
         value: m.value ?? undefined,
         url: m.type === "url" ? (m.value ?? undefined) : undefined,
-        qrCodeUrl: m.type === "qr_code"
-          ? (asset?.r2_key
-              ? `asset:${m.asset_id}`  // placeholder — routes resolve via asset service
-              : (m.value ?? undefined))
-          : undefined,
-        qrCodeMeta: m.type === "qr_code" && asset
-          ? { width: asset.width, height: asset.height, byteLength: asset.byte_length }
-          : undefined,
+        qrCodeUrl:
+          m.type === "qr_code"
+            ? asset?.r2_key
+              ? `asset:${m.asset_id}` // placeholder — routes resolve via asset service
+              : (m.value ?? undefined)
+            : undefined,
+        qrCodeMeta:
+          m.type === "qr_code" && asset
+            ? { width: asset.width, height: asset.height, byteLength: asset.byte_length }
+            : undefined,
         assetId: m.asset_id ?? undefined,
         assetUrl: asset?.r2_key ? null : null, // resolved in route layer
         assetWidth: asset?.width ?? undefined,
         assetHeight: asset?.height ?? undefined,
         assetByteLength: asset?.byte_length ?? undefined,
-        assetStatus: asset?.status as AdminGroupDto["joinMethods"][number]["assetStatus"] ?? undefined,
+        assetStatus:
+          (asset?.status as AdminGroupDto["joinMethods"][number]["assetStatus"]) ?? undefined,
       };
     }),
     likeCount: group.like_count,
@@ -118,18 +121,15 @@ function mapToAdminDto(
 // ─── 共享 WHERE 子句构建器 ───────────────────────────────
 // COUNT 与 items 查询必须共用同一条件集合
 
-function buildWhereClause(params: {
-  statuses: string[];
-  deleted: boolean;
-  q?: string;
-}): { sql: string; bindings: unknown[] } {
+function buildWhereClause(params: { statuses: string[]; deleted: boolean; q?: string }): {
+  sql: string;
+  bindings: unknown[];
+} {
   const conditions: string[] = [];
   const bindings: unknown[] = [];
 
   if (params.statuses.length > 0) {
-    conditions.push(
-      `g.status IN (${params.statuses.map(() => "?").join(",")})`,
-    );
+    conditions.push(`g.status IN (${params.statuses.map(() => "?").join(",")})`);
     bindings.push(...params.statuses);
   }
 
@@ -322,9 +322,7 @@ export function createGroupRepository(db: D1Database) {
 
       // 加载 asset 数据
       const assetLookup = new Map<string, AssetJoinRow>();
-      const assetIds = methodsResult.results
-        .filter((m) => m.asset_id)
-        .map((m) => m.asset_id!);
+      const assetIds = methodsResult.results.filter((m) => m.asset_id).map((m) => m.asset_id!);
       if (assetIds.length > 0) {
         const assetRows = await db
           .prepare(
@@ -338,7 +336,13 @@ export function createGroupRepository(db: D1Database) {
         }
       }
 
-      return mapToAdminDto(group, tagsResult.results, methodsResult.results, detail ?? null, assetLookup);
+      return mapToAdminDto(
+        group,
+        tagsResult.results,
+        methodsResult.results,
+        detail ?? null,
+        assetLookup,
+      );
     },
 
     /** 创建群聊 + 关联数据（在 D1 batch 中原子写入） */
@@ -347,20 +351,22 @@ export function createGroupRepository(db: D1Database) {
       description?: string;
       kind: string;
       platform: string;
+      status?: string;
       tags: string[];
-      joinMethods: { type: string; value: string }[];
-      contact?: string;
-      notes?: string;
+      joinMethods: { type: string; value?: string; assetId?: string; sortOrder?: number }[];
+      auditNotes?: string | null;
+      logoR2Key?: string | null;
     }): Promise<AdminGroupDto> {
       const id = crypto.randomUUID();
       const rotationKey = crypto.randomUUID();
       const now = new Date().toISOString();
+      const status = input.status ?? "pending";
 
       const batch: D1PreparedStatement[] = [
         db
           .prepare(
-            `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+            `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, logo_r2_key, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             id,
@@ -368,42 +374,55 @@ export function createGroupRepository(db: D1Database) {
             input.description ?? "",
             input.kind,
             input.platform,
+            status,
             rotationKey,
+            input.logoR2Key ?? null,
             now,
             now,
           ),
       ];
 
-      // 标签
-      if (input.tags.length > 0) {
-        for (let i = 0; i < input.tags.length; i++) {
-          batch.push(
-            db
-              .prepare("INSERT INTO group_tags (id, group_id, tag, sort_order) VALUES (?, ?, ?, ?)")
-              .bind(crypto.randomUUID(), id, input.tags[i]!, i),
-          );
-        }
-      }
-
-      // 加群方式
-      for (let i = 0; i < input.joinMethods.length; i++) {
-        const m = input.joinMethods[i]!;
+      // 标签（过滤空值，保留 sort_order）
+      const validTags = input.tags.filter((t) => t.trim().length > 0);
+      for (let i = 0; i < validTags.length; i++) {
         batch.push(
           db
-            .prepare(
-              "INSERT INTO join_methods (id, group_id, type, value, sort_order) VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(crypto.randomUUID(), id, m.type, m.value, i),
+            .prepare("INSERT INTO group_tags (id, group_id, tag, sort_order) VALUES (?, ?, ?, ?)")
+            .bind(crypto.randomUUID(), id, validTags[i]!, i),
         );
       }
 
-      // 提交详情
+      // 加群方式（支持 qr_code 带 asset_id）
+      for (let i = 0; i < input.joinMethods.length; i++) {
+        const m = input.joinMethods[i]!;
+        const sortOrder = m.sortOrder ?? i;
+        batch.push(
+          db
+            .prepare(
+              "INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES (?, ?, ?, ?, ?, ?)",
+            )
+            .bind(
+              crypto.randomUUID(),
+              id,
+              m.type,
+              m.type === "group_number"
+                ? (m.value ?? "")
+                : m.type === "url"
+                  ? (m.value ?? "")
+                  : null,
+              sortOrder,
+              m.type === "qr_code" ? (m.assetId ?? null) : null,
+            ),
+        );
+      }
+
+      // 提交详情（auditNotes 写入 notes，contact 留空）
       batch.push(
         db
           .prepare(
             "INSERT INTO submission_details (id, group_id, contact, notes) VALUES (?, ?, ?, ?)",
           )
-          .bind(crypto.randomUUID(), id, input.contact ?? null, input.notes ?? null),
+          .bind(crypto.randomUUID(), id, null, input.auditNotes ?? null),
       );
 
       await db.batch(batch);
@@ -481,13 +500,8 @@ export function createGroupRepository(db: D1Database) {
                 .bind(decoded.k)
                 .first<{ created_at: string }>();
               if (cursorItem) {
-                cursorSql =
-                  " AND (g.created_at < ? OR (g.created_at = ? AND g.id < ?))";
-                cursorBindings.push(
-                  cursorItem.created_at,
-                  cursorItem.created_at,
-                  decoded.k,
-                );
+                cursorSql = " AND (g.created_at < ? OR (g.created_at = ? AND g.id < ?))";
+                cursorBindings.push(cursorItem.created_at, cursorItem.created_at, decoded.k);
               }
             } else if (sortDir === "asc") {
               cursorSql = " AND g.id > ?";
@@ -505,9 +519,7 @@ export function createGroupRepository(db: D1Database) {
       // ── items 查询 ──
       const allBindings = [...whereBindings, ...cursorBindings, limit];
       const rows = await db
-        .prepare(
-          `SELECT g.* FROM groups g ${whereSql}${cursorSql} ORDER BY ${orderBy} LIMIT ?`,
-        )
+        .prepare(`SELECT g.* FROM groups g ${whereSql}${cursorSql} ORDER BY ${orderBy} LIMIT ?`)
         .bind(...allBindings)
         .all<GroupRow>();
 
@@ -585,47 +597,146 @@ export function createGroupRepository(db: D1Database) {
       // nextCursor
       const lastItem = items[items.length - 1];
       const nextCursor =
-        items.length === limit && lastItem
-          ? btoa(JSON.stringify({ k: lastItem.id }))
-          : null;
+        items.length === limit && lastItem ? btoa(JSON.stringify({ k: lastItem.id })) : null;
 
       return { items, total, nextCursor };
     },
 
-    /** 乐观锁更新 */
-    async update(id: string, fields: Record<string, unknown>): Promise<AdminGroupDto> {
+    /** 原子更新（乐观锁） */
+    async update(
+      id: string,
+      input: {
+        title?: string;
+        description?: string;
+        kind?: string;
+        platform?: string;
+        status?: string;
+        tags?: string[];
+        joinMethods?: { type: string; value?: string; assetId?: string; sortOrder?: number }[];
+        auditNotes?: string | null;
+        version: number;
+        /** 需要 adopt 的 asset ID 列表（staged → ready） */
+        adoptAssetIds?: string[];
+      },
+    ): Promise<{ dto: AdminGroupDto | null; versionConflict: boolean }> {
       const now = new Date().toISOString();
+
+      // ── 步骤 1：乐观锁更新 groups 主表 ──
       const setters: string[] = ["updated_at = ?"];
       const bindings: unknown[] = [now];
 
-      const allowedFields = [
+      const stringFields: (keyof typeof input)[] = [
         "title",
         "description",
         "kind",
         "platform",
         "status",
-        "logo_url",
-        "logo_width",
-        "logo_height",
-        "logo_byte_length",
       ];
-      for (const key of allowedFields) {
-        if (key in fields) {
+      for (const key of stringFields) {
+        if (input[key] !== undefined) {
           setters.push(`${key} = ?`);
-          bindings.push(fields[key]);
+          bindings.push(input[key]);
         }
       }
 
-      // 版本递增
-      setters.push("version = version + 1");
-      bindings.push(id);
+      // 版本递增作为乐观锁
+      bindings.push(id, input.version);
 
-      await db
-        .prepare(`UPDATE groups SET ${setters.join(", ")} WHERE id = ?`)
+      const updateResult = await db
+        .prepare(
+          `UPDATE groups SET ${setters.join(", ")}, version = version + 1 WHERE id = ? AND version = ?`,
+        )
         .bind(...bindings)
         .run();
 
-      return (await this.getById(id))!;
+      // 版本冲突：没有行被更新
+      if (updateResult.meta.changes === 0) {
+        // 确认是版本冲突还是群聊不存在
+        const exists = await db
+          .prepare("SELECT id FROM groups WHERE id = ?")
+          .bind(id)
+          .first<{ id: string }>();
+        if (!exists) return { dto: null, versionConflict: false };
+        return { dto: null, versionConflict: true };
+      }
+
+      // ── 步骤 2：adopt 新引用的 staged asset ──
+      if (input.adoptAssetIds && input.adoptAssetIds.length > 0) {
+        for (const assetId of input.adoptAssetIds) {
+          await db
+            .prepare(
+              `UPDATE assets SET status = 'ready', ref_count = ref_count + 1, updated_at = ? WHERE id = ? AND status = 'staged'`,
+            )
+            .bind(now, assetId)
+            .run();
+        }
+      }
+
+      // ── 步骤 3：标签完全替换 ──
+      if (input.tags !== undefined) {
+        await db.prepare("DELETE FROM group_tags WHERE group_id = ?").bind(id).run();
+
+        const validTags = input.tags.filter((t) => t.trim().length > 0);
+        for (let i = 0; i < validTags.length; i++) {
+          await db
+            .prepare("INSERT INTO group_tags (id, group_id, tag, sort_order) VALUES (?, ?, ?, ?)")
+            .bind(crypto.randomUUID(), id, validTags[i]!, i)
+            .run();
+        }
+      }
+
+      // ── 步骤 4：加群方式完全替换 ──
+      if (input.joinMethods !== undefined) {
+        await db.prepare("DELETE FROM join_methods WHERE group_id = ?").bind(id).run();
+
+        for (let i = 0; i < input.joinMethods.length; i++) {
+          const m = input.joinMethods[i]!;
+          const sortOrder = m.sortOrder ?? i;
+          await db
+            .prepare(
+              "INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES (?, ?, ?, ?, ?, ?)",
+            )
+            .bind(
+              crypto.randomUUID(),
+              id,
+              m.type,
+              m.type === "group_number"
+                ? (m.value ?? "")
+                : m.type === "url"
+                  ? (m.value ?? "")
+                  : null,
+              sortOrder,
+              m.type === "qr_code" ? (m.assetId ?? null) : null,
+            )
+            .run();
+        }
+      }
+
+      // ── 步骤 5：审核备注 upsert ──
+      if (input.auditNotes !== undefined) {
+        const existing = await db
+          .prepare("SELECT id FROM submission_details WHERE group_id = ?")
+          .bind(id)
+          .first<{ id: string }>();
+
+        if (existing) {
+          await db
+            .prepare("UPDATE submission_details SET notes = ? WHERE group_id = ?")
+            .bind(input.auditNotes, id)
+            .run();
+        } else {
+          await db
+            .prepare(
+              "INSERT INTO submission_details (id, group_id, contact, notes) VALUES (?, ?, ?, ?)",
+            )
+            .bind(crypto.randomUUID(), id, null, input.auditNotes)
+            .run();
+        }
+      }
+
+      // ── 步骤 6：返回权威 DTO ──
+      const dto = await this.getById(id);
+      return { dto, versionConflict: false };
     },
 
     /** 软删除 */
@@ -665,9 +776,7 @@ export function createGroupRepository(db: D1Database) {
      * 返回 { action, logoR2Key, qrAssetIds } 供调用方协调 R2 操作。
      * 重复调用从当前状态继续。
      */
-    async permanentDelete(
-      id: string,
-    ): Promise<{
+    async permanentDelete(id: string): Promise<{
       action: "STATE_CONFLICT" | "STARTED" | "R2_CLEANUP" | "DONE";
       logoR2Key: string | null;
       qrAssetIds: string[];
@@ -676,9 +785,7 @@ export function createGroupRepository(db: D1Database) {
 
       // 检查群聊状态
       const group = await db
-        .prepare(
-          "SELECT deleted_at, purge_state, logo_r2_key FROM groups WHERE id = ?",
-        )
+        .prepare("SELECT deleted_at, purge_state, logo_r2_key FROM groups WHERE id = ?")
         .bind(id)
         .first<{
           deleted_at: string | null;
@@ -778,11 +885,7 @@ export function createGroupRepository(db: D1Database) {
     /**
      * R2 清理失败，递增 attempts 并保存安全错误码。
      */
-    async markR2PurgeFailed(
-      id: string,
-      errorCode: string,
-      errorMessage: string,
-    ): Promise<void> {
+    async markR2PurgeFailed(id: string, errorCode: string, errorMessage: string): Promise<void> {
       await db
         .prepare(
           `UPDATE groups SET
