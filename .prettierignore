@@ -1,0 +1,8 @@
+.agents/
+.claude/
+.codegraph/
+.codex/
+.opencode/
+.trellis/
+pnpm-lock.yaml
+AGENTS.md
