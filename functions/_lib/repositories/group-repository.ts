@@ -1,0 +1,293 @@
+import type { AdminGroupDto } from "@shared/contracts/group";
+
+// ─── D1 行类型 ──────────────────────────────────────────
+
+interface GroupRow {
+  id: string;
+  title: string;
+  description: string;
+  kind: string;
+  platform: string;
+  status: string;
+  rotation_key: string;
+  like_count: number;
+  version: number;
+  logo_r2_key: string | null;
+  logo_url: string | null;
+  logo_width: number | null;
+  logo_height: number | null;
+  logo_byte_length: number | null;
+  deleted_at: string | null;
+  purge_state: string | null;
+  purge_started_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TagRow {
+  tag: string;
+  sort_order: number;
+}
+
+interface JoinMethodRow {
+  type: "group_number" | "url" | "qr_code";
+  value: string | null;
+  sort_order: number;
+}
+
+interface SubmissionDetailRow {
+  contact: string | null;
+  notes: string | null;
+}
+
+// ─── 行 → DTO 映射 ──────────────────────────────────────
+
+function mapToAdminDto(
+  group: GroupRow,
+  tags: TagRow[],
+  methods: JoinMethodRow[],
+  detail: SubmissionDetailRow | null,
+): AdminGroupDto {
+  const hasLogo = group.logo_url !== null;
+  return {
+    id: group.id,
+    title: group.title,
+    description: group.description,
+    kind: group.kind as AdminGroupDto["kind"],
+    platform: group.platform,
+    tags: tags.map((t) => t.tag),
+    status: group.status as AdminGroupDto["status"],
+    logoUrl: group.logo_url,
+    logoMeta: hasLogo
+      ? {
+          width: group.logo_width!,
+          height: group.logo_height!,
+          byteLength: group.logo_byte_length!,
+        }
+      : null,
+    joinMethods: methods.map((m) => ({
+      type: m.type,
+      value: m.value ?? undefined,
+      url: m.type === "url" ? (m.value ?? undefined) : undefined,
+      qrCodeUrl: m.type === "qr_code" ? (m.value ?? undefined) : undefined,
+    })),
+    likeCount: group.like_count,
+    createdAt: group.created_at,
+    updatedAt: group.updated_at,
+    submissionContact: detail?.contact ?? null,
+    auditNotes: detail?.notes ?? null,
+    deletedAt: group.deleted_at,
+    deleteProgress: group.purge_state as AdminGroupDto["deleteProgress"],
+    logoR2Key: group.logo_r2_key,
+    version: group.version,
+  };
+}
+
+// ─── 查询 ────────────────────────────────────────────────
+
+export function createGroupRepository(db: D1Database) {
+  return {
+    /** 分页列出已发布/已下架的群聊 */
+    async listPublished(params: {
+      q?: string;
+      cursor?: string | null;
+      limit: number;
+      rotationOrdinal: number;
+    }): Promise<{ items: AdminGroupDto[]; total: number }> {
+      const { q, limit, rotationOrdinal } = params;
+
+      let whereClause = `g.status IN ('published', 'delisted') AND g.deleted_at IS NULL`;
+      const bindings: unknown[] = [];
+
+      if (q) {
+        const pattern = `%${q}%`;
+        whereClause += ` AND (g.title LIKE ? OR g.id IN (SELECT DISTINCT gt.group_id FROM group_tags gt WHERE gt.tag LIKE ?))`;
+        bindings.push(pattern, pattern);
+      }
+
+      // 总数
+      const countResult = await db
+        .prepare(`SELECT COUNT(*) as total FROM groups g WHERE ${whereClause}`)
+        .bind(...bindings)
+        .first<{ total: number }>();
+      const total = countResult?.total ?? 0;
+
+      if (total === 0) {
+        return { items: [], total: 0 };
+      }
+
+      // 主查询：排序后循环位移分页
+      const offset = rotationOrdinal % total;
+      const mainBindings = [...bindings, limit, offset];
+
+      const rows = await db
+        .prepare(
+          `SELECT g.* FROM groups g
+           WHERE ${whereClause}
+           ORDER BY g.rotation_key ASC, g.id ASC
+           LIMIT ? OFFSET ?`,
+        )
+        .bind(...mainBindings)
+        .all<GroupRow>();
+
+      // 批量加载标签、加群方式、提交详情
+      const groupIds = rows.results.map((r) => r.id);
+      if (groupIds.length === 0) return { items: [], total };
+
+      const [tagsResult, methodsResult, detailsResult] = await Promise.all([
+        db
+          .prepare(
+            `SELECT group_id, tag, sort_order FROM group_tags WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
+          )
+          .bind(...groupIds)
+          .all<{ group_id: string } & TagRow>(),
+        db
+          .prepare(
+            `SELECT group_id, type, value, sort_order FROM join_methods WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
+          )
+          .bind(...groupIds)
+          .all<{ group_id: string } & JoinMethodRow>(),
+        db
+          .prepare(
+            `SELECT group_id, contact, notes FROM submission_details WHERE group_id IN (${groupIds.map(() => "?").join(",")})`,
+          )
+          .bind(...groupIds)
+          .all<{ group_id: string } & SubmissionDetailRow>(),
+      ]);
+
+      // 按 group_id 分组
+      const tagsByGroup = new Map<string, TagRow[]>();
+      for (const r of tagsResult.results) {
+        if (!tagsByGroup.has(r.group_id)) tagsByGroup.set(r.group_id, []);
+        tagsByGroup.get(r.group_id)!.push({ tag: r.tag, sort_order: r.sort_order });
+      }
+
+      const methodsByGroup = new Map<string, JoinMethodRow[]>();
+      for (const r of methodsResult.results) {
+        if (!methodsByGroup.has(r.group_id)) methodsByGroup.set(r.group_id, []);
+        methodsByGroup
+          .get(r.group_id)!
+          .push({ type: r.type, value: r.value, sort_order: r.sort_order });
+      }
+
+      const detailsByGroup = new Map<string, SubmissionDetailRow>();
+      for (const r of detailsResult.results) {
+        detailsByGroup.set(r.group_id, { contact: r.contact, notes: r.notes });
+      }
+
+      const items = rows.results.map((g) =>
+        mapToAdminDto(
+          g,
+          tagsByGroup.get(g.id) ?? [],
+          methodsByGroup.get(g.id) ?? [],
+          detailsByGroup.get(g.id) ?? null,
+        ),
+      );
+
+      return { items, total };
+    },
+
+    /** 按 ID 查询单个群聊 */
+    async getById(id: string): Promise<AdminGroupDto | null> {
+      const group = await db
+        .prepare("SELECT * FROM groups WHERE id = ?")
+        .bind(id)
+        .first<GroupRow>();
+
+      if (!group) return null;
+
+      const [tagsResult, methodsResult, detail] = await Promise.all([
+        db
+          .prepare(
+            "SELECT tag, sort_order FROM group_tags WHERE group_id = ? ORDER BY sort_order ASC",
+          )
+          .bind(id)
+          .all<TagRow>(),
+        db
+          .prepare(
+            "SELECT type, value, sort_order FROM join_methods WHERE group_id = ? ORDER BY sort_order ASC",
+          )
+          .bind(id)
+          .all<JoinMethodRow>(),
+        db
+          .prepare("SELECT contact, notes FROM submission_details WHERE group_id = ?")
+          .bind(id)
+          .first<SubmissionDetailRow>(),
+      ]);
+
+      return mapToAdminDto(group, tagsResult.results, methodsResult.results, detail ?? null);
+    },
+
+    /** 创建群聊 + 关联数据（在 D1 batch 中原子写入） */
+    async create(input: {
+      title: string;
+      description?: string;
+      kind: string;
+      platform: string;
+      tags: string[];
+      joinMethods: { type: string; value: string }[];
+      contact?: string;
+      notes?: string;
+    }): Promise<AdminGroupDto> {
+      const id = crypto.randomUUID();
+      const rotationKey = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      const batch: D1PreparedStatement[] = [
+        db
+          .prepare(
+            `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+          )
+          .bind(
+            id,
+            input.title,
+            input.description ?? "",
+            input.kind,
+            input.platform,
+            rotationKey,
+            now,
+            now,
+          ),
+      ];
+
+      // 标签
+      if (input.tags.length > 0) {
+        for (let i = 0; i < input.tags.length; i++) {
+          batch.push(
+            db
+              .prepare("INSERT INTO group_tags (id, group_id, tag, sort_order) VALUES (?, ?, ?, ?)")
+              .bind(crypto.randomUUID(), id, input.tags[i]!, i),
+          );
+        }
+      }
+
+      // 加群方式
+      for (let i = 0; i < input.joinMethods.length; i++) {
+        const m = input.joinMethods[i]!;
+        batch.push(
+          db
+            .prepare(
+              "INSERT INTO join_methods (id, group_id, type, value, sort_order) VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(crypto.randomUUID(), id, m.type, m.value, i),
+        );
+      }
+
+      // 提交详情
+      batch.push(
+        db
+          .prepare(
+            "INSERT INTO submission_details (id, group_id, contact, notes) VALUES (?, ?, ?, ?)",
+          )
+          .bind(crypto.randomUUID(), id, input.contact ?? null, input.notes ?? null),
+      );
+
+      await db.batch(batch);
+
+      return (await this.getById(id))!;
+    },
+  };
+}
+
+export type GroupRepository = ReturnType<typeof createGroupRepository>;

@@ -1,15 +1,21 @@
-import { defineWorkersConfig } from "@cloudflare/vitest-pool-workers/config";
+import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-export default defineWorkersConfig({
-  test: {
-    poolOptions: {
-      workers: {
-        wrangler: { configPath: "./wrangler.jsonc" },
-        isolatedStorage: true,
-        singleWorker: false,
-        miniflare: {},
-      },
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      "@shared": resolve(__dirname, "shared"),
     },
-    include: ["functions/**/*.{test,spec}.{ts,tsx}"],
+  },
+  test: {
+    include: ["tests/workers/**/*.{test,spec}.{ts,tsx}"],
+    pool: "forks",
+    sequence: {
+      concurrent: false,
+    },
+    testTimeout: 15000,
   },
 });

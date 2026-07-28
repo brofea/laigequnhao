@@ -18,6 +18,7 @@ export default tseslint.config(
       ".codegraph",
       "eslint.config.mjs",
       "postcss.config.js",
+      "tests/workers",
     ],
   },
   js.configs.recommended,

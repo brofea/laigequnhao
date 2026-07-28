@@ -12,6 +12,10 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "baseUrl": "..",
+    "paths": {
+      "@shared/*": ["./shared/*"]
+    },
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["_lib/**/*.ts", "api/**/*.ts"]

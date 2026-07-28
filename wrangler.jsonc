@@ -7,4 +7,40 @@
   "observability": {
     "enabled": true,
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "laigequnhao-db",
+      "database_id": "local-dev",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "laigequnhao-assets",
+    },
+  ],
+  "vars": {
+    "SKIP_TURNSTILE": "true",
+  },
+  "env": {
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "laigequnhao-preview",
+          "database_id": "preview",
+        },
+      ],
+    },
+    "production": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "laigequnhao-prod",
+          "database_id": "production",
+        },
+      ],
+    },
+  },
 }
