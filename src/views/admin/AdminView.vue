@@ -7,6 +7,7 @@ import { useAdminGroups } from "@/features/admin/composables/useAdminGroups";
 import AdminGroupTable from "@/features/admin/components/AdminGroupTable.vue";
 import AdminGroupForm from "@/features/admin/components/AdminGroupForm.vue";
 import TrashConfirmDialog from "@/features/admin/components/TrashConfirmDialog.vue";
+import AdminDashboard from "@/features/admin/components/AdminDashboard.vue";
 import type { AdminGroupDto } from "@shared/contracts/group";
 
 const router = useRouter();
@@ -77,6 +78,8 @@ async function handlePermanentDelete() {
   trashGroup.value = null;
 }
 
+const activeTab = ref<"groups" | "dashboard">("groups");
+
 async function handleLogout() {
   await doLogout();
   void router.push("/admin/login");
@@ -89,6 +92,26 @@ async function handleLogout() {
       <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
         <h1 class="text-xl font-bold text-gray-900">管理后台</h1>
         <div class="flex items-center gap-4">
+          <button
+            class="rounded px-3 py-1.5 text-sm"
+            :class="
+              activeTab === 'groups' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'
+            "
+            @click="activeTab = 'groups'"
+          >
+            群聊管理
+          </button>
+          <button
+            class="rounded px-3 py-1.5 text-sm"
+            :class="
+              activeTab === 'dashboard'
+                ? 'bg-brand-primary text-white'
+                : 'bg-gray-100 text-gray-600'
+            "
+            @click="activeTab = 'dashboard'"
+          >
+            运行数据
+          </button>
           <span v-if="authLoading" class="text-sm text-gray-400">加载中...</span>
           <button
             v-else
@@ -102,66 +125,72 @@ async function handleLogout() {
     </header>
 
     <div class="mx-auto max-w-6xl px-4 py-6">
-      <!-- 工具栏 -->
-      <div class="mb-4 flex flex-wrap items-center gap-3">
-        <select v-model="statusFilter" class="rounded border px-3 py-1.5 text-sm">
-          <option value="">全部状态</option>
-          <option value="pending">待审核</option>
-          <option value="published">已发布</option>
-          <option value="rejected">已拒绝</option>
-          <option value="delisted">已下架</option>
-        </select>
+      <!-- 仪表盘 Tab -->
+      <AdminDashboard v-if="activeTab === 'dashboard'" />
 
-        <label class="flex items-center gap-1.5 text-sm">
-          <input v-model="deletedFilter" type="checkbox" class="rounded" />
-          回收站
-        </label>
+      <!-- 群聊管理 Tab -->
+      <template v-if="activeTab === 'groups'">
+        <!-- 工具栏 -->
+        <div class="mb-4 flex flex-wrap items-center gap-3">
+          <select v-model="statusFilter" class="rounded border px-3 py-1.5 text-sm">
+            <option value="">全部状态</option>
+            <option value="pending">待审核</option>
+            <option value="published">已发布</option>
+            <option value="rejected">已拒绝</option>
+            <option value="delisted">已下架</option>
+          </select>
 
-        <button
-          v-if="!deletedFilter"
-          class="ml-auto rounded bg-brand-primary px-4 py-1.5 text-sm text-white"
-          @click="openCreate"
-        >
-          新建群聊
-        </button>
-      </div>
+          <label class="flex items-center gap-1.5 text-sm">
+            <input v-model="deletedFilter" type="checkbox" class="rounded" />
+            回收站
+          </label>
 
-      <p v-if="groupsError" class="mb-4 text-sm text-red-500">{{ groupsError }}</p>
+          <button
+            v-if="!deletedFilter"
+            class="ml-auto rounded bg-brand-primary px-4 py-1.5 text-sm text-white"
+            @click="openCreate"
+          >
+            新建群聊
+          </button>
+        </div>
 
-      <!-- 群聊表格 -->
-      <AdminGroupTable
-        :groups="groups"
-        :loading="groupsLoading"
-        :deleted-filter="deletedFilter"
-        @edit="openEdit"
-        @soft-delete="
-          (id: string) => {
-            void softDelete(id);
-          }
-        "
-        @restore="
-          (id: string) => {
-            void restore(id);
-          }
-        "
-        @permanent-delete="(id: string) => confirmPermanentDelete(id)"
-      />
+        <p v-if="groupsError" class="mb-4 text-sm text-red-500">{{ groupsError }}</p>
 
-      <!-- 编辑表单 -->
-      <AdminGroupForm
-        :group="editingGroup"
-        :open="formOpen"
-        @update:open="formOpen = $event"
-        @save="handleSave"
-      />
+        <!-- 群聊表格 -->
+        <AdminGroupTable
+          :groups="groups"
+          :loading="groupsLoading"
+          :deleted-filter="deletedFilter"
+          @edit="openEdit"
+          @soft-delete="
+            (id: string) => {
+              void softDelete(id);
+            }
+          "
+          @restore="
+            (id: string) => {
+              void restore(id);
+            }
+          "
+          @permanent-delete="(id: string) => confirmPermanentDelete(id)"
+        />
 
-      <!-- 永久删除确认 -->
-      <TrashConfirmDialog
-        :open="trashOpen"
-        :group-title="trashGroup?.title ?? ''"
-        @confirm="handlePermanentDelete"
-        @cancel="trashOpen = false"
-      />
+        <!-- 编辑表单 -->
+        <AdminGroupForm
+          :group="editingGroup"
+          :open="formOpen"
+          @update:open="formOpen = $event"
+          @save="handleSave"
+        />
+
+        <!-- 永久删除确认 -->
+        <TrashConfirmDialog
+          :open="trashOpen"
+          :group-title="trashGroup?.title ?? ''"
+          @confirm="handlePermanentDelete"
+          @cancel="trashOpen = false"
+        />
+      </template>
     </div>
   </main>
 </template>

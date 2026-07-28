@@ -1,0 +1,7 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/api-guidelines.md", "reason": "管理员路由 — /admin/assets /admin/health /admin/dashboard"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误码 — 上传验证/DEPENDENCY_UNAVAILABLE"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "assets 表 + D1 聚合查询"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "ImageUploader/Dashboard 组件规范"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "useImageProcessor/useDashboard composable 规范"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "测试 — Canvas 单元测试 + Workers 集成测试"}

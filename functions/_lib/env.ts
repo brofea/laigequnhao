@@ -16,4 +16,6 @@ export interface Env {
   SKIP_TURNSTILE?: string;
   /** 本地开发用固定 pepper（测试确定性 hash） */
   DEV_LIKE_PEPPER?: string;
+  /** Cloudflare Analytics 只读 Token */
+  ANALYTICS_TOKEN?: string;
 }

@@ -7,6 +7,10 @@ import { submissionsRoute } from "./routes/submissions";
 import { likesRoute } from "./routes/likes";
 import { adminSessionRoute } from "./routes/admin-session";
 import { adminGroupsRoute } from "./routes/admin-groups";
+import { adminAssetsRoute } from "./routes/admin-assets";
+import { adminHealthRoute } from "./routes/admin-health";
+import { adminDashboardRoute } from "./routes/admin-dashboard";
+import { adminAnalyticsRoute } from "./routes/admin-analytics";
 import type { Env } from "./env";
 
 type Variables = {
@@ -39,5 +43,9 @@ app.route("/api/v1/submissions", submissionsRoute);
 app.route("/api/v1/groups", likesRoute);
 app.route("/api/v1/admin", adminSessionRoute);
 app.route("/api/v1/admin", adminGroupsRoute);
+app.route("/api/v1/admin", adminAssetsRoute);
+app.route("/api/v1/admin", adminHealthRoute);
+app.route("/api/v1/admin", adminDashboardRoute);
+app.route("/api/v1/admin", adminAnalyticsRoute);
 
 export default app;
