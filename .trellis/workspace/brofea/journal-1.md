@@ -71,3 +71,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 建立 contracts-and-config 领域契约
+
+**Date**: 2026-07-28
+**Task**: 建立 contracts-and-config 领域契约
+**Branch**: `main`
+
+### Summary
+
+定义 shared/domain/ 领域类型（GroupKind/GroupStatus/JoinMethod/PlatformConfig/SiteConfig）并绑定 Zod schema。创建 shared/contracts/ 12 种 API 契约文件：响应信封 discriminatedUnion、12 种标准错误码、PublicGroupDto 与 AdminGroupDto 严格隔离、访客提交/点赞/认证/分页/健康检查/资源上传 schema。site.config.ts 接入 Zod 校验。21 个 Vitest 测试全部通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `462da57` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
