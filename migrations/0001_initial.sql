@@ -3,7 +3,7 @@
 -- 所有主键使用 crypto.randomUUID() TEXT
 
 -- ─── 群聊主表 ────────────────────────────────────────────
-CREATE TABLE groups (
+CREATE TABLE IF NOT EXISTS groups (
   id              TEXT PRIMARY KEY,
   title           TEXT NOT NULL,
   description     TEXT NOT NULL DEFAULT '',
@@ -25,13 +25,13 @@ CREATE TABLE groups (
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-CREATE INDEX idx_groups_status ON groups (status);
-CREATE INDEX idx_groups_rotation ON groups (rotation_key, id);
-CREATE INDEX idx_groups_deleted ON groups (deleted_at);
-CREATE INDEX idx_groups_purge ON groups (purge_state);
+CREATE INDEX IF NOT EXISTS idx_groups_status ON groups (status);
+CREATE INDEX IF NOT EXISTS idx_groups_rotation ON groups (rotation_key, id);
+CREATE INDEX IF NOT EXISTS idx_groups_deleted ON groups (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_groups_purge ON groups (purge_state);
 
 -- ─── 群聊标签 ────────────────────────────────────────────
-CREATE TABLE group_tags (
+CREATE TABLE IF NOT EXISTS group_tags (
   id         TEXT PRIMARY KEY,
   group_id   TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   tag        TEXT NOT NULL COLLATE NOCASE,
@@ -39,11 +39,11 @@ CREATE TABLE group_tags (
   UNIQUE(group_id, tag)
 );
 
-CREATE INDEX idx_group_tags_group ON group_tags (group_id);
-CREATE INDEX idx_group_tags_tag ON group_tags (tag);
+CREATE INDEX IF NOT EXISTS idx_group_tags_group ON group_tags (group_id);
+CREATE INDEX IF NOT EXISTS idx_group_tags_tag ON group_tags (tag);
 
 -- ─── 加群方式 ────────────────────────────────────────────
-CREATE TABLE join_methods (
+CREATE TABLE IF NOT EXISTS join_methods (
   id         TEXT PRIMARY KEY,
   group_id   TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   type       TEXT NOT NULL CHECK (type IN ('group_number', 'url', 'qr_code')),
@@ -51,10 +51,10 @@ CREATE TABLE join_methods (
   sort_order INTEGER NOT NULL
 );
 
-CREATE INDEX idx_join_methods_group ON join_methods (group_id);
+CREATE INDEX IF NOT EXISTS idx_join_methods_group ON join_methods (group_id);
 
 -- ─── 提交详情（仅管理员可见） ─────────────────────────────
-CREATE TABLE submission_details (
+CREATE TABLE IF NOT EXISTS submission_details (
   id       TEXT PRIMARY KEY,
   group_id TEXT NOT NULL UNIQUE REFERENCES groups(id) ON DELETE CASCADE,
   contact  TEXT,
@@ -62,16 +62,16 @@ CREATE TABLE submission_details (
 );
 
 -- ─── 点赞 ────────────────────────────────────────────────
-CREATE TABLE likes (
+CREATE TABLE IF NOT EXISTS likes (
   group_id   TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   voter_hash TEXT NOT NULL,
   UNIQUE(group_id, voter_hash)
 );
 
-CREATE INDEX idx_likes_group ON likes (group_id);
+CREATE INDEX IF NOT EXISTS idx_likes_group ON likes (group_id);
 
 -- ─── 频率限制 ────────────────────────────────────────────
-CREATE TABLE rate_limits (
+CREATE TABLE IF NOT EXISTS rate_limits (
   key          TEXT PRIMARY KEY,
   count        INTEGER NOT NULL,
   window_start INTEGER NOT NULL,

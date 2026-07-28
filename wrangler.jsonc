@@ -1,76 +1,88 @@
 {
-  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
-  "name": "laigequnhao",
-  "pages_build_output_dir": "./dist",
-  "compatibility_date": "2025-01-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": {
-    "enabled": true,
-  },
-
-  // ─── Secrets ────────────────────────────────────────────────
-  // 以下 secrets 必须通过 wrangler secret put <KEY> 设置：
-  //   ADMIN_PASSWORD     — 管理员共享密码
-  //   SESSION_SECRET     — 会话签名密钥
-  //   LIKE_PEPPER        — 匿名设备 ID 哈希 pepper
-  //   TURNSTILE_SECRET_KEY — Cloudflare Turnstile 密钥
-  //   R2_PUBLIC_BASE_URL — R2 自定义域名（如 https://assets.example.com）
-  //
-  // 本地开发使用 .dev.vars（已 .gitignore），模板见 .dev.vars.example
-
-  // ─── D1 数据库 ────────────────────────────────────────────
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "laigequnhao-db",
-      "database_id": "local-dev",
-    },
-  ],
-
-  // ─── R2 存储桶 ────────────────────────────────────────────
-  "r2_buckets": [
-    {
-      "binding": "R2",
-      "bucket_name": "laigequnhao-assets",
-    },
-  ],
-
-  // ─── 本地环境变量 ─────────────────────────────────────────
-  "vars": {
-    "SKIP_TURNSTILE": "true",
-  },
-
-  // ─── 环境隔离 ──────────────────────────────────────────────
-  "env": {
-    "preview": {
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "laigequnhao-preview",
-          "database_id": "preview",
-        },
-      ],
-      "r2_buckets": [
-        {
-          "binding": "R2",
-          "bucket_name": "laigequnhao-assets-preview",
-        },
-      ],
-    },
-    "production": {
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "laigequnhao-prod",
-          "database_id": "production",
-        },
-      ],
-      "r2_buckets": [
-        {
-          "binding": "R2",
-          "bucket_name": "laigequnhao-assets-prod",
-        },
-      ],
-    },
-  },
+	"$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+	"name": "laigequnhao",
+	"compatibility_date": "2025-01-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true,
+	},
+	"build": {
+		"alias": {
+			"@shared": "./shared"
+		}
+	},
+	// ─── Secrets ────────────────────────────────────────────────
+	// 以下 secrets 必须通过 wrangler secret put <KEY> 设置：
+	//   ADMIN_PASSWORD     — 管理员共享密码
+	//   SESSION_SECRET     — 会话签名密钥
+	//   LIKE_PEPPER        — 匿名设备 ID 哈希 pepper
+	//   TURNSTILE_SECRET_KEY — Cloudflare Turnstile 密钥
+	//   R2_PUBLIC_BASE_URL — R2 自定义域名（如 https://assets.example.com）
+	//
+	// 本地开发使用 .dev.vars（已 .gitignore），模板见 .dev.vars.example
+	// ─── D1 数据库 ────────────────────────────────────────────
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "laigequnhao-db",
+			"database_id": "local-dev",
+		},
+		{
+			"binding": "lgqh_dev",
+			"database_name": "laigequnhao-db",
+			"database_id": "85353e93-ed4e-46c4-ac10-fc1e39ea9c18"
+		},
+		{
+			"binding": "lgqh_test",
+			"database_name": "lgqh-test",
+			"database_id": "98f266f6-fdf8-48ea-8f4a-1ce921741cd7",
+			"remote": true
+		},
+	],
+	// ─── R2 存储桶 ────────────────────────────────────────────
+	"r2_buckets": [
+		{
+			"binding": "R2",
+			"bucket_name": "laigequnhao-assets",
+		},
+	],
+	// ─── 本地环境变量 ─────────────────────────────────────────
+	"vars": {
+		"SKIP_TURNSTILE": "true",
+	},
+	// ─── 环境隔离 ──────────────────────────────────────────────
+	"env": {
+		"preview": {
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "laigequnhao-preview",
+					"database_id": "preview",
+				},
+			],
+			"r2_buckets": [
+				{
+					"binding": "R2",
+					"bucket_name": "laigequnhao-assets-preview",
+				},
+			],
+		},
+		"production": {
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "laigequnhao-prod",
+					"database_id": "production",
+				},
+			],
+			"r2_buckets": [
+				{
+					"binding": "R2",
+					"bucket_name": "laigequnhao-assets-prod",
+				},
+			],
+		},
+	},
 }

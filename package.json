@@ -16,11 +16,12 @@
     "test:workers": "vitest run --config vitest.workers.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "pages:dev": "wrangler pages dev -- vite dev",
-    "pages:deploy": "wrangler pages deploy",
+    "pages:dev": "wrangler pages dev --proxy 5173 -- vite dev",
+    "pages:deploy": "wrangler pages deploy ./dist",
     "db:migrate:local": "wrangler d1 execute laigequnhao-db --local --file=migrations/0001_initial.sql",
     "db:migrate:preview": "wrangler d1 execute laigequnhao-preview --file=migrations/0001_initial.sql",
     "db:migrate:prod": "wrangler d1 execute laigequnhao-prod --file=migrations/0001_initial.sql",
+    "db:reset:local": "wrangler d1 execute laigequnhao-db --local --command=\"DROP TABLE IF EXISTS rate_limits; DROP TABLE IF EXISTS likes; DROP TABLE IF EXISTS submission_details; DROP TABLE IF EXISTS join_methods; DROP TABLE IF EXISTS group_tags; DROP TABLE IF EXISTS groups;\"",
     "db:seed:local": "wrangler d1 execute laigequnhao-db --local --file=migrations/seed.sql"
   },
   "dependencies": {

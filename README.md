@@ -1,6 +1,6 @@
 # 来个群号
 
-> 群聊发现与导航网站。每个部署实例服务一所高校或一家大型企业。
+为高校或大型企业等团体提供群聊发现导航网站
 
 **一个群号，连接彼此。**
 
@@ -44,7 +44,7 @@
 
 - [Node.js](https://nodejs.org/) >= 22
 - [pnpm](https://pnpm.io/) >= 9 （`corepack enable pnpm`）
-- [Cloudflare 账号](https://dash.cloudflare.com/)（部署时需要）
+- [Cloudflare](https://dash.cloudflare.com/)（部署时）
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)（`npx wrangler`）
 
 ## Quick Start — 本地开发
@@ -70,12 +70,17 @@ cp .dev.vars.example .dev.vars
 ### 3. 创建本地 D1 数据库并运行迁移
 
 ```bash
-# 首次运行需要创建 D1 数据库
+# 首次运行需要创建 D1 数据库（若已创建可跳过）
 npx wrangler d1 create laigequnhao-db
 
 # 运行数据库迁移
 pnpm db:migrate:local
 ```
+
+> **注意**：如果提示 `table already exists`，说明迁移已执行过，可忽略。如需从头开始，运行：
+> ```bash
+> pnpm db:reset:local && pnpm db:migrate:local
+> ```
 
 ### 4. 启动开发服务器
 
@@ -174,8 +179,9 @@ pnpm pages:deploy
 | `pnpm test`             | 运行单元测试 + 组件测试  |
 | `pnpm test:workers`     | 运行 Workers 集成测试    |
 | `pnpm test:e2e`         | 运行 Playwright E2E      |
-| `pnpm db:migrate:local` | 本地 D1 迁移             |
-| `pnpm db:migrate:prod`  | 生产 D1 迁移             |
+| `pnpm db:migrate:local` | 本地 D1 迁移 |
+| `pnpm db:migrate:prod`  | 生产 D1 迁移 |
+| `pnpm db:reset:local`   | 重置本地数据库 |
 | `pnpm pages:dev`        | 启动 Wrangler Pages 开发 |
 | `pnpm pages:deploy`     | 部署到 Cloudflare Pages  |
 

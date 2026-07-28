@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const listQuerySchema = z.object({
   q: z.string().optional(),
-  cursor: z.string().optional(),
+  cursor: z.string().nullable().optional(),
   limit: z.coerce.number().int().min(1).max(60).default(24),
 });
 export type ListQuery = z.infer<typeof listQuerySchema>;
