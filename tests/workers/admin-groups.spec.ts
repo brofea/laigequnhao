@@ -48,11 +48,12 @@ describe("Admin Groups CRUD", () => {
   });
 
   it("lists groups with auth", async () => {
-    const response = await apiFetch("GET", "/api/v1/admin/groups?limit=10");
+    const response = await apiFetch("GET", "/api/v1/admin/groups?limit=10&status=pending");
     const json = await response.json();
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(Array.isArray(json.data.items)).toBe(true);
+    expect(typeof json.data.total).toBe("number");
   });
 
   it("creates a new group", async () => {

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查列表 UI、URL 状态、无障碍与 E2E 门禁。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查绑定 SQL、动态排序白名单和 Worker 测试。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 query/排序联合类型与运行时解析。"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "检查搜索、排序、分页和请求乱序覆盖。"}

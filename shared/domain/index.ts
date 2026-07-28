@@ -11,3 +11,5 @@ export {
   featuresConfigSchema,
 } from "./config";
 export type { SiteConfig, ThemeConfig, RotationConfig, FeaturesConfig } from "./config";
+
+export { normalizeSearchQuery } from "./search";

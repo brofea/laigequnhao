@@ -54,7 +54,7 @@ function onCopyNumber(text: string) {
           <input
             v-model="searchQuery"
             type="search"
-            placeholder="搜索群聊标题或标签..."
+            placeholder="搜索标题、简介或标签..."
             class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
             @input="onSearch"
           />

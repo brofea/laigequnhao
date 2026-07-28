@@ -1,6 +1,9 @@
 import { Hono } from "hono";
-import { adminGroupDtoSchema } from "@shared/contracts/group";
-import { listQuerySchema, cursorPageSchema } from "@shared/contracts/pagination";
+import {
+  adminGroupDtoSchema,
+  adminGroupListQuerySchema,
+  adminGroupListResponseSchema,
+} from "@shared/contracts/group";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createGroupRepository } from "../repositories/group-repository";
 import { authRequired, csrfProtection } from "../middleware/auth";
@@ -15,37 +18,48 @@ adminGroupsRoute.use("*", authRequired());
 /** GET /admin/groups — 管理员群聊列表 */
 adminGroupsRoute.get("/", async (c) => {
   const requestId = c.get("requestId");
-  const query = listQuerySchema.safeParse(c.req.query());
+
+  const parsed = {
+    statuses: c.req.queries("status") ?? [],
+    deleted: c.req.query("deleted") === "true",
+    q: c.req.query("q") ?? undefined,
+    sortBy: c.req.query("sortBy") ?? undefined,
+    sortDir: (c.req.query("sortDir") as "asc" | "desc") ?? "desc",
+    cursor: c.req.query("cursor") ?? null,
+    limit: Number(c.req.query("limit")) || 50,
+  };
+
+  const query = adminGroupListQuerySchema.safeParse(parsed);
   if (!query.success) {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
-        error: { code: "VALIDATION_FAILED", message: "Invalid query." },
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "Invalid query.",
+          fieldErrors: query.error.flatten().fieldErrors,
+        },
         requestId,
       }),
       400,
     );
   }
 
-  const status = c.req.query("status") ?? undefined;
-  const deleted = c.req.query("deleted") === "true";
-
   const repo = createGroupRepository(c.env.DB);
-  const { items, total } = await repo.listAll({
-    status,
-    deleted,
-    cursor: query.data.cursor ?? undefined,
+  const { items, total, nextCursor } = await repo.listAll({
+    statuses: query.data.statuses,
+    deleted: query.data.deleted,
+    q: query.data.q,
+    sortBy: query.data.sortBy,
+    sortDir: query.data.sortDir,
+    cursor: query.data.cursor,
     limit: query.data.limit,
   });
 
-  const lastItem = items[items.length - 1];
-  const nextCursor =
-    items.length === query.data.limit && lastItem ? btoa(JSON.stringify({ k: lastItem.id })) : null;
-
   return c.json(
-    apiSuccessSchema(cursorPageSchema(adminGroupDtoSchema)).parse({
+    apiSuccessSchema(adminGroupListResponseSchema).parse({
       ok: true,
-      data: { items, nextCursor, rotationWindow: "" },
+      data: { items, total, nextCursor },
       requestId,
     }),
   );

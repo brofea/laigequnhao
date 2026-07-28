@@ -1,29 +1,22 @@
 <script setup lang="ts">
 /* eslint-disable no-useless-assignment */
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAdminAuth } from "@/features/admin/composables/useAdminAuth";
 import { useAdminGroups } from "@/features/admin/composables/useAdminGroups";
 import AdminGroupTable from "@/features/admin/components/AdminGroupTable.vue";
 import AdminGroupForm from "@/features/admin/components/AdminGroupForm.vue";
+import AdminStatusFilters from "@/features/admin/components/AdminStatusFilters.vue";
+import AdminGroupSearch from "@/features/admin/components/AdminGroupSearch.vue";
 import TrashConfirmDialog from "@/features/admin/components/TrashConfirmDialog.vue";
 import AdminDashboard from "@/features/admin/components/AdminDashboard.vue";
 import type { AdminGroupDto } from "@shared/contracts/group";
+import type { AdminSortField } from "@shared/contracts/group";
 
 const router = useRouter();
 const { isAuthenticated, csrfToken, loading: authLoading, check, doLogout } = useAdminAuth();
-const {
-  groups,
-  loading: groupsLoading,
-  error: groupsError,
-  statusFilter,
-  deletedFilter,
-  fetchGroups,
-  updateGroup,
-  softDelete,
-  restore,
-  permanentDelete,
-} = useAdminGroups(() => csrfToken.value);
+
+const admin = useAdminGroups(() => csrfToken.value);
 
 onMounted(async () => {
   await check();
@@ -31,11 +24,7 @@ onMounted(async () => {
     void router.push("/admin/login");
     return;
   }
-  void fetchGroups();
-});
-
-watch([statusFilter, deletedFilter], () => {
-  void fetchGroups();
+  void admin.fetchGroups();
 });
 
 // Form state
@@ -54,9 +43,8 @@ function openEdit(group: AdminGroupDto) {
 
 async function handleSave(data: Record<string, unknown>) {
   if (editingGroup.value) {
-    await updateGroup(editingGroup.value.id, data);
+    await admin.updateGroup(editingGroup.value.id, data);
   }
-  // updateGroup 已经就地更新了 groups 数组中的对应项，不需要 re-fetch
 }
 
 // Trash dialog
@@ -64,7 +52,7 @@ const trashOpen = ref(false);
 const trashGroup = ref<AdminGroupDto | null>(null);
 
 function confirmPermanentDelete(id: string) {
-  const g = groups.value.find((g) => g.id === id);
+  const g = admin.groups.value.find((g) => g.id === id);
   if (!g) return;
   trashGroup.value = g;
   trashOpen.value = true;
@@ -72,7 +60,7 @@ function confirmPermanentDelete(id: string) {
 
 async function handlePermanentDelete() {
   if (trashGroup.value) {
-    await permanentDelete(trashGroup.value.id);
+    await admin.permanentDelete(trashGroup.value.id);
   }
   trashOpen.value = false;
   trashGroup.value = null;
@@ -132,21 +120,22 @@ async function handleLogout() {
       <template v-if="activeTab === 'groups'">
         <!-- 工具栏 -->
         <div class="mb-4 flex flex-wrap items-center gap-3">
-          <select v-model="statusFilter" class="rounded border px-3 py-1.5 text-sm">
-            <option value="">全部状态</option>
-            <option value="pending">待审核</option>
-            <option value="published">已发布</option>
-            <option value="rejected">已拒绝</option>
-            <option value="delisted">已下架</option>
-          </select>
-
-          <label class="flex items-center gap-1.5 text-sm">
-            <input v-model="deletedFilter" type="checkbox" class="rounded" />
-            回收站
-          </label>
-
+          <AdminStatusFilters
+            :statuses="admin.statuses.value"
+            :deleted="admin.deleted.value"
+            @toggle-status="admin.toggleStatus"
+            @toggle-deleted="admin.toggleDeleted"
+          />
+          <AdminGroupSearch
+            v-if="!admin.deleted.value"
+            :model-value="admin.searchQuery.value"
+            :disabled="admin.deleted.value"
+            @update:model-value="admin.setSearch"
+            @search="admin.searchImmediate"
+            @clear="admin.searchImmediate"
+          />
           <button
-            v-if="!deletedFilter"
+            v-if="!admin.deleted.value"
             class="ml-auto rounded bg-brand-primary px-4 py-1.5 text-sm text-white"
             @click="openCreate"
           >
@@ -154,25 +143,31 @@ async function handleLogout() {
           </button>
         </div>
 
-        <p v-if="groupsError" class="mb-4 text-sm text-red-500">{{ groupsError }}</p>
+        <p v-if="admin.error.value" class="mb-4 text-sm text-red-500">{{ admin.error.value }}</p>
 
         <!-- 群聊表格 -->
         <AdminGroupTable
-          :groups="groups"
-          :loading="groupsLoading"
-          :deleted-filter="deletedFilter"
+          :groups="admin.groups.value"
+          :loading="admin.loading.value"
+          :deleted-filter="admin.deleted.value"
+          :total="admin.total.value"
+          :next-cursor="admin.nextCursor.value"
+          :sort-by="admin.sortBy.value"
+          :sort-dir="admin.sortDir.value"
           @edit="openEdit"
           @soft-delete="
             (id: string) => {
-              void softDelete(id);
+              void admin.softDelete(id);
             }
           "
           @restore="
             (id: string) => {
-              void restore(id);
+              void admin.restore(id);
             }
           "
           @permanent-delete="(id: string) => confirmPermanentDelete(id)"
+          @sort="(field: AdminSortField) => admin.setSort(field)"
+          @load-more="void admin.loadMore()"
         />
 
         <!-- 编辑表单 -->

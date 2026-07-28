@@ -1,4 +1,6 @@
 import type { AdminGroupDto } from "@shared/contracts/group";
+import type { GroupStatus } from "@shared/domain";
+import { normalizeSearchQuery } from "@shared/domain";
 
 // ─── D1 行类型 ──────────────────────────────────────────
 
@@ -83,6 +85,47 @@ function mapToAdminDto(
   };
 }
 
+// ─── 共享 WHERE 子句构建器 ───────────────────────────────
+// COUNT 与 items 查询必须共用同一条件集合
+
+function buildWhereClause(params: {
+  statuses: string[];
+  deleted: boolean;
+  q?: string;
+}): { sql: string; bindings: unknown[] } {
+  const conditions: string[] = [];
+  const bindings: unknown[] = [];
+
+  if (params.statuses.length > 0) {
+    conditions.push(
+      `g.status IN (${params.statuses.map(() => "?").join(",")})`,
+    );
+    bindings.push(...params.statuses);
+  }
+
+  if (params.deleted) {
+    conditions.push("g.deleted_at IS NOT NULL");
+  } else {
+    conditions.push("g.deleted_at IS NULL");
+  }
+
+  if (params.q) {
+    const normalized = normalizeSearchQuery(params.q);
+    if (normalized) {
+      const pattern = `%${normalized}%`;
+      conditions.push(
+        "(g.title LIKE ? COLLATE NOCASE OR g.description LIKE ? COLLATE NOCASE OR EXISTS (SELECT 1 FROM group_tags gt WHERE gt.group_id = g.id AND gt.tag LIKE ? COLLATE NOCASE))",
+      );
+      bindings.push(pattern, pattern, pattern);
+    }
+  }
+
+  return {
+    sql: conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "",
+    bindings,
+  };
+}
+
 // ─── 查询 ────────────────────────────────────────────────
 
 export function createGroupRepository(db: D1Database) {
@@ -101,9 +144,12 @@ export function createGroupRepository(db: D1Database) {
       const bindings: unknown[] = [];
 
       if (q) {
-        const pattern = `%${q}%`;
-        whereClause += ` AND (g.title LIKE ? OR g.id IN (SELECT DISTINCT gt.group_id FROM group_tags gt WHERE gt.tag LIKE ?))`;
-        bindings.push(pattern, pattern);
+        const normalized = normalizeSearchQuery(q);
+        if (normalized) {
+          const pattern = `%${normalized}%`;
+          whereClause += ` AND (g.title LIKE ? COLLATE NOCASE OR g.description LIKE ? COLLATE NOCASE OR g.id IN (SELECT DISTINCT gt.group_id FROM group_tags gt WHERE gt.tag LIKE ? COLLATE NOCASE))`;
+          bindings.push(pattern, pattern, pattern);
+        }
       }
 
       // 总数
@@ -298,44 +344,106 @@ export function createGroupRepository(db: D1Database) {
 
     // ─── 管理员方法 ────────────────────────────────────────
 
-    /** 管理员全量列表 */
+    /** 管理员全量列表（多状态筛选 + 全文搜索 + 多列排序 + keyset 游标分页） */
     async listAll(params: {
-      status?: string;
-      deleted?: boolean;
-      cursor?: string;
+      statuses: GroupStatus[];
+      deleted: boolean;
+      q?: string;
+      sortBy?: "title" | "kind" | "status" | "platform" | "tags" | "likeCount";
+      sortDir: "asc" | "desc";
+      cursor?: string | null;
       limit: number;
-    }): Promise<{ items: AdminGroupDto[]; total: number }> {
-      const { status, deleted, limit } = params;
-      const conditions: string[] = [];
-      const bindings: unknown[] = [];
+    }): Promise<{ items: AdminGroupDto[]; total: number; nextCursor: string | null }> {
+      const { statuses, deleted, q, sortBy, sortDir, cursor, limit } = params;
 
-      if (status) {
-        conditions.push("g.status = ?");
-        bindings.push(status);
-      }
-      if (deleted) {
-        conditions.push("g.deleted_at IS NOT NULL");
-      } else {
-        conditions.push("g.deleted_at IS NULL");
-      }
+      // ── 共享 WHERE 子句（COUNT 与 items 查询共用） ──
+      const { sql: whereSql, bindings: whereBindings } = buildWhereClause({
+        statuses,
+        deleted,
+        q,
+      });
 
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-
+      // COUNT
       const countResult = await db
-        .prepare(`SELECT COUNT(*) as total FROM groups g ${whereClause}`)
-        .bind(...bindings)
+        .prepare(`SELECT COUNT(*) as total FROM groups g ${whereSql}`)
+        .bind(...whereBindings)
         .first<{ total: number }>();
       const total = countResult?.total ?? 0;
 
-      if (total === 0) return { items: [], total: 0 };
+      if (total === 0) return { items: [], total: 0, nextCursor: null };
 
+      // ── ORDER BY ──
+      let orderBy: string;
+      switch (sortBy) {
+        case "title":
+          orderBy = `g.title COLLATE NOCASE ${sortDir}, g.id ${sortDir}`;
+          break;
+        case "kind":
+          orderBy = `CASE g.kind WHEN 'official' THEN 0 ELSE 1 END ${sortDir}, g.id ${sortDir}`;
+          break;
+        case "status":
+          orderBy = `CASE g.status WHEN 'pending' THEN 0 WHEN 'published' THEN 1 WHEN 'rejected' THEN 2 WHEN 'delisted' THEN 3 END ${sortDir}, g.id ${sortDir}`;
+          break;
+        case "platform":
+          orderBy = `g.platform COLLATE NOCASE ${sortDir}, g.id ${sortDir}`;
+          break;
+        case "tags":
+          orderBy = `COALESCE((SELECT gt.tag FROM group_tags gt WHERE gt.group_id = g.id ORDER BY gt.sort_order ASC LIMIT 1), '') COLLATE NOCASE ${sortDir}, g.id ${sortDir}`;
+          break;
+        case "likeCount":
+          orderBy = `g.like_count ${sortDir}, g.id ${sortDir}`;
+          break;
+        default:
+          orderBy = "g.created_at DESC, g.id DESC";
+      }
+
+      // ── keyset 游标 ──
+      const cursorBindings: unknown[] = [];
+      let cursorSql = "";
+
+      if (cursor) {
+        try {
+          const decoded = JSON.parse(atob(cursor)) as { k: string };
+          if (decoded.k) {
+            if (!sortBy) {
+              // 默认排序 (created_at DESC)：需游标项的 created_at
+              const cursorItem = await db
+                .prepare("SELECT created_at FROM groups WHERE id = ?")
+                .bind(decoded.k)
+                .first<{ created_at: string }>();
+              if (cursorItem) {
+                cursorSql =
+                  " AND (g.created_at < ? OR (g.created_at = ? AND g.id < ?))";
+                cursorBindings.push(
+                  cursorItem.created_at,
+                  cursorItem.created_at,
+                  decoded.k,
+                );
+              }
+            } else if (sortDir === "asc") {
+              cursorSql = " AND g.id > ?";
+              cursorBindings.push(decoded.k);
+            } else {
+              cursorSql = " AND g.id < ?";
+              cursorBindings.push(decoded.k);
+            }
+          }
+        } catch {
+          /* 无效游标，忽略 */
+        }
+      }
+
+      // ── items 查询 ──
+      const allBindings = [...whereBindings, ...cursorBindings, limit];
       const rows = await db
-        .prepare(`SELECT g.* FROM groups g ${whereClause} ORDER BY g.created_at DESC LIMIT ?`)
-        .bind(...bindings, limit)
+        .prepare(
+          `SELECT g.* FROM groups g ${whereSql}${cursorSql} ORDER BY ${orderBy} LIMIT ?`,
+        )
+        .bind(...allBindings)
         .all<GroupRow>();
 
       const groupIds = rows.results.map((r) => r.id);
-      if (groupIds.length === 0) return { items: [], total };
+      if (groupIds.length === 0) return { items: [], total, nextCursor: null };
 
       const [tagsResult, methodsResult, detailsResult] = await Promise.all([
         db
@@ -384,7 +492,14 @@ export function createGroupRepository(db: D1Database) {
         ),
       );
 
-      return { items, total };
+      // nextCursor
+      const lastItem = items[items.length - 1];
+      const nextCursor =
+        items.length === limit && lastItem
+          ? btoa(JSON.stringify({ k: lastItem.id }))
+          : null;
+
+      return { items, total, nextCursor };
     },
 
     /** 乐观锁更新 */

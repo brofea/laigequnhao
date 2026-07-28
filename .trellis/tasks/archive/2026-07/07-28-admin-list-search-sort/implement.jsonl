@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/api-guidelines.md", "reason": "实现管理员 query、公开搜索、游标和排序契约。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "实现筛选/搜索/排序 URL 状态和服务端权威列表。"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "实现请求取消、防抖、过期响应保护和列表生命周期。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "实现状态按钮、搜索、表头排序和表格无障碍。"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "覆盖搜索归一化、1000 条规模、Worker/Vue/E2E 列表行为。"}

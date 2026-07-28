@@ -34,7 +34,7 @@ export async function fetchGroups(params: {
   if (query.cursor) qs.set("cursor", query.cursor);
   qs.set("limit", String(query.limit));
 
-  return api.get(`/groups?${qs.toString()}`, cursorPageResponseSchema);
+  return api.get(`/groups?${qs.toString()}`, cursorPageResponseSchema, undefined, params.signal);
 }
 
 export async function toggleLike(
