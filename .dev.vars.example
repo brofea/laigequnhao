@@ -1,0 +1,10 @@
+# 本地开发 Secrets — 请勿提交到版本控制
+# 复制此文件为 .dev.vars 并填入本地开发值
+# 生产环境请使用 `wrangler secret put <KEY>` 设置
+
+ADMIN_PASSWORD=dev-admin-password
+SESSION_SECRET=dev-session-secret-change-me
+LIKE_PEPPER=dev-like-pepper-change-me
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+SKIP_TURNSTILE=true
+DEV_LIKE_PEPPER=dev-like-pepper-change-me

@@ -3,8 +3,10 @@
 export interface Env {
   /** D1 数据库 */
   DB: D1Database;
-  /** R2 存储桶（本阶段不使用，预留） */
+  /** R2 存储桶 */
   R2: R2Bucket;
+  /** R2 自定义域名（用于生成公开 URL，不返回 r2.dev） */
+  R2_PUBLIC_BASE_URL?: string;
   /** 环境变量 / Secrets */
   ADMIN_PASSWORD: string;
   SESSION_SECRET: string;
