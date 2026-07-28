@@ -6,6 +6,8 @@ import {
 } from "@shared/contracts/group";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createGroupRepository } from "../repositories/group-repository";
+import { createAssetService } from "../services/asset-service";
+import { createR2Adapter } from "../adapters/r2-adapter";
 import { authRequired, csrfProtection } from "../middleware/auth";
 import type { Env } from "../env";
 
@@ -199,7 +201,7 @@ adminGroupsRoute.post("/:id/restore", csrfProtection(), async (c) => {
   return c.json(apiSuccessSchema(adminGroupDtoSchema).parse({ ok: true, data: result, requestId }));
 });
 
-/** DELETE /admin/trash/groups/:id — 永久删除 */
+/** DELETE /admin/trash/groups/:id — 永久删除（状态机，可重试） */
 adminGroupsRoute.delete("/trash/groups/:id", csrfProtection(), async (c) => {
   const requestId = c.get("requestId");
   const id = c.req.param("id");
@@ -215,7 +217,87 @@ adminGroupsRoute.delete("/trash/groups/:id", csrfProtection(), async (c) => {
   }
 
   const repo = createGroupRepository(c.env.DB);
-  await repo.permanentDelete(id);
+  const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+  const r2Adapter = createR2Adapter(c.env.R2, c.env);
 
-  return c.json({ ok: true, data: { id }, requestId });
+  // 执行状态机步骤
+  const step = await repo.permanentDelete(id);
+
+  if (step.action === "STATE_CONFLICT") {
+    return c.json(
+      apiErrorSchema.parse({
+        ok: false,
+        error: {
+          code: "STATE_CONFLICT",
+          message: "Group must be soft-deleted before permanent deletion.",
+        },
+        requestId,
+      }),
+      409,
+    );
+  }
+
+  if (step.action === "STARTED") {
+    return c.json({
+      ok: true,
+      data: { id, purgeState: "pending", nextAction: "R2_CLEANUP" },
+      requestId,
+    });
+  }
+
+  if (step.action === "R2_CLEANUP") {
+    // 清理 Logo R2 对象
+    if (step.logoR2Key) {
+      try {
+        await r2Adapter.delete(step.logoR2Key);
+      } catch {
+        // 对象不存在 = 成功
+      }
+    }
+
+    // 清理二维码 R2 对象
+    for (const assetId of step.qrAssetIds) {
+      try {
+        await assetService.deleteIfUnreferenced(assetId);
+      } catch {
+        await repo.markR2PurgeFailed(
+          id,
+          "R2_DELETE_FAILED",
+          `Failed to delete QR asset ${assetId}`,
+        );
+        return c.json(
+          apiErrorSchema.parse({
+            ok: false,
+            error: {
+              code: "DEPENDENCY_UNAVAILABLE",
+              message: "R2 cleanup partially failed. Retry.",
+            },
+            requestId,
+          }),
+          502,
+        );
+      }
+    }
+
+    await repo.markR2PurgeDone(id);
+
+    return c.json({
+      ok: true,
+      data: { id, purgeState: "r2_done", nextAction: "D1_BATCH" },
+      requestId,
+    });
+  }
+
+  if (step.action === "DONE") {
+    return c.json({ ok: true, data: { id, purgeState: "done" }, requestId });
+  }
+
+  return c.json(
+    apiErrorSchema.parse({
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: "Unknown purge state." },
+      requestId,
+    }),
+    500,
+  );
 });

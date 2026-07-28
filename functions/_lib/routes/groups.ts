@@ -3,6 +3,7 @@ import { listQuerySchema, cursorPageSchema } from "@shared/contracts/pagination"
 import { publicGroupDtoSchema } from "@shared/contracts/group";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createGroupRepository } from "../repositories/group-repository";
+import { createAssetService } from "../services/asset-service";
 import { computeRotation } from "../services/rotation-service";
 import type { Env } from "../env";
 import type { SiteConfig } from "@shared/domain";
@@ -51,20 +52,44 @@ groupsRoute.get("/", async (c) => {
   const repo = createGroupRepository(c.env.DB);
   const { items, total } = await repo.listPublished({ q, cursor: null, limit, rotationOrdinal: ordinal, skip });
 
+  // 解析 QR asset URL
+  const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+
   // 过滤 → PublicGroupDto
-  const publicItems = items.map((admin) => {
-    // 剔除管理端字段
-    const {
-      submissionContact: _sc,
-      auditNotes: _an,
-      deletedAt: _da,
-      deleteProgress: _dp,
-      logoR2Key: _lk,
-      version: _v,
-      ...rest
-    } = admin;
-    return publicGroupDtoSchema.parse(rest);
-  });
+  const publicItems = await Promise.all(
+    items.map(async (admin) => {
+      // 解析 join methods 中 QR 的 asset URL
+      const resolvedMethods = await Promise.all(
+        admin.joinMethods.map(async (m) => {
+          if (m.type === "qr_code" && m.assetId) {
+            const url = await assetService.getPublicUrl(m.assetId);
+            const meta = await assetService.getPublicMeta(m.assetId);
+            return {
+              ...m,
+              qrCodeUrl: url ?? m.qrCodeUrl ?? undefined,
+              qrCodeMeta: meta
+                ? { width: meta.width, height: meta.height, byteLength: meta.byteLength }
+                : m.qrCodeMeta,
+            };
+          }
+          return m;
+        }),
+      );
+
+      // 剔除管理端字段
+      const {
+        submissionContact: _sc,
+        auditNotes: _an,
+        deletedAt: _da,
+        deleteProgress: _dp,
+        logoR2Key: _lk,
+        version: _v,
+        joinMethods: _jm,
+        ...rest
+      } = admin;
+      return publicGroupDtoSchema.parse({ ...rest, joinMethods: resolvedMethods });
+    }),
+  );
 
   // 游标
   const newSkip = skip + items.length;

@@ -28,7 +28,7 @@ export const assetUploadLimitsSchema = z.union([
   }),
 ]);
 
-// ─── 资源信息 ────────────────────────────────────────────
+// ─── 资源信息（上传响应） ──────────────────────────────────
 
 export const assetInfoSchema = z.object({
   id: z.string().uuid(),
@@ -38,5 +38,28 @@ export const assetInfoSchema = z.object({
   byteLength: z.number().int().positive(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
+  status: z.enum(["staged", "ready", "delete_pending", "delete_failed"]),
 });
 export type AssetInfo = z.infer<typeof assetInfoSchema>;
+
+// ─── 管理员资源 DTO ───────────────────────────────────────
+
+export const adminAssetDtoSchema = assetInfoSchema.extend({
+  refCount: z.number().int().nonnegative(),
+  deleteAttempts: z.number().int().nonnegative(),
+  deleteLastError: z.string().nullable(),
+  deleteLastErrorCode: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  publicUrl: z.string(),
+});
+export type AdminAssetDto = z.infer<typeof adminAssetDtoSchema>;
+
+// ─── 公开资源展示信息 ─────────────────────────────────────
+
+export const publicAssetMetaSchema = z.object({
+  url: z.string(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  byteLength: z.number().int().positive(),
+});
+export type PublicAssetMeta = z.infer<typeof publicAssetMetaSchema>;

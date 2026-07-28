@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { assetInfoSchema } from "@shared/contracts/asset";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
-import { createR2Adapter } from "../adapters/r2-adapter";
+import { createAssetService } from "../services/asset-service";
 import { authRequired, csrfProtection } from "../middleware/auth";
 import type { Env } from "../env";
 
@@ -25,7 +25,7 @@ function isValidWebp(bytes: Uint8Array): boolean {
   );
 }
 
-/** POST /admin/assets — 上传资源 */
+/** POST /admin/assets — 上传资源（返回 staged asset） */
 adminAssetsRoute.post("/assets", csrfProtection(), async (c) => {
   const requestId = c.get("requestId");
   const formData = await c.req.formData();
@@ -63,7 +63,10 @@ adminAssetsRoute.post("/assets", csrfProtection(), async (c) => {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
-        error: { code: "PAYLOAD_TOO_LARGE", message: `File exceeds ${maxBytes} bytes.` },
+        error: {
+          code: "PAYLOAD_TOO_LARGE",
+          message: `File exceeds ${maxBytes} bytes.`,
+        },
         requestId,
       }),
       413,
@@ -75,54 +78,65 @@ adminAssetsRoute.post("/assets", csrfProtection(), async (c) => {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
-        error: { code: "UNSUPPORTED_MEDIA_TYPE", message: "Not a valid WebP file." },
+        error: {
+          code: "UNSUPPORTED_MEDIA_TYPE",
+          message: "Not a valid WebP file.",
+        },
         requestId,
       }),
       415,
     );
   }
 
-  const key = `${purpose}/${crypto.randomUUID()}.webp`;
-  const adapter = createR2Adapter(c.env.R2, c.env);
-  await adapter.upload(key, buffer.buffer);
+  const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+  const asset = await assetService.uploadStaged(buffer.buffer, purpose as "logo" | "qr_code", {
+    width,
+    height,
+    byteLength,
+  });
 
-  // 写入 D1
-  const id = crypto.randomUUID();
-  await c.env.DB.prepare(
-    "INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  )
-    .bind(id, key, purpose, "image/webp", byteLength, width, height)
-    .run();
-
-  // 如果关联群聊，更新群聊的 Logo 字段
+  // 如果关联群聊且是 logo，更新群聊 Logo 字段
   if (groupId && purpose === "logo") {
-    const publicUrl = adapter.getPublicUrl(key);
+    const publicUrl = assetService.r2Adapter.getPublicUrl(asset.r2Key);
     await c.env.DB.prepare(
       "UPDATE groups SET logo_r2_key = ?, logo_url = ?, logo_width = ?, logo_height = ?, logo_byte_length = ?, updated_at = ? WHERE id = ?",
     )
-      .bind(key, publicUrl, width, height, byteLength, new Date().toISOString(), groupId)
+      .bind(asset.r2Key, publicUrl, width, height, byteLength, new Date().toISOString(), groupId)
       .run();
   }
 
   return c.json(
     apiSuccessSchema(assetInfoSchema).parse({
       ok: true,
-      data: {
-        id,
-        purpose,
-        r2Key: key,
-        contentType: "image/webp" as const,
-        byteLength,
-        width,
-        height,
-      },
+      data: asset,
       requestId,
     }),
     201,
   );
 });
 
-/** DELETE /admin/assets/:id — 删除资源 */
+/** POST /admin/assets/:id/adopt — 采纳 staged asset → ready */
+adminAssetsRoute.post("/assets/:id/adopt", csrfProtection(), async (c) => {
+  const requestId = c.get("requestId");
+  const id = c.req.param("id");
+  if (!id) {
+    return c.json(
+      apiErrorSchema.parse({
+        ok: false,
+        error: { code: "NOT_FOUND", message: "Asset not found." },
+        requestId,
+      }),
+      404,
+    );
+  }
+
+  const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+  await assetService.adopt(id);
+
+  return c.json({ ok: true, data: { id }, requestId });
+});
+
+/** DELETE /admin/assets/:id — 解除引用并清理 */
 adminAssetsRoute.delete("/assets/:id", csrfProtection(), async (c) => {
   const requestId = c.get("requestId");
   const id = c.req.param("id");
@@ -137,10 +151,11 @@ adminAssetsRoute.delete("/assets/:id", csrfProtection(), async (c) => {
     );
   }
 
-  const row = await c.env.DB.prepare("SELECT r2_key FROM assets WHERE id = ?")
-    .bind(id)
-    .first<{ r2_key: string }>();
-  if (!row) {
+  const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+
+  // 检查 asset 是否存在
+  const existing = await assetService.getById(id);
+  if (!existing) {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
@@ -151,9 +166,8 @@ adminAssetsRoute.delete("/assets/:id", csrfProtection(), async (c) => {
     );
   }
 
-  const adapter = createR2Adapter(c.env.R2, c.env);
-  await adapter.delete(row.r2_key);
-  await c.env.DB.prepare("DELETE FROM assets WHERE id = ?").bind(id).run();
+  // 解除引用（ref_count -1；归零则标记 delete_pending 并异步清理）
+  await assetService.release(id);
 
-  return c.json(apiSuccessSchema(assetInfoSchema).parse({ ok: true, data: { id }, requestId }));
+  return c.json({ ok: true, data: { id }, requestId });
 });

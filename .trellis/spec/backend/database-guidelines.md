@@ -1,4 +1,4 @@
-# D1 数据库规范
+﻿# D1 数据库规范
 
 ## 方案
 
@@ -14,7 +14,7 @@ Repository 在单一边界把 `unknown` D1 行映射为内部类型。Service �
 | `group_tags` | 有顺序且已归一化的标签 |
 | `join_methods` | 有顺序的群号、URL 或二维码资源加群方式 |
 | `submission_details` | 仅管理员可见的联系方式和审核备注 |
-| `assets` | R2 key、用途、尺寸、字节数和 content type |
+| `assets` | R2 key、用途、尺寸、字节数、状态、引用计数和可重试清理元数据 |
 | `likes` | 群聊与投票者 hash 的唯一关系 |
 | `rate_limits` | 必要时使用的服务端过期计数器 |
 
@@ -26,7 +26,7 @@ Repository 在单一边界把 `unknown` D1 行映射为内部类型。Service �
 
 ## 不变量与索引
 
-- 已发布/已下架群聊至少有一种当前阶段允许公开使用的加群方式。二维码公开功能未启用时，单独一个 `qr_code` 不能满足此不变量。
+- 已发布/已下架群聊至少有一种当前阶段允许公开使用的加群方式。二维码始终公开，单独的 `qr_code` 满足此不变量。
 - `likes` 包含 `UNIQUE(group_id, voter_hash)`。
 - `groups.like_count` 是缓存投影，与点赞行在同一 D1 batch 中更新。
 - 持久化前，根据应用配置校验平台和性质。
@@ -45,7 +45,48 @@ Repository 在单一边界把 `unknown` D1 行映射为内部类型。Service �
 - 软删除元数据；
 - 审核状态和私有提交信息更新。
 
-D1 和 R2 无法共享事务。替换资源时，先写入新对象，再写入 D1，最后移除未被引用的旧对象。永久删除时，先把软删除记录标为 `pending`，确认资源没有被其他记录引用后移除相应 R2 对象，再将状态写为 `r2_done`，最后以 D1 batch 删除关联行和群聊行。任何失败都必须保留可重试状态并让管理员可见；重试必须把“对象已经不存在”视为 R2 清理成功。
+D1 和 R2 无法共享事务。替换资源时，先写入新对象，再写入 D1，最后移除未被引用的旧对象。永久删除时，先把软删除记录标为 `pending`，确认资源没有被其他记录引用后移除相应 R2 对象，再将状态写为 `r2_done`，最后以 D1 batch 删除关联行和群聊行。任何失败都必须保留可重试状态并让管理员可见；重试必须把\u201C对象已经不存在\u201D视为 R2 清理成功。
+
+## Asset 生命周期
+
+`assets.status` 状态机：
+
+```
+upload → staged → (adopt) → ready → (release, ref_count → 0) → delete_pending
+                                                    delete_pending → (R2 删除成功) → D1 行移除
+                                                    delete_pending → (R2 删除失败) → delete_failed
+                                                    delete_failed → (retry) → D1 行移除 / 继续 delete_failed
+```
+
+### 状态说明
+
+| 状态 | 含义 | ref_count | R2 对象 |
+|---|---|---|---|
+| `staged` | 上传完成，等待群聊保存确认 | 0 | 已存在 |
+| `ready` | 群聊保存成功，正常引用中 | ≥1 | 已存在 |
+| `delete_pending` | 引用归零，等待异步清理 | 0 | 待删除 |
+| `delete_failed` | R2 删除失败，等待重试 | 0 | 可能存在 |
+
+### 引用计数规则
+
+- `join_methods.asset_id` 指向 `assets` 表示一次引用。
+- 多个 `join_methods` 可以引用同一 asset（ref_count > 1）。
+- `adopt()`：staged → ready，ref_count +1。
+- `addRef()`：直接对 ready asset 增加引用（复用已有 asset 时）。
+- `release()`：ref_count -1；归零时标记 `delete_pending` 并触发异步清理。
+- 异步清理使用 `deleteIfUnreferenced()`：再次检查 ref_count=0 后才删除 R2 + D1。
+
+### R2/D1 补偿策略
+
+- **上传**：先写 R2，再写 D1 staged 行。D1 失败则回删 R2 对象。
+- **删除**：先删 R2，再删 D1 行。R2 对象不存在视为成功（幂等）。
+- **检查 R2 存在性**：删除失败后通过 `r2.head()` 验证对象是否真的不存在。
+- **失败保留**：`delete_attempts`、`delete_last_error`、`delete_last_error_code` 记录失败信息。
+
+### Staged 过期回收
+
+- `cleanupStaged(olderThanMinutes)`：清理超过 N 分钟未被 adopt 的 staged asset。
+- 先删 R2（尽力而为），再删 D1 行；任一失败均不阻塞其他清理。
 
 ## 数据库迁移（Migration）
 

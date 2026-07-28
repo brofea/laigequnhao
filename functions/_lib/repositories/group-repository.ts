@@ -35,6 +35,19 @@ interface JoinMethodRow {
   type: "group_number" | "url" | "qr_code";
   value: string | null;
   sort_order: number;
+  asset_id: string | null;
+}
+
+interface AssetJoinRow {
+  asset_id: string;
+  r2_key: string;
+  purpose: string;
+  content_type: string;
+  byte_length: number;
+  width: number;
+  height: number;
+  status: string;
+  ref_count: number;
 }
 
 interface SubmissionDetailRow {
@@ -49,6 +62,7 @@ function mapToAdminDto(
   tags: TagRow[],
   methods: JoinMethodRow[],
   detail: SubmissionDetailRow | null,
+  assetLookup: Map<string, AssetJoinRow>,
 ): AdminGroupDto {
   const hasLogo = group.logo_url !== null;
   return {
@@ -67,12 +81,28 @@ function mapToAdminDto(
           byteLength: group.logo_byte_length!,
         }
       : null,
-    joinMethods: methods.map((m) => ({
-      type: m.type,
-      value: m.value ?? undefined,
-      url: m.type === "url" ? (m.value ?? undefined) : undefined,
-      qrCodeUrl: m.type === "qr_code" ? (m.value ?? undefined) : undefined,
-    })),
+    joinMethods: methods.map((m) => {
+      const asset = m.asset_id ? assetLookup.get(m.asset_id) : null;
+      return {
+        type: m.type,
+        value: m.value ?? undefined,
+        url: m.type === "url" ? (m.value ?? undefined) : undefined,
+        qrCodeUrl: m.type === "qr_code"
+          ? (asset?.r2_key
+              ? `asset:${m.asset_id}`  // placeholder — routes resolve via asset service
+              : (m.value ?? undefined))
+          : undefined,
+        qrCodeMeta: m.type === "qr_code" && asset
+          ? { width: asset.width, height: asset.height, byteLength: asset.byte_length }
+          : undefined,
+        assetId: m.asset_id ?? undefined,
+        assetUrl: asset?.r2_key ? null : null, // resolved in route layer
+        assetWidth: asset?.width ?? undefined,
+        assetHeight: asset?.height ?? undefined,
+        assetByteLength: asset?.byte_length ?? undefined,
+        assetStatus: asset?.status as AdminGroupDto["joinMethods"][number]["assetStatus"] ?? undefined,
+      };
+    }),
     likeCount: group.like_count,
     createdAt: group.created_at,
     updatedAt: group.updated_at,
@@ -197,7 +227,7 @@ export function createGroupRepository(db: D1Database) {
           .all<{ group_id: string } & TagRow>(),
         db
           .prepare(
-            `SELECT group_id, type, value, sort_order FROM join_methods WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
+            `SELECT group_id, type, value, sort_order, asset_id FROM join_methods WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
           )
           .bind(...groupIds)
           .all<{ group_id: string } & JoinMethodRow>(),
@@ -217,16 +247,36 @@ export function createGroupRepository(db: D1Database) {
       }
 
       const methodsByGroup = new Map<string, JoinMethodRow[]>();
+      const allAssetIds = new Set<string>();
       for (const r of methodsResult.results) {
         if (!methodsByGroup.has(r.group_id)) methodsByGroup.set(r.group_id, []);
-        methodsByGroup
-          .get(r.group_id)!
-          .push({ type: r.type, value: r.value, sort_order: r.sort_order });
+        methodsByGroup.get(r.group_id)!.push({
+          type: r.type,
+          value: r.value,
+          sort_order: r.sort_order,
+          asset_id: r.asset_id,
+        });
+        if (r.asset_id) allAssetIds.add(r.asset_id);
       }
 
       const detailsByGroup = new Map<string, SubmissionDetailRow>();
       for (const r of detailsResult.results) {
         detailsByGroup.set(r.group_id, { contact: r.contact, notes: r.notes });
+      }
+
+      // 批量加载 asset 数据
+      const assetLookup = new Map<string, AssetJoinRow>();
+      if (allAssetIds.size > 0) {
+        const assetRows = await db
+          .prepare(
+            `SELECT id as asset_id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count
+             FROM assets WHERE id IN (${[...allAssetIds].map(() => "?").join(",")})`,
+          )
+          .bind(...allAssetIds)
+          .all<AssetJoinRow>();
+        for (const a of assetRows.results) {
+          assetLookup.set(a.asset_id, a);
+        }
       }
 
       const items = sliced.map((g) =>
@@ -235,6 +285,7 @@ export function createGroupRepository(db: D1Database) {
           tagsByGroup.get(g.id) ?? [],
           methodsByGroup.get(g.id) ?? [],
           detailsByGroup.get(g.id) ?? null,
+          assetLookup,
         ),
       );
 
@@ -259,7 +310,7 @@ export function createGroupRepository(db: D1Database) {
           .all<TagRow>(),
         db
           .prepare(
-            "SELECT type, value, sort_order FROM join_methods WHERE group_id = ? ORDER BY sort_order ASC",
+            "SELECT type, value, sort_order, asset_id FROM join_methods WHERE group_id = ? ORDER BY sort_order ASC",
           )
           .bind(id)
           .all<JoinMethodRow>(),
@@ -269,7 +320,25 @@ export function createGroupRepository(db: D1Database) {
           .first<SubmissionDetailRow>(),
       ]);
 
-      return mapToAdminDto(group, tagsResult.results, methodsResult.results, detail ?? null);
+      // 加载 asset 数据
+      const assetLookup = new Map<string, AssetJoinRow>();
+      const assetIds = methodsResult.results
+        .filter((m) => m.asset_id)
+        .map((m) => m.asset_id!);
+      if (assetIds.length > 0) {
+        const assetRows = await db
+          .prepare(
+            `SELECT id as asset_id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count
+             FROM assets WHERE id IN (${assetIds.map(() => "?").join(",")})`,
+          )
+          .bind(...assetIds)
+          .all<AssetJoinRow>();
+        for (const a of assetRows.results) {
+          assetLookup.set(a.asset_id, a);
+        }
+      }
+
+      return mapToAdminDto(group, tagsResult.results, methodsResult.results, detail ?? null, assetLookup);
     },
 
     /** 创建群聊 + 关联数据（在 D1 batch 中原子写入） */
@@ -454,7 +523,7 @@ export function createGroupRepository(db: D1Database) {
           .all<{ group_id: string } & TagRow>(),
         db
           .prepare(
-            `SELECT group_id, type, value, sort_order FROM join_methods WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
+            `SELECT group_id, type, value, sort_order, asset_id FROM join_methods WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
           )
           .bind(...groupIds)
           .all<{ group_id: string } & JoinMethodRow>(),
@@ -472,15 +541,35 @@ export function createGroupRepository(db: D1Database) {
         tagsByGroup.get(r.group_id)!.push({ tag: r.tag, sort_order: r.sort_order });
       }
       const methodsByGroup = new Map<string, JoinMethodRow[]>();
+      const allAssetIds = new Set<string>();
       for (const r of methodsResult.results) {
         if (!methodsByGroup.has(r.group_id)) methodsByGroup.set(r.group_id, []);
-        methodsByGroup
-          .get(r.group_id)!
-          .push({ type: r.type, value: r.value, sort_order: r.sort_order });
+        methodsByGroup.get(r.group_id)!.push({
+          type: r.type,
+          value: r.value,
+          sort_order: r.sort_order,
+          asset_id: r.asset_id,
+        });
+        if (r.asset_id) allAssetIds.add(r.asset_id);
       }
       const detailsByGroup = new Map<string, SubmissionDetailRow>();
       for (const r of detailsResult.results) {
         detailsByGroup.set(r.group_id, { contact: r.contact, notes: r.notes });
+      }
+
+      // 批量加载 asset 数据
+      const assetLookup = new Map<string, AssetJoinRow>();
+      if (allAssetIds.size > 0) {
+        const assetRows = await db
+          .prepare(
+            `SELECT id as asset_id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count
+             FROM assets WHERE id IN (${[...allAssetIds].map(() => "?").join(",")})`,
+          )
+          .bind(...allAssetIds)
+          .all<AssetJoinRow>();
+        for (const a of assetRows.results) {
+          assetLookup.set(a.asset_id, a);
+        }
       }
 
       const items = rows.results.map((g) =>
@@ -489,6 +578,7 @@ export function createGroupRepository(db: D1Database) {
           tagsByGroup.get(g.id) ?? [],
           methodsByGroup.get(g.id) ?? [],
           detailsByGroup.get(g.id) ?? null,
+          assetLookup,
         ),
       );
 
@@ -563,16 +653,146 @@ export function createGroupRepository(db: D1Database) {
       return this.getById(id);
     },
 
-    /** 永久删除 */
-    async permanentDelete(id: string): Promise<void> {
-      const batch: D1PreparedStatement[] = [
-        db.prepare("DELETE FROM likes WHERE group_id = ?").bind(id),
-        db.prepare("DELETE FROM group_tags WHERE group_id = ?").bind(id),
-        db.prepare("DELETE FROM join_methods WHERE group_id = ?").bind(id),
-        db.prepare("DELETE FROM submission_details WHERE group_id = ?").bind(id),
-        db.prepare("DELETE FROM groups WHERE id = ?").bind(id),
-      ];
-      await db.batch(batch);
+    /**
+     * 永久删除 — 状态机实现。
+     *
+     * 流程：
+     * 1. 验证软删除记录（非软删除返回 STATE_CONFLICT）
+     * 2. none → pending：开始清理
+     * 3. pending：检查并清理 Logo/QR（调用方负责 R2 删除）
+     * 4. r2_done：D1 batch 删除关联行 + 群聊行
+     *
+     * 返回 { action, logoR2Key, qrAssetIds } 供调用方协调 R2 操作。
+     * 重复调用从当前状态继续。
+     */
+    async permanentDelete(
+      id: string,
+    ): Promise<{
+      action: "STATE_CONFLICT" | "STARTED" | "R2_CLEANUP" | "DONE";
+      logoR2Key: string | null;
+      qrAssetIds: string[];
+    }> {
+      const now = new Date().toISOString();
+
+      // 检查群聊状态
+      const group = await db
+        .prepare(
+          "SELECT deleted_at, purge_state, logo_r2_key FROM groups WHERE id = ?",
+        )
+        .bind(id)
+        .first<{
+          deleted_at: string | null;
+          purge_state: string | null;
+          logo_r2_key: string | null;
+        }>();
+
+      if (!group) {
+        return { action: "STATE_CONFLICT", logoR2Key: null, qrAssetIds: [] };
+      }
+      if (!group.deleted_at) {
+        return { action: "STATE_CONFLICT", logoR2Key: null, qrAssetIds: [] };
+      }
+
+      const state = group.purge_state ?? "none";
+
+      // 状态：none → 启动清理
+      if (state === "none") {
+        await db
+          .prepare(
+            `UPDATE groups SET
+               purge_state = 'pending',
+               purge_started_at = ?,
+               purge_attempts = COALESCE(purge_attempts, 0) + 1,
+               updated_at = ?
+             WHERE id = ?`,
+          )
+          .bind(now, now, id)
+          .run();
+
+        return {
+          action: "STARTED",
+          logoR2Key: group.logo_r2_key,
+          qrAssetIds: [],
+        };
+      }
+
+      // 状态：pending → 收集需清理的 asset，等待 R2 操作
+      if (state === "pending") {
+        // 查询本群二维码 asset（排除仍被其他群引用的）
+        const qrAssets = await db
+          .prepare(
+            `SELECT DISTINCT jm.asset_id, a.r2_key
+             FROM join_methods jm
+             JOIN assets a ON a.id = jm.asset_id
+             WHERE jm.group_id = ?
+               AND jm.asset_id IS NOT NULL
+               AND a.status IN ('ready', 'delete_pending', 'delete_failed')
+               AND (
+                 SELECT COUNT(*) FROM join_methods jm2
+                 WHERE jm2.asset_id = jm.asset_id AND jm2.group_id != ?
+               ) = 0`,
+          )
+          .bind(id, id)
+          .all<{ asset_id: string; r2_key: string }>();
+
+        return {
+          action: "R2_CLEANUP",
+          logoR2Key: group.logo_r2_key,
+          qrAssetIds: qrAssets.results.map((r) => r.asset_id),
+        };
+      }
+
+      // 状态：r2_done → D1 批量删除
+      if (state === "r2_done") {
+        const batch: D1PreparedStatement[] = [
+          db.prepare("DELETE FROM likes WHERE group_id = ?").bind(id),
+          db.prepare("DELETE FROM group_tags WHERE group_id = ?").bind(id),
+          db.prepare("DELETE FROM join_methods WHERE group_id = ?").bind(id),
+          db.prepare("DELETE FROM submission_details WHERE group_id = ?").bind(id),
+          db.prepare("DELETE FROM groups WHERE id = ?").bind(id),
+        ];
+        await db.batch(batch);
+
+        return { action: "DONE", logoR2Key: null, qrAssetIds: [] };
+      }
+
+      // 未知状态
+      return { action: "STATE_CONFLICT", logoR2Key: null, qrAssetIds: [] };
+    },
+
+    /**
+     * 标记 R2 清理完成，进入 r2_done 状态。
+     */
+    async markR2PurgeDone(id: string): Promise<void> {
+      await db
+        .prepare(
+          `UPDATE groups SET
+             purge_state = 'r2_done',
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE id = ? AND purge_state = 'pending'`,
+        )
+        .bind(id)
+        .run();
+    },
+
+    /**
+     * R2 清理失败，递增 attempts 并保存安全错误码。
+     */
+    async markR2PurgeFailed(
+      id: string,
+      errorCode: string,
+      errorMessage: string,
+    ): Promise<void> {
+      await db
+        .prepare(
+          `UPDATE groups SET
+             purge_attempts = COALESCE(purge_attempts, 0) + 1,
+             purge_last_error_code = ?,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE id = ?`,
+        )
+        .bind(errorCode, id)
+        .run();
     },
   };
 }

@@ -30,7 +30,14 @@ export {
   assetUploadMetaSchema,
   assetUploadLimitsSchema,
   assetInfoSchema,
+  adminAssetDtoSchema,
+  publicAssetMetaSchema,
   LOGO_MAX_BYTES,
   QR_CODE_MAX_BYTES,
 } from "./asset";
-export type { AssetUploadMeta, AssetInfo } from "./asset";
+export type {
+  AssetUploadMeta,
+  AssetInfo,
+  AdminAssetDto,
+  PublicAssetMeta,
+} from "./asset";

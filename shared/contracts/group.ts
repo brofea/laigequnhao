@@ -4,7 +4,7 @@ import { groupKindSchema, groupStatusSchema, joinMethodSchema } from "../domain/
 // ─── 公开群聊 DTO ────────────────────────────────────────
 //
 // 禁止包含：联系方式、审核备注、软删除字段、
-//           R2 对象 key、投票者 hash、内部版本号
+//           R2 对象 key、投票者 hash、内部版本号、asset ID
 
 const publicJoinMethodSchema = z.object({
   type: joinMethodSchema,
@@ -12,8 +12,16 @@ const publicJoinMethodSchema = z.object({
   value: z.string().optional(),
   /** url 类型的 HTTPS 链接 */
   url: z.string().url().optional(),
-  /** qr_code 类型的展示 URL（阶段开关控制是否返回） */
+  /** qr_code 类型的展示 URL（始终公开，从 asset 引用解析） */
   qrCodeUrl: z.string().optional(),
+  /** qr_code 展示元数据（宽高、体积），来自 asset 引用 */
+  qrCodeMeta: z
+    .object({
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+      byteLength: z.number().int().positive(),
+    })
+    .optional(),
 });
 
 export const publicGroupDtoSchema = z
@@ -45,7 +53,26 @@ export type PublicGroupDto = z.infer<typeof publicGroupDtoSchema>;
 //
 // 公开字段超集 + 管理私有字段
 
+const adminJoinMethodSchema = publicJoinMethodSchema.extend({
+  /** 关联的 asset ID（qr_code 类型时指向 assets 表） */
+  assetId: z.string().uuid().nullable().optional(),
+  /** asset 的公开 URL（从 asset 引用计算，非 DB 直存） */
+  assetUrl: z.string().nullable().optional(),
+  /** asset 宽度 */
+  assetWidth: z.number().int().positive().nullable().optional(),
+  /** asset 高度 */
+  assetHeight: z.number().int().positive().nullable().optional(),
+  /** asset 字节数 */
+  assetByteLength: z.number().int().positive().nullable().optional(),
+  /** asset 生命周期状态 */
+  assetStatus: z
+    .enum(["staged", "ready", "delete_pending", "delete_failed"])
+    .nullable()
+    .optional(),
+});
+
 export const adminGroupDtoSchema = publicGroupDtoSchema.extend({
+  joinMethods: z.array(adminJoinMethodSchema),
   /** 提交者联系方式（仅管理员可见） */
   submissionContact: z.string().nullable(),
   /** 审核备注（仅管理员可见） */
