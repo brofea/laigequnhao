@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 R2/D1 绑定、签名/大小验证、幂等和 Worker 测试。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查二维码上传、对话框、公开字段隔离和 E2E。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查 delete_pending/delete_failed 与 dependency error 语义。"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "检查资源限制、部分失败、迁移和永久删除覆盖。"}

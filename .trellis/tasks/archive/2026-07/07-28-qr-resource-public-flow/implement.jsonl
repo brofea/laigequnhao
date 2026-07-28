@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "实现 assets migration、外键、引用检查和可重试永久清理。"}
+{"file": ".trellis/spec/backend/api-guidelines.md", "reason": "实现管理员 asset API、公开二维码投影和配置契约变化。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "实现 R2/D1 部分失败、幂等重试和安全错误。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "实现图片上传接入和公开二维码对话框无障碍。"}
+{"file": ".trellis/spec/frontend/composable-guidelines.md", "reason": "实现 WebP 处理、staged asset、对象 URL 和清理生命周期。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "实现管理员/公开 asset DTO 隔离与三种方式穷尽分支。"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "覆盖 R2/D1、资源限制、永久删除和公开二维码 E2E。"}
