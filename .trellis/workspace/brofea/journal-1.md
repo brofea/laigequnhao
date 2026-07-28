@@ -104,3 +104,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: 实现 public-mvp 公开首页
+
+**Date**: 2026-07-28
+**Task**: 实现 public-mvp 公开首页
+**Branch**: `main`
+
+### Summary
+
+后端：D1 六表 migration、repositories（group/like/rate-limit）、services（rotation/submission）、adapters（hash/turnstile）、routes（/groups /submissions /likes）、中间件。前端：api/client、shared 组件、composables、组件（GroupCard/GroupList/SubmissionDialog）、HomeView 完整首页。测试：43 单元/组件 + Workers 集成。全部质量门禁通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6fda23e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

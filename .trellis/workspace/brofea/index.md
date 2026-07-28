@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
+- **Total Sessions**: 4
 - **Last Active**: 2026-07-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~106 | Active |
+| `journal-1.md` | ~139 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-07-28 | 实现 public-mvp 公开首页 | `6fda23e` | `main` |
 | 3 | 2026-07-28 | 建立 contracts-and-config 领域契约 | `462da57` | `main` |
 | 2 | 2026-07-28 | 搭建 project-foundation 项目骨架 | `be8527c` | `main` |
 | 1 | 2026-07-27 | 完成来个群号 Bootstrap | `a0597b9` | `main` |
