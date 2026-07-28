@@ -36,9 +36,20 @@ groupsRoute.get("/", async (c) => {
     .default as import("@shared/domain").SiteConfig;
   const { ordinal, windowId } = computeRotation(config.rotation);
 
+  // 解码游标
+  let skip = 0;
+  if (cursor) {
+    try {
+      const decoded = JSON.parse(atob(cursor)) as { o: number; q: string; n: number };
+      if (decoded.o === ordinal && (decoded.q ?? "") === (q ?? "")) {
+        skip = decoded.n;
+      }
+    } catch { /* 无效游标，从头开始 */ }
+  }
+
   // 数据库查询
   const repo = createGroupRepository(c.env.DB);
-  const { items, total } = await repo.listPublished({ q, cursor, limit, rotationOrdinal: ordinal });
+  const { items, total } = await repo.listPublished({ q, cursor: null, limit, rotationOrdinal: ordinal, skip });
 
   // 过滤 → PublicGroupDto
   const publicItems = items.map((admin) => {
@@ -56,10 +67,11 @@ groupsRoute.get("/", async (c) => {
   });
 
   // 游标
+  const newSkip = skip + items.length;
   const lastItem = items[items.length - 1];
   const nextCursor =
     items.length === limit && lastItem
-      ? btoa(JSON.stringify({ o: ordinal, q: q ?? "", k: lastItem.id }))
+      ? btoa(JSON.stringify({ o: ordinal, q: q ?? "", n: newSkip }))
       : null;
 
   return c.json(

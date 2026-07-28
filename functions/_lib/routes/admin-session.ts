@@ -16,6 +16,12 @@ export const adminSessionRoute = new Hono<{ Bindings: Env; Variables: Vars }>();
 const COOKIE_NAME = "session";
 const SESSION_DURATION = 8 * 60 * 60;
 
+/** 构建 Set-Cookie header，本地开发跳过 Secure */
+function setSessionCookie(c: { env: Env }, value: string, maxAge: number) {
+  const secure = c.env.SECURE_COOKIE === "true" ? "; Secure" : "";
+  return `${COOKIE_NAME}=${value}; HttpOnly${secure}; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+}
+
 /** POST /admin/session — 登录 */
 adminSessionRoute.post("/session", async (c) => {
   const requestId = c.get("requestId");
@@ -47,7 +53,7 @@ adminSessionRoute.post("/session", async (c) => {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
-        error: { code: "RATE_LIMITED", message: "Too many login attempts." },
+        error: { code: "RATE_LIMITED", message: "登录尝试过于频繁，请 15 分钟后重试。" },
         requestId,
       }),
       429,
@@ -71,10 +77,7 @@ adminSessionRoute.post("/session", async (c) => {
   const session = await auth.createSession();
   const cookieValue = `${session.sessionId}.${session.signature}`;
 
-  c.header(
-    "Set-Cookie",
-    `${COOKIE_NAME}=${cookieValue}; HttpOnly; Secure; SameSite=Lax; Path=/admin; Max-Age=${SESSION_DURATION}`,
-  );
+  c.header("Set-Cookie", setSessionCookie(c, cookieValue, SESSION_DURATION));
 
   return c.json(
     apiSuccessSchema(sessionResponseSchema).parse({
@@ -106,7 +109,7 @@ adminSessionRoute.get("/session", authRequired(), async (c) => {
 adminSessionRoute.delete("/session", authRequired(), csrfProtection(), async (c) => {
   const requestId = c.get("requestId");
 
-  c.header("Set-Cookie", `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/admin; Max-Age=0`);
+  c.header("Set-Cookie", setSessionCookie(c, "", 0));
 
   return c.json({
     ok: true,

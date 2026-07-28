@@ -1,36 +1,41 @@
 <script setup lang="ts">
 /* eslint-disable no-useless-assignment */
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAdminAuth } from "@/features/admin/composables/useAdminAuth";
 
 const router = useRouter();
-const { isAuthenticated, loading, error, check, doLogin } = useAdminAuth();
+const { isAuthenticated, loading, error, check, doLogin, doLogout } = useAdminAuth();
 const password = ref("");
 
-// Check existing session on mount
-void check();
+onMounted(async () => {
+  await check();
+  if (isAuthenticated.value) {
+    void router.replace("/admin");
+  }
+});
 
 async function handleLogin() {
   const ok = await doLogin(password.value);
-  if (ok) void router.push("/admin");
+  if (ok) void router.replace("/admin");
 }
 </script>
 
 <template>
-  <div class="flex min-h-[60vh] items-center justify-center">
-    <div class="w-full max-w-sm rounded-xl border bg-white p-6 shadow-sm">
-      <h2 class="text-xl font-semibold">管理员登录</h2>
+  <main class="flex min-h-screen items-center justify-center bg-gray-100">
+    <div class="w-full max-w-sm rounded-xl border bg-white p-8 shadow-sm">
+      <h1 class="mb-6 text-center text-xl font-bold text-gray-900">来个群号 — 管理后台</h1>
 
-      <form v-if="!isAuthenticated" class="mt-4 space-y-3" @submit.prevent="handleLogin">
+      <form @submit.prevent="handleLogin" class="space-y-4">
         <label class="block">
-          <span class="text-sm font-medium text-gray-700">密码</span>
+          <span class="text-sm font-medium text-gray-700">管理员密码</span>
           <input
             v-model="password"
             type="password"
             required
-            class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            placeholder="请输入管理员密码"
+            autofocus
+            class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            placeholder="请输入密码"
           />
         </label>
         <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
@@ -43,7 +48,10 @@ async function handleLogin() {
         </button>
       </form>
 
-      <p v-else class="mt-4 text-sm text-green-600">已登录，正在跳转...</p>
+      <p v-if="isAuthenticated" class="mt-4 text-center text-sm">
+        已登录，
+        <button class="text-brand-primary hover:underline" @click="doLogout()">退出登录</button>
+      </p>
     </div>
-  </div>
+  </main>
 </template>

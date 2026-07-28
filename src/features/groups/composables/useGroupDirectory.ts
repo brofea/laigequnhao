@@ -15,15 +15,15 @@ export function useGroupDirectory() {
 
   let controller: AbortController | null = null;
 
-  async function load(q?: string, cursor?: string | null, append = false) {
+  async function load(q?: string, _cursor?: string | null, append = false) {
     controller?.abort();
     controller = new AbortController();
-
     loading.value = true;
     error.value = null;
 
     try {
-      const result = await fetchGroups({ q, cursor, signal: controller.signal });
+      // 不传 cursor，limit 设大一点一次性加载全部
+      const result = await fetchGroups({ q, cursor: null, limit: 200, signal: controller.signal });
 
       if (!result.ok) {
         error.value = result.error.message;

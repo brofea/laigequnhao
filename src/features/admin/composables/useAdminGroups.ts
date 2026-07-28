@@ -26,7 +26,7 @@ export function useAdminGroups(_csrfToken: () => string) {
       if (deletedFilter.value) qs.set("deleted", "true");
       qs.set("limit", "50");
 
-      const result = await api.get(`/admin/groups?${qs.toString()}`, listResponseSchema);
+      const result = await api.get(`/admin?${qs.toString()}`, listResponseSchema);
       if (result.ok) {
         groups.value = result.data.items;
       } else {
@@ -40,7 +40,7 @@ export function useAdminGroups(_csrfToken: () => string) {
   }
 
   async function updateGroup(id: string, fields: Record<string, unknown>): Promise<boolean> {
-    const result = await api.patch(`/admin/groups/${id}`, adminGroupDtoSchema, fields);
+    const result = await api.patch(`/admin/${id}`, adminGroupDtoSchema, fields);
     if (result.ok) {
       const idx = groups.value.findIndex((g) => g.id === id);
       if (idx !== -1) groups.value[idx] = result.data;
@@ -51,7 +51,7 @@ export function useAdminGroups(_csrfToken: () => string) {
   }
 
   async function softDelete(id: string): Promise<boolean> {
-    const result = await api.delete(`/admin/groups/${id}`, adminGroupDtoSchema);
+    const result = await api.delete(`/admin/${id}`, adminGroupDtoSchema);
     if (result.ok) {
       await fetchGroups();
       return true;
@@ -60,7 +60,7 @@ export function useAdminGroups(_csrfToken: () => string) {
   }
 
   async function restore(id: string): Promise<boolean> {
-    const result = await api.post(`/admin/groups/${id}/restore`, adminGroupDtoSchema, {});
+    const result = await api.post(`/admin/${id}/restore`, adminGroupDtoSchema, {});
     if (result.ok) {
       await fetchGroups();
       return true;

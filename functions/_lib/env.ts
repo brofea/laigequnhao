@@ -18,4 +18,10 @@ export interface Env {
   DEV_LIKE_PEPPER?: string;
   /** Cloudflare Analytics 只读 Token */
   ANALYTICS_TOKEN?: string;
+  /** 是否启用 Secure Cookie（生产环境设为 true） */
+  SECURE_COOKIE?: string;
+  /** 登录最大尝试次数（默认 5） */
+  LOGIN_MAX_ATTEMPTS?: string;
+  /** 登录限流窗口（分钟，默认 15） */
+  LOGIN_WINDOW_MINUTES?: string;
 }

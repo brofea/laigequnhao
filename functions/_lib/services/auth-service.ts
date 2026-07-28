@@ -1,8 +1,6 @@
 /** 管理员认证服务 — HMAC-SHA256 签名 + CSRF token */
 
 const SESSION_DURATION = 8 * 60 * 60; // 8 小时
-const LOGIN_MAX_ATTEMPTS = 5;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 分钟
 
 /** Web Crypto HMAC-SHA256 */
 async function hmac(key: string, data: string): Promise<string> {
@@ -29,7 +27,17 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-export function createAuthService(env: { ADMIN_PASSWORD: string; SESSION_SECRET: string }) {
+export function createAuthService(env: {
+  ADMIN_PASSWORD: string;
+  SESSION_SECRET: string;
+  LOGIN_MAX_ATTEMPTS?: string;
+  LOGIN_WINDOW_MINUTES?: string;
+}) {
+  const loginMaxAttempts = env.LOGIN_MAX_ATTEMPTS ? parseInt(env.LOGIN_MAX_ATTEMPTS) : 5;
+  const loginWindowMs = env.LOGIN_WINDOW_MINUTES
+    ? parseInt(env.LOGIN_WINDOW_MINUTES) * 60 * 1000
+    : 15 * 60 * 1000;
+
   return {
     /** 常量时间密码校验 */
     async verifyPassword(input: string): Promise<boolean> {
@@ -74,10 +82,10 @@ export function createAuthService(env: { ADMIN_PASSWORD: string; SESSION_SECRET:
       return SESSION_DURATION;
     },
     get loginMaxAttempts() {
-      return LOGIN_MAX_ATTEMPTS;
+      return loginMaxAttempts;
     },
     get loginWindowMs() {
-      return LOGIN_WINDOW_MS;
+      return loginWindowMs;
     },
   };
 }

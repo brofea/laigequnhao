@@ -7,15 +7,13 @@ export const routes: RouteRecordRaw[] = [
     component: () => import("@/views/HomeView.vue"),
   },
   {
+    path: "/admin/login",
+    name: "admin-login",
+    component: () => import("@/views/admin/LoginView.vue"),
+  },
+  {
     path: "/admin",
     name: "admin",
     component: () => import("@/views/admin/AdminView.vue"),
-    children: [
-      {
-        path: "login",
-        name: "admin-login",
-        component: () => import("@/views/admin/LoginView.vue"),
-      },
-    ],
   },
 ];

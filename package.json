@@ -22,6 +22,7 @@
     "db:migrate:preview": "wrangler d1 execute laigequnhao-preview --file=migrations/0001_initial.sql",
     "db:migrate:prod": "wrangler d1 execute laigequnhao-prod --file=migrations/0001_initial.sql",
     "db:reset:local": "wrangler d1 execute laigequnhao-db --local --command=\"DROP TABLE IF EXISTS rate_limits; DROP TABLE IF EXISTS likes; DROP TABLE IF EXISTS submission_details; DROP TABLE IF EXISTS join_methods; DROP TABLE IF EXISTS group_tags; DROP TABLE IF EXISTS groups;\"",
+    "db:unlock:local": "wrangler d1 execute laigequnhao-db --local --command=\"DELETE FROM rate_limits;\"",
     "db:seed:local": "wrangler d1 execute laigequnhao-db --local --file=migrations/seed.sql"
   },
   "dependencies": {

@@ -93,8 +93,9 @@ export function createGroupRepository(db: D1Database) {
       cursor?: string | null;
       limit: number;
       rotationOrdinal: number;
+      skip?: number;
     }): Promise<{ items: AdminGroupDto[]; total: number }> {
-      const { q, limit, rotationOrdinal } = params;
+      const { q, limit, rotationOrdinal, skip = 0 } = params;
 
       let whereClause = `g.status IN ('published', 'delisted') AND g.deleted_at IS NULL`;
       const bindings: unknown[] = [];
@@ -116,22 +117,29 @@ export function createGroupRepository(db: D1Database) {
         return { items: [], total: 0 };
       }
 
-      // 主查询：排序后循环位移分页
-      const offset = rotationOrdinal % total;
-      const mainBindings = [...bindings, limit, offset];
-
-      const rows = await db
+      // 查询全部匹配群聊（移除 LIMIT/OFFSET，在内存中做循环位移）
+      const allRows = await db
         .prepare(
           `SELECT g.* FROM groups g
            WHERE ${whereClause}
-           ORDER BY g.rotation_key ASC, g.id ASC
-           LIMIT ? OFFSET ?`,
+           ORDER BY g.rotation_key ASC, g.id ASC`,
         )
-        .bind(...mainBindings)
+        .bind(...bindings)
         .all<GroupRow>();
 
+      // 内存中循环位移 + 分页
+      const allItems = allRows.results;
+      const baseOffset = rotationOrdinal % total;
+      const startIdx = (baseOffset + skip) % total;
+      let sliced: GroupRow[];
+      if (startIdx + limit <= total) {
+        sliced = allItems.slice(startIdx, startIdx + limit);
+      } else {
+        sliced = [...allItems.slice(startIdx), ...allItems.slice(0, (startIdx + limit) % total)];
+      }
+
       // 批量加载标签、加群方式、提交详情
-      const groupIds = rows.results.map((r) => r.id);
+      const groupIds = sliced.map((r) => r.id);
       if (groupIds.length === 0) return { items: [], total };
 
       const [tagsResult, methodsResult, detailsResult] = await Promise.all([
@@ -175,7 +183,7 @@ export function createGroupRepository(db: D1Database) {
         detailsByGroup.set(r.group_id, { contact: r.contact, notes: r.notes });
       }
 
-      const items = rows.results.map((g) =>
+      const items = sliced.map((g) =>
         mapToAdminDto(
           g,
           tagsByGroup.get(g.id) ?? [],
