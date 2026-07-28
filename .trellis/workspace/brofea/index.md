@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-07-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~238 | Active |
+| `journal-1.md` | ~271 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-07-28 | 编写 project-docs 快速入门与测试清单 | `5597d1b` | `main` |
 | 7 | 2026-07-28 | 实现 assets-and-operations 图片与运行数据 | `cc5f7b5` | `main` |
 | 6 | 2026-07-28 | 实现 admin-moderation 管理员审核 | `1118d67` | `main` |
 | 5 | 2026-07-28 | 补全 Cloudflare 数据层基础设施 | `791fa0c` | `main` |

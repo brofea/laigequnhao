@@ -236,3 +236,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 编写 project-docs 快速入门与测试清单
+
+**Date**: 2026-07-28
+**Task**: 编写 project-docs 快速入门与测试清单
+**Branch**: `main`
+
+### Summary
+
+编写 README.md（项目简介、技术栈、Quick Start 5 步、Cloudflare 部署流程、命令参考、环境变量说明）和 TESTING.md（36 项人工测试清单，覆盖公开端、管理端、仪表盘、图片上传）。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5597d1b` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
