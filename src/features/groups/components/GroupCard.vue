@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /* eslint-disable no-useless-assignment */
+import { ref } from "vue";
 import type { PublicGroupDto } from "@shared/contracts/group";
+import QrCodeDialog from "./QrCodeDialog.vue";
 
 defineProps<{
   group: PublicGroupDto;
@@ -12,8 +14,16 @@ const emit = defineEmits<{
   copyNumber: [text: string];
 }>();
 
+const qrDialogOpen = ref(false);
+const viewingQrMethod = ref<PublicGroupDto["joinMethods"][number] | null>(null);
+
 function openUrl(url: string) {
   window.open(url, "_blank", "noopener");
+}
+
+function openQrDialog(method: PublicGroupDto["joinMethods"][number]) {
+  viewingQrMethod.value = method;
+  qrDialogOpen.value = true;
 }
 </script>
 
@@ -94,15 +104,17 @@ function openUrl(url: string) {
       <!-- 加群按钮 -->
       <div class="flex gap-2">
         <button
-          v-for="method in group.joinMethods"
-          :key="method.type"
+          v-for="(method, idx) in group.joinMethods"
+          :key="`${method.type}-${idx}`"
           class="rounded bg-brand-primary px-3 py-1 text-xs font-medium text-white transition-opacity hover:opacity-80"
           @click="
             method.type === 'group_number' && method.value
               ? emit('copyNumber', method.value)
               : method.type === 'url' && method.url
                 ? openUrl(method.url)
-                : undefined
+                : method.type === 'qr_code' && method.qrCodeUrl
+                  ? openQrDialog(method)
+                  : undefined
           "
         >
           {{
@@ -115,5 +127,14 @@ function openUrl(url: string) {
         </button>
       </div>
     </div>
+
+    <!-- 二维码对话框 -->
+    <QrCodeDialog
+      v-if="viewingQrMethod"
+      v-model:open="qrDialogOpen"
+      :group-title="group.title"
+      :qr-code-url="viewingQrMethod.qrCodeUrl ?? ''"
+      :qr-code-meta="viewingQrMethod.qrCodeMeta ?? null"
+    />
   </article>
 </template>

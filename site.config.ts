@@ -38,9 +38,7 @@ const rawConfig: SiteConfig = {
     { id: "telegram", name: "Telegram", allowedJoinMethods: ["url"] },
   ],
 
-  features: {
-    qrCodePublic: false,
-  },
+  features: {},
 };
 
 /** 经 Zod 校验的站点配置 */

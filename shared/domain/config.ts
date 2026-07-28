@@ -40,9 +40,10 @@ export const rotationConfigSchema = z
 export type RotationConfig = z.infer<typeof rotationConfigSchema>;
 
 // ─── 功能开关 ────────────────────────────────────────────
-export const featuresConfigSchema = z.object({
-  qrCodePublic: z.boolean(),
-});
+//
+// 二维码始终公开（不再有 qrCodePublic 开关）。
+// features 保留为扩展点，当前为空。
+export const featuresConfigSchema = z.object({}).strict();
 export type FeaturesConfig = z.infer<typeof featuresConfigSchema>;
 
 // ─── 站点配置 ────────────────────────────────────────────

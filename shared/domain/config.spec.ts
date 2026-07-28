@@ -11,7 +11,7 @@ const validConfig = {
   theme: { primaryColor: "#2563eb", accentColor: "#f59e0b", defaultMode: "light" as const },
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
   platforms: [{ id: "qq", name: "QQ", allowedJoinMethods: ["group_number" as const] }],
-  features: { qrCodePublic: false },
+  features: {},
 };
 
 describe("siteConfigSchema", () => {
