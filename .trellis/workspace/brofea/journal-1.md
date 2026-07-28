@@ -170,3 +170,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: 实现 admin-moderation 管理员审核
+
+**Date**: 2026-07-28
+**Task**: 实现 admin-moderation 管理员审核
+**Branch**: `main`
+
+### Summary
+
+后端：HMAC-SHA256 认证服务、authRequired/csrfProtection 中间件、admin-session 路由（登录/状态/退出）、admin-groups 路由（9 个管理端点）。前端：useAdminAuth/useAdminGroups composables、AdminGroupTable/Form/TrashConfirmDialog 组件、LoginView/AdminView。测试：admin-session 7/8 pass。全部质量门禁通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1118d67` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
