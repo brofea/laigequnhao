@@ -1,66 +1,17 @@
-/** 来个群号 — 机构级站点配置 */
-export interface SiteConfig {
-  /** 机构完整名称 */
-  name: string;
-  /** 机构简称 */
-  shortName: string;
-  /** 站点页面标题 */
-  title: string;
-  /** 站点介绍 */
-  description: string;
-  /** 联系邮箱 */
-  contactEmail: string;
-  /** 页脚版权行 */
-  copyright: string;
+import { siteConfigSchema } from "@shared/domain/config";
+import type {
+  SiteConfig,
+  PlatformConfig,
+  JoinMethod,
+  GroupKind,
+  GroupStatus,
+} from "@shared/domain";
 
-  /** 主题 */
-  theme: {
-    /** 主色（CSS 合法颜色值） */
-    primaryColor: string;
-    /** 强调色 */
-    accentColor: string;
-    /** 默认颜色模式 */
-    defaultMode: "light" | "dark";
-  };
-
-  /** 轮换排序 */
-  rotation: {
-    /** IANA 时区标识 */
-    timezone: string;
-    /** 每日轮换时间点（HH:mm，升序，不重复） */
-    times: string[];
-  };
-
-  /** 支持的平台配置 */
-  platforms: PlatformConfig[];
-
-  /** 功能开关 */
-  features: {
-    /** 二维码公开展示 */
-    qrCodePublic: boolean;
-  };
-}
-
-export interface PlatformConfig {
-  /** 平台唯一标识 */
-  id: string;
-  /** 平台显示名称 */
-  name: string;
-  /** 该平台允许的加群方式 */
-  allowedJoinMethods: JoinMethod[];
-}
-
-/** 加群方式 */
-export type JoinMethod = "group_number" | "url" | "qr_code";
-
-/** 群聊性质 */
-export type GroupKind = "official" | "interest";
-
-/** 业务状态 */
-export type GroupStatus = "pending" | "published" | "rejected" | "delisted";
+// Re-export for consumers
+export type { SiteConfig, PlatformConfig, JoinMethod, GroupKind, GroupStatus };
 
 /** 默认示例配置 — 部署时替换为实际机构 */
-const siteConfig: SiteConfig = {
+const rawConfig: SiteConfig = {
   name: "示例大学",
   shortName: "示例",
   title: "来个群号 — 示例大学",
@@ -91,5 +42,8 @@ const siteConfig: SiteConfig = {
     qrCodePublic: false,
   },
 };
+
+/** 经 Zod 校验的站点配置 */
+const siteConfig = siteConfigSchema.parse(rawConfig);
 
 export default siteConfig;
