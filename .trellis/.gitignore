@@ -30,3 +30,6 @@
 # Python cache
 **/__pycache__/
 **/*.pyc
+
+# Trellis 个人工作区
+/workspace

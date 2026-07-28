@@ -1,0 +1,33 @@
+{
+  "id": "00-bootstrap-guidelines",
+  "name": "00-bootstrap-guidelines",
+  "title": "Bootstrap Guidelines",
+  "description": "Define the product bootstrap PRD, technical design, implementation plan, and project development Specs",
+  "status": "completed",
+  "dev_type": "docs",
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "brofea",
+  "assignee": "brofea",
+  "createdAt": "2026-07-27",
+  "completedAt": "2026-07-27",
+  "branch": null,
+  "base_branch": null,
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/tasks/00-bootstrap-guidelines/prd.md",
+    ".trellis/tasks/00-bootstrap-guidelines/design.md",
+    ".trellis/tasks/00-bootstrap-guidelines/implement.md",
+    ".trellis/spec/backend/",
+    ".trellis/spec/frontend/",
+    ".trellis/spec/guides/testing-strategy.md"
+  ],
+  "notes": "Greenfield full-stack bootstrap. Specs are initial implementation contracts and must gain source-backed examples after the first product implementation.",
+  "meta": {}
+}

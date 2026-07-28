@@ -1,0 +1,67 @@
+# D1 数据库规范
+
+## 方案
+
+通过有类型约束的 repository 模块直接使用 Cloudflare D1。MVP 不使用 ORM。所有值都通过预处理语句绑定；禁止把值插值到 SQL 中。
+
+Repository 在单一边界把 `unknown` D1 行映射为内部类型。Service 和路由不得读取无类型约束的行属性。
+
+## 初始数据表
+
+| 表 | 职责 |
+|---|---|
+| `groups` | 内容、性质、平台、状态、Logo 资源、轮换 key、计数、版本、软删除状态和永久清理进度 |
+| `group_tags` | 有顺序且已归一化的标签 |
+| `join_methods` | 有顺序的群号、URL 或二维码资源加群方式 |
+| `submission_details` | 仅管理员可见的联系方式和审核备注 |
+| `assets` | R2 key、用途、尺寸、字节数和 content type |
+| `likes` | 群聊与投票者 hash 的唯一关系 |
+| `rate_limits` | 必要时使用的服务端过期计数器 |
+
+外部标识符使用 `crypto.randomUUID()` 生成的 TEXT UUID。时间戳统一使用 UTC 整数毫秒或 ISO 字符串；应用使用 `Asia/Shanghai` 计算排名时间窗。
+
+`groups.status` 只能是 `pending`、`published`、`rejected`、`delisted`。软删除使用 `deleted_at` 且不修改 `status`，因此恢复时清除删除字段。每次管理员编辑都递增 `version`。
+
+永久清理只允许作用于软删除记录。`groups.purge_state` 使用 `none`、`pending`、`r2_done` 三种值，并配合 `purge_started_at`、`purge_attempts` 和安全的 `purge_last_error_code` 保存可重试进度。最终 D1 关联行全部删除后，不再保留操作记录；如果删除 D1 失败，`r2_done` 行必须能够继续重试。
+
+## 不变量与索引
+
+- 已发布/已下架群聊至少有一种当前阶段允许公开使用的加群方式。二维码公开功能未启用时，单独一个 `qr_code` 不能满足此不变量。
+- `likes` 包含 `UNIQUE(group_id, voter_hash)`。
+- `groups.like_count` 是缓存投影，与点赞行在同一 D1 batch 中更新。
+- 持久化前，根据应用配置校验平台和性质。
+- 资源记录引用不可变的 R2 key。
+- 为公开可见性/轮换、管理员状态/删除/永久清理、标签查询、提交时间和限流过期时间建立索引。
+- 显式启用并声明外键。
+
+写入和查询时统一对搜索文本执行 trim、Unicode 宽度/兼容性和拉丁字母大小写归一化。在 1,000 个群聊的基准下，对维护好的可搜索投影使用 D1 `LIKE` 即可。没有测量证明需要之前，不要引入 FTS 或外部搜索服务。
+
+## 事务与多资源操作
+
+以下相关 SQL 写入使用 D1 batch/transaction 语义：
+
+- 群聊、标签和加群方式；
+- 点赞行和缓存计数；
+- 软删除元数据；
+- 审核状态和私有提交信息更新。
+
+D1 和 R2 无法共享事务。替换资源时，先写入新对象，再写入 D1，最后移除未被引用的旧对象。永久删除时，先把软删除记录标为 `pending`，确认资源没有被其他记录引用后移除相应 R2 对象，再将状态写为 `r2_done`，最后以 D1 batch 删除关联行和群聊行。任何失败都必须保留可重试状态并让管理员可见；重试必须把“对象已经不存在”视为 R2 清理成功。
+
+## 数据库迁移（Migration）
+
+- 有序 SQL 存放在 `migrations/`。
+- 禁止修改已应用的 migration。
+- 应用到生产环境之前，先在本地和隔离的预览数据库执行 migration。
+- 破坏性 migration 必须先导出/备份，并制定补偿性回滚 migration 方案。
+- Migration 测试从空数据库开始，并覆盖从有代表性的旧 schema 升级。
+- Seed 数据与 migration 分开，且绝不包含 Secret。
+
+## 禁止做法
+
+- 在公开投影中使用 `SELECT *`
+- 根据请求输入动态生成表名或列名
+- 存储原始 IP、密码、会话 token、Turnstile token 或 Analytics token
+- 在 D1 中存储图片 blob
+- 每张群聊卡片产生 N+1 查询
+- 没有不变量测试就假设缓存的 `like_count` 始终正确
+- 本地测试访问生产 D1
