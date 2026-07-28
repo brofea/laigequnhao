@@ -1,0 +1,30 @@
+{
+  "id": "improve-admin-page",
+  "name": "improve-admin-page",
+  "title": "完善 admin 页面功能",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "brofea",
+  "assignee": "brofea",
+  "createdAt": "2026-07-28",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-28-admin-list-search-sort",
+    "07-28-admin-group-aggregate-editor",
+    "07-28-qr-resource-public-flow"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

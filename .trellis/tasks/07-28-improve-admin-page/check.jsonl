@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查前端 lint、类型、组件测试、E2E、公开私有隔离和无障碍门禁。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 Functions、D1、R2、安全与 Worker 集成测试门禁。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查共享 schema、判别联合、穷尽分支及禁止局部 payload 类型。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查 VALIDATION/VERSION/STATE/DEPENDENCY 错误和可重试失败语义。"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "检查全部验收标准是否由正确测试层证明。"}

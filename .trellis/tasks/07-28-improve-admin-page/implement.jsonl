@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/api-guidelines.md", "reason": "父任务集成需核对管理员/公开 API 契约、认证、游标和私有字段隔离。"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "父任务集成需核对 D1 migration、聚合事务、外键和可重试资源清理。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "父任务集成需核对 URL 状态、服务端权威状态和管理员 CRUD 回写。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "父任务集成需核对抽屉、表格、对话框和动态列表的组件及无障碍规则。"}
+{"file": ".trellis/spec/guides/testing-strategy.md", "reason": "父任务集成需按项目分层测试与 1000 条规模夹具规划全量验证。"}

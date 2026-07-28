@@ -269,3 +269,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: 实现二维码资源生命周期与公开交互闭环
+
+**Date**: 2026-07-28
+**Task**: 实现二维码资源生命周期与公开交互闭环
+**Branch**: `main`
+
+### Summary
+
+完成 migration 0002、asset 生命周期服务（staged/ready/delete_pending/delete_failed）、引用计数、R2/D1 补偿、永久删除状态机、QrCodeDialog 对话框、移除 qrCodePublic 配置开关。TypeCheck/Build/46 Tests 全部通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ae8327b` | (see git log) |
+| `b1a309c` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
