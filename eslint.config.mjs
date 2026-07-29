@@ -19,6 +19,7 @@ export default tseslint.config(
       "eslint.config.mjs",
       "postcss.config.js",
       "tests/workers",
+      "tests/e2e/worker.ts",
     ],
   },
   js.configs.recommended,
@@ -56,6 +57,15 @@ export default tseslint.config(
     },
   },
   {
+    files: ["scripts/**/*.mjs"],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+      },
+    },
+  },
+  {
     files: ["**/*.vue"],
     languageOptions: {
       parserOptions: {
@@ -65,6 +75,13 @@ export default tseslint.config(
     rules: {
       "vue/multi-word-component-names": "off",
       "vue/singleline-html-element-content-newline": "off",
+      // Prettier owns template whitespace and attribute layout.
+      "vue/max-attributes-per-line": "off",
+      "vue/html-self-closing": "off",
+      "vue/html-indent": "off",
+      "vue/html-closing-bracket-newline": "off",
+      // Core rule does not account for script-setup bindings consumed by Vue templates.
+      "no-useless-assignment": "off",
     },
   },
 );

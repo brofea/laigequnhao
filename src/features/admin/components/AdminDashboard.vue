@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 import { onMounted } from "vue";
 import { useDashboard } from "../composables/useDashboard";
 import HealthPanel from "./HealthPanel.vue";

@@ -8,8 +8,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
-  search: [];
-  clear: [];
+  search: [value: string];
+  clear: [value: string];
 }>();
 
 const local = ref(props.modelValue);
@@ -27,14 +27,14 @@ function onInput() {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Enter") {
-    emit("search");
+    emit("search", local.value);
   }
 }
 
 function onClear() {
   local.value = "";
   emit("update:modelValue", "");
-  emit("clear");
+  emit("clear", "");
 }
 </script>
 
@@ -48,7 +48,7 @@ function onClear() {
       class="w-full max-w-xs rounded-lg border border-gray-300 py-1.5 pl-8 pr-8 text-sm focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary disabled:opacity-50"
       @input="onInput"
       @keydown="onKeydown"
-    >
+    />
     <svg
       class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
       fill="none"
@@ -68,12 +68,7 @@ function onClear() {
       aria-label="清除搜索"
       @click="onClear"
     >
-      <svg
-        class="h-4 w-4"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
           stroke-linecap="round"
           stroke-linejoin="round"

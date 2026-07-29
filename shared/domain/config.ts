@@ -41,7 +41,7 @@ export type RotationConfig = z.infer<typeof rotationConfigSchema>;
 
 // ─── 功能开关 ────────────────────────────────────────────
 //
-// 二维码始终公开（不再有 qrCodePublic 开关）。
+// 二维码与群号、URL 一样始终作为公开加群方式。
 // features 保留为扩展点，当前为空。
 export const featuresConfigSchema = z.object({}).strict();
 export type FeaturesConfig = z.infer<typeof featuresConfigSchema>;

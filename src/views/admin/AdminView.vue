@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAdminAuth } from "@/features/admin/composables/useAdminAuth";
@@ -33,12 +32,14 @@ const editingGroup = ref<AdminGroupDto | null>(null);
 const saving = ref(false);
 const drawerFieldErrors = ref<Record<string, string[]> | undefined>(undefined);
 const drawerGlobalError = ref("");
+const drawerSaved = ref(false);
 
 function openCreate() {
   if (admin.deleted.value) return;
   editingGroup.value = null;
   drawerFieldErrors.value = undefined;
   drawerGlobalError.value = "";
+  drawerSaved.value = false;
   drawerOpen.value = true;
 }
 
@@ -47,6 +48,7 @@ function openEdit(group: AdminGroupDto) {
   editingGroup.value = group;
   drawerFieldErrors.value = undefined;
   drawerGlobalError.value = "";
+  drawerSaved.value = false;
   drawerOpen.value = true;
 }
 
@@ -58,6 +60,7 @@ async function handleSave(data: Record<string, unknown>) {
     if (editingGroup.value) {
       const result = await admin.updateGroup(editingGroup.value.id, data);
       if (result.ok) {
+        drawerSaved.value = true;
         drawerOpen.value = false;
         editingGroup.value = null;
       } else if (result.versionConflict) {
@@ -68,6 +71,7 @@ async function handleSave(data: Record<string, unknown>) {
     } else {
       const result = await admin.createGroup(data);
       if (result.ok) {
+        drawerSaved.value = true;
         drawerOpen.value = false;
         editingGroup.value = null;
       } else if (result.fieldErrors) {
@@ -159,9 +163,8 @@ async function handleLogout() {
             @toggle-deleted="admin.toggleDeleted"
           />
           <AdminGroupSearch
-            v-if="!admin.deleted.value"
             :model-value="admin.searchQuery.value"
-            :disabled="admin.deleted.value"
+            :disabled="false"
             @update:model-value="admin.setSearch"
             @search="admin.searchImmediate"
             @clear="admin.searchImmediate"
@@ -175,7 +178,9 @@ async function handleLogout() {
           </button>
         </div>
 
-        <p v-if="admin.error.value" class="mb-4 text-sm text-red-500">{{ admin.error.value }}</p>
+        <p v-if="admin.error.value" class="mb-4 text-sm text-red-500">
+          {{ admin.error.value }}
+        </p>
 
         <!-- 群聊表格 -->
         <AdminGroupTable
@@ -207,8 +212,10 @@ async function handleLogout() {
           :group="editingGroup"
           :open="drawerOpen"
           :saving="saving"
+          :saved="drawerSaved"
           :server-field-errors="drawerFieldErrors"
           :server-error="drawerGlobalError"
+          :csrf-token="csrfToken"
           @update:open="drawerOpen = $event"
           @save="handleSave"
         />

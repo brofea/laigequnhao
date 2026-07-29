@@ -130,7 +130,6 @@ watch(
             :width="qrCodeMeta?.width ?? 256"
             :height="qrCodeMeta?.height ?? 256"
             class="max-h-64 max-w-full rounded object-contain"
-            loading="lazy"
             decoding="async"
             @load="imageLoaded = true"
             @error="imageError = true"
@@ -158,9 +157,7 @@ watch(
         </div>
 
         <!-- 提示文字 -->
-        <p class="mt-3 text-center text-xs text-gray-400">
-          使用 {{ groupTitle }} 的二维码扫码加群
-        </p>
+        <p class="mt-3 text-center text-xs text-gray-400">使用 {{ groupTitle }} 的二维码扫码加群</p>
       </div>
     </div>
   </Teleport>

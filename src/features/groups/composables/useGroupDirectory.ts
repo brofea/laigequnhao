@@ -1,6 +1,7 @@
 import { ref, watch, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { PublicGroupDto } from "@shared/contracts/group";
+import { normalizeSearchQuery } from "@shared/domain";
 import { fetchGroups } from "../api";
 
 export function useGroupDirectory() {
@@ -15,15 +16,21 @@ export function useGroupDirectory() {
 
   let controller: AbortController | null = null;
 
-  async function load(q?: string, _cursor?: string | null, append = false) {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function load(q?: string, cursor?: string | null, append = false) {
     controller?.abort();
     controller = new AbortController();
     loading.value = true;
     error.value = null;
 
     try {
-      // 不传 cursor，limit 设大一点一次性加载全部
-      const result = await fetchGroups({ q, cursor: null, limit: 200, signal: controller.signal });
+      const result = await fetchGroups({
+        q,
+        cursor: cursor ?? null,
+        limit: 50,
+        signal: controller.signal,
+      });
 
       if (!result.ok) {
         error.value = result.error.message;
@@ -52,7 +59,20 @@ export function useGroupDirectory() {
   }
 
   function search(q: string) {
-    void router.replace({ query: { ...route.query, q: q || undefined } });
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      void router.replace({
+        query: { ...route.query, q: normalizeSearchQuery(q) ?? undefined },
+      });
+    }, 300);
+  }
+
+  /** 立即搜索（回车/清空使用） */
+  function searchImmediate(q: string) {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    void router.replace({
+      query: { ...route.query, q: normalizeSearchQuery(q) ?? undefined },
+    });
   }
 
   watch(
@@ -76,6 +96,7 @@ export function useGroupDirectory() {
     rotationWindow,
     loadMore,
     search,
+    searchImmediate,
     retry: () => {
       const q = (route.query.q as string) || undefined;
       void load(q, null, false);

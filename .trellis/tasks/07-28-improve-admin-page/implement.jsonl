@@ -3,3 +3,6 @@
 {"file": ".trellis/spec/frontend/state-management.md", "reason": "父任务集成需核对 URL 状态、服务端权威状态和管理员 CRUD 回写。"}
 {"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "父任务集成需核对抽屉、表格、对话框和动态列表的组件及无障碍规则。"}
 {"file": ".trellis/spec/guides/testing-strategy.md", "reason": "父任务集成需按项目分层测试与 1000 条规模夹具规划全量验证。"}
+{"file": ".trellis/tasks/07-28-improve-admin-page/prd.md", "reason": "收敛实现必须逐项满足 AC-S01–AC-S14 和 D1/R2/API/UI 状态验收矩阵。"}
+{"file": ".trellis/tasks/07-28-improve-admin-page/design.md", "reason": "唯一允许的并发方案是 UUID mutation token + 单 D1 batch，并需打通管理员已有二维码预览。"}
+{"file": ".trellis/tasks/07-28-improve-admin-page/implement.md", "reason": "单 Agent 必须按测试夹具、原子写入、二维码预览、真实资源测试、E2E、门禁的顺序串行执行。"}

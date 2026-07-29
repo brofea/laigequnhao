@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 import { ref, computed } from "vue";
 import { submissionRequestSchema, type SubmissionRequest } from "@shared/contracts/submission";
 import siteConfig from "../../../../site.config";

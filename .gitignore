@@ -11,3 +11,6 @@ dist
 Thumbs.db
 .omo
 *.tsbuildinfo
+playwright-report/
+test-results/
+.e2e-state/

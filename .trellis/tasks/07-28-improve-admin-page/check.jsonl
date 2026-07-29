@@ -3,3 +3,6 @@
 {"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查共享 schema、判别联合、穷尽分支及禁止局部 payload 类型。"}
 {"file": ".trellis/spec/backend/error-handling.md", "reason": "检查 VALIDATION/VERSION/STATE/DEPENDENCY 错误和可重试失败语义。"}
 {"file": ".trellis/spec/guides/testing-strategy.md", "reason": "检查全部验收标准是否由正确测试层证明。"}
+{"file": ".trellis/tasks/07-28-improve-admin-page/prd.md", "reason": "独立验收逐项核对 AC-S01–AC-S14，禁止用测试数量替代状态证明。"}
+{"file": ".trellis/tasks/07-28-improve-admin-page/design.md", "reason": "检查实现没有退回时间戳守卫、两步提交或事后补偿，并验证 QR URL 跨层流动。"}
+{"file": ".trellis/tasks/07-28-improve-admin-page/implement.md", "reason": "检查真实 asset/R2 fixture、并发故障注入、Vue 与 Playwright 场景以及全量门禁。"}

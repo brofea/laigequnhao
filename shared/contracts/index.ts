@@ -32,7 +32,7 @@ export type { LikeToggleResponse } from "./like";
 export { loginRequestSchema, sessionResponseSchema, sessionStatusSchema } from "./auth";
 export type { LoginRequest, SessionResponse, SessionStatus } from "./auth";
 
-export { listQuerySchema, cursorPageSchema } from "./pagination";
+export { listQuerySchema, cursorPageSchema, encodeCursor, decodeCursor } from "./pagination";
 export type { ListQuery, CursorPage } from "./pagination";
 
 export { healthResponseSchema } from "./health";

@@ -45,17 +45,46 @@ Repository 在单一边界把 `unknown` D1 行映射为内部类型。Service �
 - 软删除元数据；
 - 审核状态和私有提交信息更新。
 
-D1 和 R2 无法共享事务。替换资源时，先写入新对象，再写入 D1，最后移除未被引用的旧对象。永久删除时，先把软删除记录标为 `pending`，确认资源没有被其他记录引用后移除相应 R2 对象，再将状态写为 `r2_done`，最后以 D1 batch 删除关联行和群聊行。任何失败都必须保留可重试状态并让管理员可见；重试必须把\u201C对象已经不存在\u201D视为 R2 清理成功。
+D1 和 R2 无法共享事务。替换资源时，先写入新对象，再写入 D1，最后移除未被引用的旧对象。永久删除时，先把软删除记录标为 `pending`，确认资源没有被其他记录引用后移除相应 R2 对象，再将状态写为 `r2_done`，最后以 D1 batch 删除关联行和群聊行。任何失败都必须保留可重试状态并让管理员可见；重试必须把"对象已经不存在"视为 R2 清理成功。
+
+### D1 batch 原子聚合更新模式（Mutation Token）
+
+D1 batch 按顺序执行所有语句，不会因首条 UPDATE 影响 0 行而跳过后续语句。因此版本冲突时，后续 DELETE/INSERT 仍会执行，必须通过守卫条件阻止副作用。
+
+**模式**：
+
+```
+1. 生成 mutation_token = crypto.randomUUID()
+2. 构建单一 batch:
+   a. UPDATE groups SET ..., version = version + 1, mutation_token = <token>
+      WHERE id = ? AND version = ?
+   b. DELETE FROM group_tags WHERE group_id = ?
+      AND EXISTS (SELECT 1 FROM groups WHERE id = ? AND mutation_token = <token>)
+   c. INSERT INTO group_tags (...) SELECT ... WHERE EXISTS (... mutation_token = <token>)
+   d. 同理处理 join_methods, submission_details, assets
+   e. UPDATE groups SET mutation_token = NULL WHERE id = ?
+3. 执行 db.batch(batch)
+4. results[0].meta.changes === 0 → VERSION_CONFLICT（EXISTS 守卫零副作用）
+   results[0].meta.changes > 0 → 写入成功，所有关联操作已通过守卫执行
+```
+
+**关键约束**：
+- mutation_token 不进入任何公开或管理员 DTO。
+- `results[0].meta.changes` 在本地 miniflare 和远端 D1 均可靠反映 UPDATE 影响行数。
+- 禁止使用 `updated_at` 或 `version` 推断写入是否成功（不具备唯一性）。
+- 禁止 batch 后 SELECT 补偿判断。
 
 ## Asset 生命周期
 
 `assets.status` 状态机：
 
 ```
-upload → staged → (adopt) → ready → (release, ref_count → 0) → delete_pending
-                                                    delete_pending → (R2 删除成功) → D1 行移除
-                                                    delete_pending → (R2 删除失败) → delete_failed
-                                                    delete_failed → (retry) → D1 行移除 / 继续 delete_failed
+D1 staged 登记 → R2 upload → staged → (群组聚合保存) → ready
+R2 upload 失败 → delete_failed
+ready → (群组聚合移除最后引用) → delete_pending
+delete_pending → (R2 删除成功) → D1 行移除
+delete_pending → (R2 删除失败) → delete_failed
+delete_pending/delete_failed → (人工 cleanup 重试) → D1 行移除 / 保留可重试状态
 ```
 
 ### 状态说明
@@ -71,21 +100,38 @@ upload → staged → (adopt) → ready → (release, ref_count → 0) → delet
 
 - `join_methods.asset_id` 指向 `assets` 表示一次引用。
 - 多个 `join_methods` 可以引用同一 asset（ref_count > 1）。
-- `adopt()`：staged → ready，ref_count +1。
-- `addRef()`：直接对 ready asset 增加引用（复用已有 asset 时）。
-- `release()`：ref_count -1；归零时标记 `delete_pending` 并触发异步清理。
-- 异步清理使用 `deleteIfUnreferenced()`：再次检查 ref_count=0 后才删除 R2 + D1。
+- staged → ready、ready 复用和引用释放只能作为群组 create/update 的同一个 D1 batch
+  一部分执行；禁止保留独立 adopt/addRef/release HTTP 旁路。
+- 聚合保存预校验后，另一个聚合可能已把同一 staged asset 变为 ready。adoption 更新必须
+  对 staged/ready 都增加一次引用，并让 QR `join_methods` INSERT 在 asset 已变为不可引用
+  状态时通过 FK 失败使整个 batch 回滚。
+- 直接 asset DELETE 只允许 purge 未引用 staged 资源；ready 引用必须通过保存所属群组
+  聚合来改变。
+- `deleteIfUnreferenced()` 删除 R2 前同时检查缓存 `ref_count` 和
+  `join_methods.asset_id` 的实际引用；缓存计数不能单独作为误删保护。
+- 永久删除群组时，在删除 `join_methods` 的同一 D1 batch 内释放仍由其他群组共享的
+  ready asset 引用。独占资源由 R2 清理状态机处理，不能把共享资源的 `ref_count`
+  留在删除前的值。
+- 独占资源的 D1 asset 行必须在删除 `join_methods` 和群组的最终 batch 中一起删除；
+  禁止先删除群组，再在路由里吞错式清孤儿。最终 batch 失败时保留 `r2_done` 群组
+  tombstone，下一次永久删除调用必须能继续。
 
 ### R2/D1 补偿策略
 
-- **上传**：先写 R2，再写 D1 staged 行。D1 失败则回删 R2 对象。
+- **上传**：先写 D1 staged 行，再写 R2。D1 首写失败时不得调用 R2；R2 上传失败时把
+  D1 行标为 `delete_failed`，若状态更新也失败则保留 staged 行供超时扫描，禁止产生
+  没有 D1 记录的 R2 孤儿。
 - **删除**：先删 R2，再删 D1 行。R2 对象不存在视为成功（幂等）。
 - **检查 R2 存在性**：删除失败后通过 `r2.head()` 验证对象是否真的不存在。
 - **失败保留**：`delete_attempts`、`delete_last_error`、`delete_last_error_code` 记录失败信息。
+- **计数返回**：cleanup/retry 返回值只统计资源确实已删除的结果；服务返回 `false`
+  或抛错都不能增加成功数。
 
 ### Staged 过期回收
 
-- `cleanupStaged(olderThanMinutes)`：清理超过 N 分钟未被 adopt 的 staged asset。
+- `cleanupStaged(olderThanMinutes)`：清理超过 N 分钟未被聚合保存采用的 staged asset。
+- 人工 cleanup 同时重试 `delete_pending` 和 `delete_failed`；只扫描 failed 会让
+  “R2 已删但 D1 最后一步失败”的 pending 行永久失去恢复入口。
 - 先删 R2（尽力而为），再删 D1 行；任一失败均不阻塞其他清理。
 
 ## 数据库迁移（Migration）

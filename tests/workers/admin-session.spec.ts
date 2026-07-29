@@ -1,16 +1,13 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import app from "../../functions/_lib/app";
 import type { Env } from "../../functions/_lib/env";
-import { getPlatformProxy } from "wrangler";
+import { env as testEnv } from "cloudflare:test";
 
-let env: Env;
+const env = testEnv as Env;
 
-let password: string;
+const password = env.ADMIN_PASSWORD;
 
 beforeAll(async () => {
-  const proxy = await getPlatformProxy<Env>({ configPath: "./wrangler.jsonc" });
-  env = proxy.env;
-  password = env.ADMIN_PASSWORD || "dev-admin-password";
   // 清除限流状态，避免测试间相互影响
   await env.DB.prepare("DELETE FROM rate_limits").run();
 });

@@ -13,6 +13,8 @@ export interface DraftJoinMethod {
   value: string;
   url: string;
   assetId: string | null;
+  /** 预览用 URL（新上传使用本地 Object URL，已有资源使用远端 URL） */
+  assetUrl: string | null;
   sortOrder: number;
 }
 
@@ -48,6 +50,7 @@ function dtoToDraft(dto: AdminGroupDto): DraftState {
       value: m.value ?? "",
       url: m.url ?? "",
       assetId: m.assetId ?? null,
+      assetUrl: m.assetUrl ?? m.qrCodeUrl ?? null,
       sortOrder: i,
     })),
     auditNotes: dto.auditNotes,
@@ -71,6 +74,7 @@ function emptyDraft(): DraftState {
         value: "",
         url: "",
         assetId: null,
+        assetUrl: null,
         sortOrder: 0,
       },
     ],
@@ -185,6 +189,7 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
         value: "",
         url: "",
         assetId: null,
+        assetUrl: null,
         sortOrder: draft.value.joinMethods.length,
       },
     ];

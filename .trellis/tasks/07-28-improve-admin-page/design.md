@@ -187,6 +187,13 @@ updated_at         TEXT NOT NULL
 4. 完成 legacy 替换/迁移后收紧写入校验。
 5. 生产 rollout 前导出 D1；回滚使用补偿 migration，不修改 `0001`。
 
+### 5.5 收敛修复 migration
+
+- 新增 `0003_group_mutation_token.sql`，仅执行 `ALTER TABLE groups ADD COLUMN mutation_token TEXT`。
+- `mutation_token` 可空、无默认值，不进入业务 DTO；按 group 主键与 token 联合判断，不需要单独索引。
+- 本地、开发远端和生产必须继续使用 migration 目录顺序应用，禁止回写已应用的 `0002`。
+- migration 测试覆盖 `0001 → 0002 → 0003` 全新建库，以及已经应用 `0002` 后升级到 `0003`。
+
 ## 6. 查询、搜索与排序
 
 ### 6.1 搜索
@@ -242,12 +249,18 @@ OR EXISTS (
 
 ### 7.2 更新
 
-避免“先读 version、后无条件 UPDATE”的竞争窗口：
+使用 `0003_group_mutation_token.sql` 为 `groups` 增加可空 `mutation_token TEXT`。该字段只用于一次聚合命令的数据库内写入所有权，不进入任何公开或管理员 DTO。
 
-1. 主表 `UPDATE ... WHERE id = ? AND version = ?`，成功时递增版本。
-2. 同一 batch 中的关联删除/插入语句都由“主表已经进入期望新版本”的 `EXISTS` 条件保护。
-3. 主表更新计数为 0 时，关联写入必须全部为 no-op，路由返回 `VERSION_CONFLICT`。
-4. 成功后读取权威聚合并返回。
+每次更新生成 `mutationToken = crypto.randomUUID()`，并构造一个 D1 batch：
+
+1. 第一条语句执行 `UPDATE groups SET ..., version = version + 1, mutation_token = ? WHERE id = ? AND version = ?`。
+2. asset 引用增减、标签删除/插入、加群方式删除/插入、审核备注 upsert 全部使用 `EXISTS (... mutation_token = ?)` 守卫。
+3. 最后一条语句使用同一 token 将 `mutation_token` 清空。
+4. `db.batch()` 任一语句失败时，D1 回滚整个 batch；不得增加事后版本补偿。
+5. 以 batch 返回数组第一项的 `meta.changes` 判断第一条 UPDATE 是否命中。值为 0 时，所有 token 守卫语句均为 no-op，返回 `VERSION_CONFLICT`。
+6. 值为 1 时读取当前权威聚合并返回。不得通过提交后的 version/updated_at 快照推断本请求是否成功。
+
+版本号或毫秒时间戳都不是请求唯一标识，禁止作为 mutation token 替代品。唯一 token 解决同版本、同毫秒并发请求穿透关联守卫的问题。
 
 标签、加群方式和审核备注采用“校验后的完整集合替换”语义，对管理员表现为逐项 CRUD，对数据库保持一次原子保存。
 
@@ -269,7 +282,15 @@ OR EXISTS (
 - `ImageUploader` 只处理本地文件和预览；上传命令由独立 composable 负责。
 - 上传成功创建 `staged` asset，并返回 asset DTO。
 - 抽屉为每个新 asset 记录本次会话 owner；取消、替换或关闭时只请求清理这些 staged asset。
-- 前端关闭不能被视为清理成功，服务端仍通过 staged 资源过期扫描兜底。
+- 前端关闭不能被视为清理成功。`POST /admin/assets/cleanup` 是本阶段明确的人工维护入口，负责 staged 过期扫描与 `delete_failed` 重试；在没有部署定时调用前，文档和 UI 不得描述为自动后台回收。
+
+### 8.1.1 管理员已有二维码预览
+
+- 管理列表和单条查询把 ready asset 解析为管理员 `assetUrl`/`qrCodeUrl`。
+- `DraftJoinMethod` 保存 `assetUrl`；从 DTO 建草稿时使用 `assetUrl ?? qrCodeUrl ?? null`。
+- 编辑器图片源为 `localObjectUrl ?? assetUrl`，本次上传预览优先。
+- asset ID 被移除或替换时同步把旧 `assetUrl` 清空，避免展示与草稿引用不一致的旧二维码。
+- 远端 URL 只用于显示，不写回数据库，也不得用来反推 R2 key。
 
 ### 8.2 解除引用
 
@@ -347,10 +368,11 @@ none → pending → R2 清理 → r2_done → D1 batch 删除关联行和 group
 |---|---|
 | 多状态/搜索/排序 where 不一致 | 单一 query builder，同一组绑定生成 COUNT 与 items |
 | 动态排序 SQL 注入 | Zod 枚举 + 固定 SQL 映射 |
-| 乐观锁检查与关联写入竞态 | 版本条件 UPDATE + 同 batch 的 guarded statements |
+| 乐观锁检查与关联写入竞态 | 单 D1 batch + UUID mutation token；第一条 UPDATE 的 `meta.changes` 是唯一成功判据，所有关联语句受 token 守卫 |
 | 保存失败误删二维码 | staged/ready 状态、引用检查、只清理本次新 asset |
 | R2 成功但 D1 失败或相反 | 可重试状态机、幂等对象不存在处理 |
 | 重复同类型加群方式导致 Vue key 冲突 | client key/稳定复合 key，不用数组索引或仅 type |
 | 请求乱序覆盖新结果 | AbortSignal 传入 API client + request sequence 兜底 |
-| 多 Agent 修改共享契约冲突 | 二维码契约先行；子任务明确依赖；父任务做最终集成 Review |
-
+| 多 Agent 修改共享契约冲突 | 收敛阶段只允许一个实现 Agent 串行修改，并先写失败测试 |
+| mutation token 残留 | token 清除作为同一 batch 最后一条语句；batch 失败整体回滚；维护检查扫描非空 token |
+| 测试“绿但无证明力” | 场景测试必须创建真实 asset/群组引用并断言 D1、R2、API、UI，不接受固定不存在 UUID 代替状态测试 |

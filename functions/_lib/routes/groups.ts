@@ -1,5 +1,10 @@
 import { Hono } from "hono";
-import { listQuerySchema, cursorPageSchema } from "@shared/contracts/pagination";
+import {
+  listQuerySchema,
+  cursorPageSchema,
+  decodeCursor,
+  encodeCursor,
+} from "@shared/contracts/pagination";
 import { publicGroupDtoSchema } from "@shared/contracts/group";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createGroupRepository } from "../repositories/group-repository";
@@ -41,16 +46,24 @@ groupsRoute.get("/", async (c) => {
   let skip = 0;
   if (cursor) {
     try {
-      const decoded = JSON.parse(atob(cursor)) as { o: number; q: string; n: number };
+      const decoded = decodeCursor(cursor) as { o: number; q: string; n: number };
       if (decoded.o === ordinal && (decoded.q ?? "") === (q ?? "")) {
         skip = decoded.n;
       }
-    } catch { /* 无效游标，从头开始 */ }
+    } catch {
+      /* 无效游标，从头开始 */
+    }
   }
 
   // 数据库查询
   const repo = createGroupRepository(c.env.DB);
-  const { items, total } = await repo.listPublished({ q, cursor: null, limit, rotationOrdinal: ordinal, skip });
+  const { items, total } = await repo.listPublished({
+    q,
+    cursor: null,
+    limit,
+    rotationOrdinal: ordinal,
+    skip,
+  });
 
   // 解析 QR asset URL
   const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
@@ -91,12 +104,12 @@ groupsRoute.get("/", async (c) => {
     }),
   );
 
-  // 游标
+  // 游标 — 当已遍历完所有结果时终止
   const newSkip = skip + items.length;
   const lastItem = items[items.length - 1];
   const nextCursor =
-    items.length === limit && lastItem
-      ? btoa(JSON.stringify({ o: ordinal, q: q ?? "", n: newSkip }))
+    items.length === limit && newSkip < total && lastItem
+      ? encodeCursor({ o: ordinal, q: q ?? "", n: newSkip })
       : null;
 
   return c.json(

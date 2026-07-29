@@ -157,7 +157,10 @@ export type AdminGroupListResponse = z.infer<typeof adminGroupListResponseSchema
 export const joinMethodInputSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("group_number"),
-    value: z.string().min(1, "群号不能为空"),
+    value: z
+      .string()
+      .transform((s) => s.trim())
+      .pipe(z.string().min(1, "群号不能为空")),
     sortOrder: z.number().int().min(0),
   }),
   z.object({
@@ -191,16 +194,19 @@ export const groupCreateSchema = z
   })
   .refine(
     (data) => {
-      // 去空、大小写不敏感去重
+      // 拒绝空标签（trim 后为空字符串）
+      for (const tag of data.tags) {
+        if (!tag) return false;
+      }
+      // 大小写不敏感去重
       const seen = new Set<string>();
       for (const tag of data.tags) {
-        if (!tag) continue;
         if (seen.has(tag.toLowerCase())) return false;
         seen.add(tag.toLowerCase());
       }
       return true;
     },
-    { message: "标签存在重复（大小写不敏感）", path: ["tags"] },
+    { message: "标签存在重复或空值（大小写不敏感）", path: ["tags"] },
   )
   .refine(
     (data) => {
@@ -238,15 +244,18 @@ export const groupUpdateSchema = z
   .refine(
     (data) => {
       if (!data.tags) return true;
+      // 拒绝空标签
+      for (const tag of data.tags) {
+        if (!tag) return false;
+      }
       const seen = new Set<string>();
       for (const tag of data.tags) {
-        if (!tag) continue;
         if (seen.has(tag.toLowerCase())) return false;
         seen.add(tag.toLowerCase());
       }
       return true;
     },
-    { message: "标签存在重复（大小写不敏感）", path: ["tags"] },
+    { message: "标签存在重复或空值（大小写不敏感）", path: ["tags"] },
   )
   .refine(
     (data) => {

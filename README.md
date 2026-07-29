@@ -67,14 +67,14 @@ cp .dev.vars.example .dev.vars
 
 `.dev.vars` 不会提交到 Git（已在 `.gitignore` 中）。
 
-### 3. 创建本地 D1 数据库并运行迁移
+### 3. 初始化数据库
 
 ```bash
-# 首次运行需要创建 D1 数据库
-npx wrangler d1 create laigequnhao-db
-
-# 运行数据库迁移
+# 自动化测试和离线开发使用本地隔离 D1
 pnpm db:migrate:local
+
+# 连接团队开发环境前，初始化远端开发 D1
+pnpm db:migrate:dev
 ```
 
 如需从头开始，运行：
@@ -91,14 +91,28 @@ pnpm dev
 
 访问 http://localhost:5173 查看首页。
 
-### 5. 启动 Pages Functions（可选）
+### 5. 启动 Pages Functions（连接远端开发资源）
 
 ```bash
-# 如果需要测试 API，同时启动 Wrangler
+# 使用 wrangler.jsonc 中的远端 lgqh-dev D1/R2
+# 运行前请在另一个终端保持 pnpm dev
 pnpm pages:dev
 ```
 
 此时 API 运行在 http://localhost:8788，Vite 代理会自动转发 `/api` 请求。
+
+开发环境资源统一命名为 `lgqh-dev`，应用 binding 固定为 `DB` 和 `R2`。自动化测试读取
+`wrangler.test.jsonc`，使用本地模拟资源，不会写入远端开发库；生产部署由
+`wrangler.jsonc` 的 `env.production` 单独覆盖。
+
+### 资源清理维护
+
+`POST /api/v1/admin/assets/cleanup` 会清理超过 30 分钟、仍未被群组引用的 staged
+资源，并重试 `delete_pending`、`delete_failed` 记录。该接口要求有效管理员会话和
+CSRF token。
+
+当前版本没有部署 Cron 或其他定时调度；这是管理员按需调用的人工维护入口。若后续接入
+Cloudflare Cron，应继续复用同一清理服务，并保留 D1/R2 失败可重试和实际成功计数语义。
 
 ## Cloudflare 部署
 
@@ -180,11 +194,16 @@ pnpm pages:deploy
 | `pnpm test`             | 运行单元测试 + 组件测试  |
 | `pnpm test:workers`     | 运行 Workers 集成测试    |
 | `pnpm test:e2e`         | 运行 Playwright E2E      |
-| `pnpm db:migrate:local` | 本地 D1 迁移 |
-| `pnpm db:migrate:prod`  | 生产 D1 迁移 |
-| `pnpm db:reset:local`   | 重置本地数据库 |
+| `pnpm db:migrate:local` | 本地 D1 迁移             |
+| `pnpm db:migrate:dev`   | 远端开发 D1 迁移         |
+| `pnpm db:migrate:prod`  | 生产 D1 迁移             |
+| `pnpm db:reset:local`   | 重置本地数据库           |
 | `pnpm pages:dev`        | 启动 Wrangler Pages 开发 |
 | `pnpm pages:deploy`     | 部署到 Cloudflare Pages  |
+
+首次运行 E2E 前执行 `pnpm exec playwright install chromium`。E2E 会重建工作区内的
+`.e2e-state/`，启动本地模拟 D1/R2 和隔离的无头 Chromium，不连接 `lgqh-dev`，也不使用
+个人浏览器会话。
 
 ## 环境变量
 

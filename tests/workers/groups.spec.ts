@@ -1,14 +1,9 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import app from "../../functions/_lib/app";
 import type { Env } from "../../functions/_lib/env";
-import { getPlatformProxy } from "wrangler";
+import { env as testEnv } from "cloudflare:test";
 
-let env: Env;
-
-beforeAll(async () => {
-  const proxy = await getPlatformProxy<Env>({ configPath: "./wrangler.jsonc" });
-  env = proxy.env;
-});
+const env = testEnv as Env;
 
 beforeAll(async () => {
   // Seed test data
@@ -114,5 +109,57 @@ describe("GET /api/v1/groups", () => {
     const json = (await response.json()) as { ok: boolean; data: { rotationWindow: string } };
     expect(json.ok).toBe(true);
     expect(json.data.rotationWindow).toBeDefined();
+  });
+
+  it("paginates a Chinese fuzzy-search query without duplicates", async () => {
+    const ids = new Set<string>();
+    let cursor: string | null = null;
+
+    do {
+      const params = new URLSearchParams({ q: "测试", limit: "2" });
+      if (cursor) params.set("cursor", cursor);
+      const response = await apiFetch("GET", `/api/v1/groups?${params.toString()}`);
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as {
+        data: { items: Array<{ id: string }>; nextCursor: string | null };
+      };
+      for (const item of json.data.items) {
+        expect(ids.has(item.id)).toBe(false);
+        ids.add(item.id);
+      }
+      cursor = json.data.nextCursor;
+    } while (cursor);
+
+    expect(ids.size).toBe(5);
+  });
+
+  it("treats SQL LIKE metacharacters as literal search text", async () => {
+    const id = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        id,
+        "100% 兴趣群",
+        "特殊字符搜索",
+        "interest",
+        "qq",
+        "published",
+        crypto.randomUUID(),
+        "2026-01-01T00:00:00.000Z",
+        "2026-01-01T00:00:00.000Z",
+      ),
+      env.DB.prepare(
+        "INSERT INTO join_methods (id, group_id, type, value, sort_order) VALUES (?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), id, "group_number", "100100", 0),
+    ]);
+
+    const response = await apiFetch("GET", "/api/v1/groups?q=%25&limit=50");
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as {
+      data: { items: Array<{ title: string }> };
+    };
+    expect(json.data.items.map(({ title }) => title)).toEqual(["100% 兴趣群"]);
   });
 });

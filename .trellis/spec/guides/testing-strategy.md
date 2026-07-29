@@ -59,6 +59,12 @@
 
 使用 Cloudflare Vitest integration 在 `workerd` 中运行 API 测试。每个测试文件都在隔离的本地 D1 中应用真实 SQL migration。配置隔离的 R2 binding，只 stub Turnstile/Analytics 网络响应。
 
+质量门禁必须使用 `@cloudflare/vitest-pool-workers` 的隔离存储，不得通过
+`getPlatformProxy()` 复用工作区 `.wrangler/state`。setup 应使用
+`applyD1Migrations()` 应用当前全部 migration；另设未迁移的 D1 binding，覆盖代表性的
+旧版本到最新版本升级。测试运行前后的数据库状态不能依赖开发者机器上一次执行留下的
+数据。
+
 必须覆盖：
 
 - 公开列表绝不返回待审核、已拒绝或软删除群聊
@@ -72,6 +78,23 @@
 - 资源替换顺序和孤立对象安全
 - 软删除、恢复、`pending`/`r2_done` 永久清理进度，以及 R2 或 D1 失败后的重试
 - D1、R2 和 Analytics 不可用时映射为已记录的错误/部分可用组件
+
+资源与聚合回归测试还必须遵守：
+
+- 使用最小合法二进制 fixture 走真实上传路由，不用固定不存在 UUID 代替 staged/ready
+  状态；
+- 同时断言 HTTP、D1 行/关联/引用计数和 R2 对象，不以“请求返回 2xx”代替最终状态；
+- 用可注入 adapter 制造 R2 delete/head 失败，并证明重试成功数只统计实际删除；
+- 并发写入固定同一应用时钟并携带同一旧 version，断言一个成功、一个冲突以及完整聚合
+  一致；
+- 用数据库 trigger 或等价故障注入让 batch 中途失败，证明主表、关联、资源引用和
+  mutation token 全部回滚。
+- 对跨聚合共享 staged asset 做并发 adoption，断言数据库实际引用数与 `ref_count`
+  完全一致；让 asset 在预校验后变为不可引用时，QR INSERT 必须使聚合 batch 回滚。
+- 分页排序测试必须跨越特殊分区（例如“有标签→无标签”）并覆盖尾页，不能只断言单页
+  内部有序；LIKE 搜索必须用 `%`、`_` 等元字符证明其按字面子串匹配。
+- Vue 组件测试应激活真实用户控制（包括 form 外通过 `form` 属性关联的 submit 按钮）
+  并断言只触发一次命令；未保存导航测试必须验证“继续编辑/放弃”两种 Promise 决策。
 
 Workers 测试必须消费 fetch 和 R2 响应体。生产 compatibility flag 必须显式配置，因为测试池可能启用生产环境没有的 Node compatibility。
 
@@ -87,6 +110,10 @@ Workers 测试必须消费 fetch 和 R2 响应体。生产 compatibility flag �
 8. 切换当前实现阶段要求的视口和颜色偏好。
 
 关键 E2E 测试至少在一个桌面视口和一个移动视口运行。阶段专属的响应式、深色模式和二维码用例，在相应功能开关启用后成为必测项。
+
+Playwright 的 API 服务必须使用测试专用 Wrangler 配置、本地持久化目录和本地 D1/R2；
+启动脚本需在工作区内重建该目录。`No tests found`、浏览器未安装或服务启动失败都属于
+门禁失败，不能以组件测试替代。不得接管开发者个人浏览器会话。
 
 ## 规模与性能夹具
 

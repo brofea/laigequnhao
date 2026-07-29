@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 import { ref, onUnmounted } from "vue";
 import { useImageProcessor, formatBytes } from "../composables/useImageProcessor";
 import { LOGO_MAX_BYTES, QR_CODE_MAX_BYTES } from "@shared/contracts/asset";
@@ -127,6 +126,8 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <p v-if="error" class="text-xs text-red-500">{{ error }}</p>
+    <p v-if="error" class="text-xs text-red-500">
+      {{ error }}
+    </p>
   </div>
 </template>

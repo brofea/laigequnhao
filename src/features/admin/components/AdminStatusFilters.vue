@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 import type { GroupStatus } from "@shared/domain";
 
 defineProps<{

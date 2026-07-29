@@ -1,6 +1,5 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useGroupDirectory } from "@/features/groups/composables/useGroupDirectory";
 import { useLikedGroups } from "@/features/groups/composables/useLikedGroups";
@@ -10,17 +9,37 @@ import SubmissionDialog from "@/features/groups/components/SubmissionDialog.vue"
 import Toast from "@/shared/components/Toast.vue";
 
 const route = useRoute();
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-const searchQuery = ref((route.query.q as string) ?? "");
+const initialSearchQuery = route.query.q;
+const searchQuery = ref(typeof initialSearchQuery === "string" ? initialSearchQuery : "");
 const showSubmission = ref(false);
 
-// These are used in template via props
-const { groups, loading, error, loadMore, search } = useGroupDirectory();
+const { groups, loading, error, loadMore, search, searchImmediate } = useGroupDirectory();
 const { likedIds, toggle: toggleLike } = useLikedGroups();
 const { toastMessage, toastType, copy } = useClipboard();
 
-function onSearch() {
-  search(searchQuery.value);
+// 同步 URL → 输入框（前进/后退时）
+watch(
+  () => route.query.q as string | undefined,
+  (q) => {
+    searchQuery.value = q ?? "";
+  },
+);
+
+function onSearchInput() {
+  if (!searchQuery.value) {
+    // 清空：立即执行
+    searchImmediate("");
+  } else {
+    // 普通输入：防抖
+    search(searchQuery.value);
+  }
+}
+
+function onSearchKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter") {
+    // 回车：立即执行
+    searchImmediate(searchQuery.value);
+  }
 }
 
 async function onToggleLike(groupId: string) {
@@ -56,7 +75,8 @@ function onCopyNumber(text: string) {
             type="search"
             placeholder="搜索标题、简介或标签..."
             class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
-            @input="onSearch"
+            @input="onSearchInput"
+            @keydown="onSearchKeydown"
           />
         </div>
       </div>

@@ -1,12 +1,13 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 import { ref, watch, computed, nextTick, onBeforeUnmount } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
 import type { AdminGroupDto } from "@shared/contracts/group";
 import { useAdminGroupDraft } from "../composables/useAdminGroupDraft";
 import AdminGroupFields from "./AdminGroupFields.vue";
 import AdminTagEditor from "./AdminTagEditor.vue";
 import AdminJoinMethodEditor from "./AdminJoinMethodEditor.vue";
 import AdminPrivateDetails from "./AdminPrivateDetails.vue";
+import { purgeStagedAsset } from "../api";
 
 const props = defineProps<{
   group: AdminGroupDto | null;
@@ -14,6 +15,9 @@ const props = defineProps<{
   saving: boolean;
   serverFieldErrors?: Record<string, string[]>;
   serverError?: string;
+  csrfToken?: string;
+  /** 父级在保存成功后设为 true，用于区分"保存关闭"和"取消关闭" */
+  saved?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -27,6 +31,51 @@ watch(
   () => props.group,
   (g) => {
     groupRef.value = g;
+  },
+);
+
+// ── Staged asset 跟踪（用于取消时清理）──
+const stagedAssetIds = ref<Set<string>>(new Set());
+
+function trackAssetUpload(oldAssetId: string | null, newAssetId: string) {
+  stagedAssetIds.value.add(newAssetId);
+  if (oldAssetId && oldAssetId !== newAssetId) {
+    void cleanupStagedAsset(oldAssetId);
+  }
+}
+
+async function cleanupStagedAsset(assetId: string) {
+  // 只清理本会话上传的 staged 资源；已有 ready 资源不在此清理
+  if (!stagedAssetIds.value.has(assetId)) return;
+  stagedAssetIds.value.delete(assetId);
+  if (!props.csrfToken) return;
+  try {
+    await purgeStagedAsset(assetId, props.csrfToken);
+  } catch {
+    // 清理尽力而为
+  }
+}
+
+async function cleanupAllStagedAssets() {
+  const ids = [...stagedAssetIds.value];
+  stagedAssetIds.value.clear();
+  for (const id of ids) {
+    if (!props.csrfToken) continue;
+    try {
+      await purgeStagedAsset(id, props.csrfToken);
+    } catch {
+      // 清理尽力而为
+    }
+  }
+}
+
+// 抽屉打开时重置跟踪
+watch(
+  () => props.open,
+  (val) => {
+    if (val) {
+      stagedAssetIds.value = new Set();
+    }
   },
 );
 
@@ -67,6 +116,7 @@ const serverError = computed(() => props.serverError ?? "");
 // ── Dirty guard ──
 const confirmClose = ref(false);
 const pendingClose = ref<(() => void) | null>(null);
+let resolveNavigation: ((allow: boolean) => void) | null = null;
 
 function requestClose() {
   if (!isDirty.value) {
@@ -85,8 +135,25 @@ function doClose() {
 
 function forceClose() {
   confirmClose.value = false;
+  if (resolveNavigation) {
+    const resolve = resolveNavigation;
+    resolveNavigation = null;
+    pendingClose.value = null;
+    resolve(true);
+    return;
+  }
   if (pendingClose.value) {
     pendingClose.value();
+  }
+}
+
+function continueEditing() {
+  confirmClose.value = false;
+  pendingClose.value = null;
+  if (resolveNavigation) {
+    const resolve = resolveNavigation;
+    resolveNavigation = null;
+    resolve(false);
   }
 }
 
@@ -94,7 +161,7 @@ function forceClose() {
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
     if (confirmClose.value) {
-      confirmClose.value = false;
+      continueEditing();
       return;
     }
     requestClose();
@@ -111,17 +178,20 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
 
 watch(
   () => props.open,
-  (val) => {
+  (val, oldVal) => {
     if (val) {
       window.addEventListener("beforeunload", onBeforeUnload);
       document.addEventListener("keydown", onKeydown);
       clearFieldErrors();
-      // 焦点移到抽屉
       void nextTick(() => {
         const drawer = document.querySelector("[data-drawer]");
         if (drawer instanceof HTMLElement) drawer.focus();
       });
-    } else {
+    } else if (oldVal) {
+      // 关闭抽屉：如果保存未确认，清理 staged 资源
+      if (!props.saved) {
+        void cleanupAllStagedAssets();
+      }
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("keydown", onKeydown);
       confirmClose.value = false;
@@ -131,8 +201,24 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  if (props.open && !props.saved) {
+    void cleanupAllStagedAssets();
+  }
   window.removeEventListener("beforeunload", onBeforeUnload);
   document.removeEventListener("keydown", onKeydown);
+});
+
+// SPA 导航守卫：有未保存修改时阻止路由跳转
+onBeforeRouteLeave(() => {
+  if (props.open && isDirty.value) {
+    return new Promise<boolean>((resolve) => {
+      resolveNavigation?.(false);
+      resolveNavigation = resolve;
+      pendingClose.value = null;
+      confirmClose.value = true;
+    });
+  }
+  return true;
 });
 
 // ── 保存 ──
@@ -142,7 +228,6 @@ function handleSave() {
   formError.value = "";
   clearFieldErrors();
 
-  // 前端校验
   if (tagError.value || joinMethodError.value) {
     formError.value = tagError.value ?? joinMethodError.value ?? "请修正表单错误";
     return;
@@ -172,7 +257,7 @@ function handleSave() {
       v-if="open"
       data-drawer
       tabindex="-1"
-      class="fixed right-0 top-0 z-50 flex h-full w-full flex-col bg-white shadow-2xl outline-none sm:w-[540px]"
+      class="fixed right-0 top-0 z-50 flex h-full w-screen max-w-[100vw] flex-col bg-white shadow-2xl outline-none sm:w-[540px]"
       :class="confirmClose ? 'pointer-events-none' : ''"
     >
       <!-- 头部 -->
@@ -199,7 +284,11 @@ function handleSave() {
       </header>
 
       <!-- 表单内容 -->
-      <form class="flex-1 space-y-6 overflow-y-auto px-6 py-4" @submit.prevent="handleSave">
+      <form
+        id="admin-group-form"
+        class="flex-1 space-y-6 overflow-y-auto px-6 py-4"
+        @submit.prevent="handleSave"
+      >
         <!-- 基本信息 -->
         <AdminGroupFields
           :title="draft.title"
@@ -230,13 +319,18 @@ function handleSave() {
           :methods="draft.joinMethods"
           :allowed-types="allowedJoinMethods"
           :error="joinMethodError"
+          :csrf-token="props.csrfToken ?? ''"
           @add="addJoinMethod($event)"
           @remove="removeJoinMethod($event)"
           @update:value="(key, val) => updateJoinMethod(key, { value: val })"
           @update:url="(key, url) => updateJoinMethod(key, { url })"
-          @update:asset-id="(key, id) => updateJoinMethod(key, { assetId: id || null })"
+          @update:asset-id="
+            (key, id) => updateJoinMethod(key, { assetId: id || null, assetUrl: null })
+          "
           @move-up="moveJoinMethod($event, 'up')"
           @move-down="moveJoinMethod($event, 'down')"
+          @asset-uploaded="(oldId: string | null, newId: string) => trackAssetUpload(oldId, newId)"
+          @cleanup-asset="(assetId: string) => cleanupStagedAsset(assetId)"
         />
 
         <!-- 管理信息 -->
@@ -249,8 +343,12 @@ function handleSave() {
 
       <!-- 底部操作栏 -->
       <footer class="shrink-0 border-t px-6 py-4">
-        <p v-if="serverError" class="mb-3 text-sm text-red-500">{{ serverError }}</p>
-        <p v-if="formError && !serverError" class="mb-3 text-sm text-red-500">{{ formError }}</p>
+        <p v-if="serverError" class="mb-3 text-sm text-red-500">
+          {{ serverError }}
+        </p>
+        <p v-if="formError && !serverError" class="mb-3 text-sm text-red-500">
+          {{ formError }}
+        </p>
         <div class="flex items-center justify-end gap-3">
           <button
             type="button"
@@ -261,9 +359,9 @@ function handleSave() {
           </button>
           <button
             type="submit"
+            form="admin-group-form"
             class="rounded bg-brand-primary px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
             :disabled="saving"
-            @click="handleSave"
           >
             {{ saving ? "保存中…" : "保存" }}
           </button>
@@ -283,7 +381,7 @@ function handleSave() {
               <button
                 type="button"
                 class="rounded bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
-                @click="confirmClose = false"
+                @click="continueEditing"
               >
                 继续编辑
               </button>

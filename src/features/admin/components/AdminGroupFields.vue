@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 import type { GroupKind, GroupStatus } from "@shared/domain";
 import siteConfig from "@/../site.config";
 

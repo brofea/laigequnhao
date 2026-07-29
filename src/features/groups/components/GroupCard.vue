@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 import { ref } from "vue";
 import type { PublicGroupDto } from "@shared/contracts/group";
 import QrCodeDialog from "./QrCodeDialog.vue";

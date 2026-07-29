@@ -88,6 +88,8 @@ function handleAdd() {
       </button>
     </div>
 
-    <p v-if="error" class="text-xs text-red-500">{{ error }}</p>
+    <p v-if="error" class="text-xs text-red-500">
+      {{ error }}
+    </p>
   </fieldset>
 </template>

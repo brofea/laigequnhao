@@ -1,14 +1,9 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import app from "../../functions/_lib/app";
 import type { Env } from "../../functions/_lib/env";
-import { getPlatformProxy } from "wrangler";
+import { env as testEnv } from "cloudflare:test";
 
-let env: Env;
-
-beforeAll(async () => {
-  const proxy = await getPlatformProxy<Env>({ configPath: "./wrangler.jsonc" });
-  env = proxy.env;
-});
+const env = testEnv as Env;
 
 function apiFetch(
   method: string,

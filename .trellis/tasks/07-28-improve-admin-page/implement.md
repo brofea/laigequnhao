@@ -1,227 +1,172 @@
-# 完善 admin 页面功能：实施计划
+# Admin 页面收敛修复：实施计划
 
 ## 0. 执行约定
 
-- 当前父任务只负责规划、依赖和最终集成，不直接实现。
-- 每个实现 Agent 的提示必须以 `Active task: <child task path>` 开头。
-- 子任务进入实现前，先完成各自 `prd.md`、`design.md`、`implement.md`、`implement.jsonl`、`check.jsonl`，通过 `task.py validate` 后再单独 `task.py start`。
-- 开始编辑前加载 `trellis-before-dev`；完成代码后加载 `trellis-check`。
-- 不修改 `migrations/0001_initial.sql`，不使用 `git add .`，不覆盖其他 Agent 的脏文件。
+- 本轮只允许一个实现 Agent 串行工作，不再拆分并行子任务。
+- 先添加能够失败的回归测试，再修改实现；禁止只增加测试数量。
+- 不重写筛选、搜索、排序、抽屉布局等已经通过验收的功能。
+- 不修改 `migrations/0001_initial.sql` 或 `0002_admin_group_management.sql`。
+- 不调用或接管用户个人浏览器；Playwright 使用项目隔离的 headless 测试浏览器。
+- 开发前使用 `trellis-before-dev`，完成后使用 `trellis-check`。
 
-## 1. 子任务顺序
+## 1. 建立真实测试夹具
 
-```text
-可并行：
-  A. 07-28-admin-list-search-sort
-  B1. 07-28-qr-resource-public-flow（migration、契约、asset service）
+- [x] 在 Worker 测试 helper 中提供最小合法 WebP fixture。
+- [x] 提供通过上传路由创建 staged asset 的 helper，返回 asset ID、R2 key 和响应 DTO。
+- [x] 提供把 staged asset 通过群组创建/更新变为 ready 的 helper。
+- [x] 提供 D1 asset、join_methods、groups、tags、submission_details 的测试内查询断言。
+- [x] 使用 Miniflare R2 binding 检查对象存在/不存在；不要只检查 HTTP 状态。
+- [x] 为 R2 delete/head 失败提供可控 adapter stub 或依赖注入点，测试后恢复。
+- [x] 为并发测试注入固定时钟，确保两个请求拥有相同 `updated_at`，证明方案不依赖时间戳唯一性。
 
-B1 契约稳定后：
-  C. 07-28-admin-group-aggregate-editor
+## 2. 使用唯一 mutation token 完成聚合原子更新
 
-C 完成后：
-  B2. 07-28-qr-resource-public-flow（抽屉接入、公开二维码）
+### 2.1 Migration
 
-最后：
-  父任务集成 Review + 全量质量门禁
-```
+- [x] 新增 `migrations/0003_group_mutation_token.sql`：
 
-如同一 Agent 顺序执行，建议按 `B1 → C → B2 → A → 父任务集成`；如多个 Agent 并行，A 不得同时修改二维码/写入契约。
+  ```sql
+  ALTER TABLE groups ADD COLUMN mutation_token TEXT;
+  ```
 
-## 2. 子任务 A：统一搜索并完善管理员列表
+- [x] 更新 migration 测试，覆盖全新建库和 `0002 → 0003` 升级。
+- [x] 不把 `mutation_token` 加入公开或管理员 DTO。
 
-### 2.1 契约与共享 helper
+### 2.2 Repository
 
-- [ ] 在 `shared/domain/` 增加搜索 query 归一化纯函数及单元测试。
-- [ ] 在 `shared/contracts/` 增加管理员列表 query/response schema：
-  - 重复 `status` 参数；
-  - `deleted`；
-  - `q`；
-  - `sortBy` / `sortDir`；
-  - opaque cursor / limit；
-  - `total` / `nextCursor`。
-- [ ] 为 `deleted + statuses`、空正常状态集、非法 sort key/direction、无效 cursor 添加契约测试。
+- [x] `update()` 每次生成 `const mutationToken = crypto.randomUUID()`。
+- [x] 预读仅用于计算旧/新 QR asset 差异和 notes upsert 分支；写入所有权只认 mutation token。
+- [x] 单个 `db.batch()` 的第一条语句：
 
-### 2.2 Repository 与路由
+  ```sql
+  UPDATE groups
+  SET ..., version = version + 1, mutation_token = ?
+  WHERE id = ? AND version = ?
+  ```
 
-- [ ] 重构群组搜索 where builder，使公开列表和管理员列表共同搜索标题、简介、标签。
-- [ ] `listAll` 支持 1–4 个状态、回收站、搜索、白名单排序、keyset cursor 和 total。
-- [ ] COUNT 与 items 复用同一 where/bindings 来源。
-- [ ] 为六个排序 key 建立固定 SQL 映射，并追加稳定 ID tie-breaker。
-- [ ] 管理员 GET 路由使用专用 query schema；私有响应继续 `no-store`。
-- [ ] 公开列表搜索增加简介，保持轮换顺序和公开字段隔离。
+- [x] asset 引用增减、staged adopt、标签删除/插入、加群方式删除/插入、notes upsert 全部增加 `mutation_token = ?` 守卫。
+- [x] 最后一条语句按同一 token 清空 `mutation_token`。
+- [x] 保存 `const results = await db.batch(batch)`；只使用 `results[0].meta.changes` 判断成功或 `VERSION_CONFLICT`。
+- [x] 删除 `updated_at + expectedVersion` 伪 token、提交后成功推断和所有事后版本补偿。
+- [x] batch 抛错时向路由传播稳定内部/依赖错误，不返回成功 DTO。
+- [x] 成功后读取最新权威 DTO；即使另一个合法请求随后更新，也不得把本次已提交写入误报为冲突。
 
-### 2.3 API client 与 composable
+### 2.3 原子性回归测试
 
-- [ ] 扩展 `src/shared/api/client.ts` 支持 `AbortSignal`，不破坏现有 header/body 调用。
-- [ ] `useGroupDirectory` 实际把 signal 传到公开请求，并保留 request sequence 兜底。
-- [ ] `useAdminGroups` 从 URL 解析/写回筛选、搜索、排序与 cursor；普通输入 300ms 防抖，回车/清空立即请求。
-- [ ] 变更后保留当前 URL 和滚动位置；不得恢复无条件全量刷新跳顶。
+- [x] 两个相同旧版本、相同时间戳 PATCH：一个成功，一个 409；失败请求的 tags、join_methods、notes、asset refs 全部零副作用。
+- [x] 故障注入让关联 INSERT 失败：主表字段、version、token、关联行、asset refs 全部保持原值。
+- [x] 正常更新后 `mutation_token IS NULL`。
+- [x] 连续合法版本更新都成功，不因提交后 SELECT 竞态误报冲突。
 
-### 2.4 UI
+## 3. 打通管理员已有二维码预览
 
-- [ ] 新建状态筛选组件，集中实现“四状态至少一个”和“回收站互斥/恢复”状态转换。
-- [ ] 在筛选与表格之间增加搜索框，更新主页 placeholder 为“标题、简介或标签”。
-- [ ] `AdminGroupTable` 增加标签列。
-- [ ] 六个数据列使用可聚焦排序按钮和 `aria-sort`；操作列明确不可排序。
-- [ ] 增加完整结果遍历 UI（游标继续加载或分页控件），显示 total/加载/空/错误状态。
+### 3.1 数据契约与草稿
 
-### 2.5 子任务 A 测试
+- [x] 保留管理员路由对 ready QR 的 `assetUrl`/`qrCodeUrl` 补齐。
+- [x] `DraftJoinMethod` 增加 `assetUrl: string | null`。
+- [x] `dtoToDraft()` 使用 `m.assetUrl ?? m.qrCodeUrl ?? null`。
+- [x] 新建空方式的 `assetUrl` 为 null。
+- [x] asset ID 被移除或换成新上传 ID 时同步把旧 `assetUrl` 清空。
+- [x] `toCreateInput()`/`toUpdateInput()` 不发送 `assetUrl`。
 
-- [ ] 纯函数：trim、Unicode 兼容、英文字母大小写、中文、空输入和控制字符。
-- [ ] Worker：多状态组合、回收站互斥、标题/简介/标签搜索、六列升降序、tie、cursor query 绑定、total。
-- [ ] Vue：最后一个状态不能关闭、回收站恢复组合、防抖/清空、标签列、表头键盘与 `aria-sort`。
-- [ ] E2E：主页与管理端使用同一关键词得到符合各自可见性规则的结果；跨页全局排序稳定。
+### 3.2 编辑器显示
 
-## 3. 子任务 B：二维码资源和公开交互
+- [x] 图片源使用 `qrPreviewUrls[clientKey] ?? m.assetUrl`。
+- [x] 本次上传生成的 Object URL 优先于远端 URL。
+- [x] 远端图片提供明确 alt；移除后不继续显示旧图。
+- [x] 组件销毁时 revoke 所有本地 Object URL，不 revoke 远端 URL。
+- [x] 删除整行 QR 时先记录 asset ID 并发送 `cleanup-asset`，再移除草稿行；父级继续只 purge 本会话 tracked staged asset。
 
-### 3.1 Migration
+### 3.3 Vue 测试
 
-- [ ] 新增 `migrations/0002_admin_group_management.sql`：
-  - `assets` 表与生命周期/清理列；
-  - `join_methods.asset_id` 外键与索引；
-  - `groups.purge_attempts`、`groups.purge_last_error_code`；
-  - 必要索引。
-- [ ] 更新本地/预览/生产 migration 命令，使其按顺序应用全部 migration，不再只执行 `0001`。
-- [ ] 增加“空数据库应用 0001→0002”和“已有 0001 数据升级”的测试。
-- [ ] migration 前审计 legacy `qr_code` 行；有数据时记录迁移/替换策略，禁止静默丢失。
+- [x] 已有 ready QR DTO 打开抽屉后显示远端 URL。
+- [x] 新上传后本地预览覆盖远端 URL。
+- [x] 移除 asset 后远端图片消失、payload 不含旧 ID。
+- [x] 删除整行 staged QR 触发一次 cleanup；删除 ready QR 不触发 purge 请求。
 
-### 3.2 Asset contract 与 service
+## 4. 补齐资源生命周期与维护入口证明
 
-- [ ] 扩展管理员 asset DTO，包含 asset ID、用途、公开 URL、尺寸、体积和安全生命周期状态；不向公开 DTO暴露内部字段。
-- [ ] `POST /admin/assets` 创建 `staged` asset；验证 WebP 签名、用途、尺寸、实际字节数和 300 KB 上限。
-- [ ] `DELETE /admin/assets/:id` 只清理无引用 asset，使用幂等状态机；失败保留 `delete_failed` 与安全错误码。
-- [ ] 提供 retry 命令或让相同删除命令可安全重试。
-- [ ] 添加 staged asset 过期回收入口/服务逻辑，不能只依赖浏览器关闭事件。
+- [x] staged upload → purge：HTTP 200、D1 asset 行不存在、R2 对象不存在。
+- [x] ready asset purge：HTTP 409、D1 引用和 R2 对象保持。
+- [x] 被 join_method 引用的资源不能直接 purge。
+- [x] staged → ready：保存后状态 ready、引用计数正确、管理 DTO 有 URL、公开 DTO 无内部 ID。
+- [x] 新增 ready 引用时计数增加；移除最后引用时进入 pending 并最终删除。
+- [x] R2 delete/head 故障：HTTP 502 或保存后的 `delete_failed`，错误码安全且 D1 行保留。
+- [x] `POST /admin/assets/cleanup` 重试成功后删除 R2 与 D1；断言返回计数只统计实际成功项。
+- [x] 带 QR 群组永久删除：join_methods、group、asset 行和 R2 对象符合状态机结果；R2 故障时保持可重试。
+- [x] README 明确 cleanup 当前是管理员人工维护命令。若没有部署 Cron，不使用“自动后台清理”措辞。
 
-### 3.3 群组投影与清理
+## 5. Playwright 关键路径
 
-- [ ] Repository 查询 join method 时联接 asset 元数据。
-- [ ] 管理员二维码投影返回 asset ID + URL + meta；公开投影只返回 `qrCodeUrl`/展示 meta。
-- [ ] 聚合解除 asset 引用后执行引用计数检查，再清理 R2/D1。
-- [ ] 重写永久删除为 `none → pending → r2_done → D1 delete` 可重试流程，同时处理 Logo 和二维码。
-- [ ] 永久删除路由只接受软删除群组；错误返回稳定 `STATE_CONFLICT` / `DEPENDENCY_UNAVAILABLE`。
+- [x] 增加管理员登录/测试数据 helper，使用测试 D1/R2。
+- [x] 场景一：管理员打开含 ready QR 的已有群组，抽屉显示二维码。
+- [x] 场景二：管理员上传 QR、保存、进入主页并打开二维码查看界面。
+- [x] 测试完成后清理创建的数据和本地报告。
+- [x] 不接入或操作用户个人浏览器会话。
 
-### 3.4 移除开关与公开 UI
+## 6. 质量收口
 
-- [ ] 从 `shared/domain/config.ts`、`site.config.ts`、测试、README 和 spec 移除 `qrCodePublic`。
-- [ ] 公开 serializer 始终允许二维码方式，不返回 R2 key/asset ID。
-- [ ] 新建可访问的 `QrCodeDialog`，包含群名称、图片、关闭按钮、Escape 和焦点归还。
-- [ ] `GroupCard` 使用穷尽分支处理三种加群方式，修复仅按 `method.type` 作为 key 的冲突。
+- [x] 删除本任务新增的文件级 `eslint-disable`；修复可自动处理的 Vue warning。
+- [x] 无历史 warning 延期项；最终 `pnpm lint` 输出为 0 errors、0 warnings。
+- [x] 更新 `design.md`，只保留 UUID mutation token 单 batch 方案，删除两步补偿和时间戳 token 描述。
+- [x] 更新测试名称，使其与真实 fixture 和断言一致。
 
-### 3.5 子任务 B 测试
-
-- [ ] Worker：上传验证、staged→ready、引用保护、替换、无引用删除、R2/D1 各阶段失败与重试。
-- [ ] Worker：永久删除不是回收站记录时拒绝；重复请求幂等；关联标签/方法/详情/点赞/资源清理。
-- [ ] 契约：公开二维码可解析且不含内部字段；管理员 asset 信息完整。
-- [ ] Vue：二维码处理、预览、替换、取消、公开对话框键盘/焦点。
-- [ ] E2E：管理员上传二维码→保存→主页查看→替换→旧资源清理→软删除/永久删除。
-
-## 4. 子任务 C：群组聚合编辑
-
-### 4.1 写入契约
-
-- [ ] 新增 `adminGroupCreateSchema` / `adminGroupUpdateSchema`，禁止继续使用 `adminGroupDtoSchema.partial()`。
-- [ ] 加群方式使用判别联合；更新包含 `version`；请求不包含 `submissionContact`。
-- [ ] 标签 0–5、trim、空值/重复校验；加群方式至少 1 条、平台兼容、重复值校验。
-- [ ] URL 强制 `https:`；QR asset 必须存在、用途正确且可引用。
-
-### 4.2 Repository 原子写入
-
-- [ ] 创建使用一个 D1 batch 写入 group、tags、join methods、submission details 和 asset 状态。
-- [ ] 更新使用 version 条件主表 UPDATE，并让关联语句受期望新版本 `EXISTS` 守卫。
-- [ ] 冲突时关联写入必须全部 no-op，返回 `VERSION_CONFLICT`。
-- [ ] 完整集合替换保持 `sort_order`；响应重新读取权威聚合。
-- [ ] 联系方式永不被写入命令覆盖；审核备注可以 upsert。
-- [ ] 软删除/恢复/永久删除验证 NOT_FOUND、STATE_CONFLICT 与幂等边界。
-
-### 4.3 Composable 与抽屉
-
-- [ ] 将列表状态与编辑草稿拆成 `useAdminGroups` / `useAdminGroupDraft`，避免单个 composable 隐藏无关职责。
-- [ ] 抽屉打开时深拷贝 DTO，所有动态项使用稳定 client key。
-- [ ] 组件分区：基本信息、标签、加群方式、私有信息。
-- [ ] 平台切换后标记不兼容方式并阻止保存，不静默删除。
-- [ ] 标签和加群方式提供新增、删除、上移/下移；删除最后一个方式立即显示字段错误。
-- [ ] 联系方式只读且空值显示“未提供”；审核备注可编辑。
-- [ ] 保存失败保留草稿和字段错误；版本冲突获取权威值并要求 Review。
-- [ ] dirty guard 覆盖遮罩、关闭按钮、Escape 和页面导航。
-- [ ] 宽屏右侧固定最大宽度；窄屏扩展为 `100vw`；正确处理焦点、焦点归还和 reduced motion。
-
-### 4.4 创建和列表回写
-
-- [ ] 修复现有“新建群聊”只开表单但不调用 create 的缺口。
-- [ ] 创建/编辑成功后用权威 DTO 更新列表；筛选或排序键变化时精确补取并恢复 scroll anchor。
-- [ ] 回收站不渲染编辑入口；恢复后按原状态重新进入正常列表。
-
-### 4.5 子任务 C 测试
-
-- [ ] Worker：创建完整聚合、0/5/6 标签、至少一个方式、同类型多条、重复项、平台不兼容。
-- [ ] Worker：主表/标签/方式/notes 全部成功或全部回滚；并发 version 冲突不改任何关联行。
-- [ ] Vue：创建/编辑回显、标签/方式 CRUD 与排序、联系方式只读、notes 可写、dirty guard、响应式抽屉。
-- [ ] E2E：创建→编辑全部字段→切换状态→软删除→回收站无编辑→恢复→再次编辑。
-
-## 5. 父任务集成 Review
-
-### 5.1 契约和数据流
-
-- [ ] 公开/管理员 DTO 不混用，公开投影没有联系方式、notes、删除字段、version、R2 key 或 asset ID。
-- [ ] 管理员列表 query、前端 URL parser 和 SQL 白名单字段完全一致。
-- [ ] 主页和管理端搜索调用同一个归一化 helper、同一字段集合。
-- [ ] 平台/加群方式规则只有一个来源；三种方式分支穷尽。
-- [ ] 保存、上传、解除引用、永久删除各层错误码和 UI 行为一致。
-
-### 5.2 代码复用与一致性
-
-- [ ] 搜索 SQL/normalizer、状态顺序、排序 key、asset URL 映射没有平行副本。
-- [ ] 不在组件中使用数据库行、裸 `fetch`、`any`、索引 key 或局部 payload 断言。
-- [ ] 所有新增文档以简体中文为主。
-
-### 5.3 全量门禁
-
-按顺序运行并保存结果：
+按以下顺序运行：
 
 ```bash
-pnpm lint
 pnpm format:check
+pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:workers
 pnpm test:e2e
 pnpm build
+git diff --check
 ```
 
-另外执行：
+## 7. Review 停止条件
 
-```bash
-python ./.trellis/scripts/task.py validate .trellis/tasks/07-28-admin-list-search-sort
-python ./.trellis/scripts/task.py validate .trellis/tasks/07-28-admin-group-aggregate-editor
-python ./.trellis/scripts/task.py validate .trellis/tasks/07-28-qr-resource-public-flow
-```
+出现下列任一情况时停止提交，不继续补丁式修复：
 
-## 6. 高风险文件与 Review 重点
-
-| 文件/区域 | 风险 |
-|---|---|
-| `migrations/0002_*.sql`、migration scripts | 生产升级、外键、legacy QR 与回滚 |
-| `shared/contracts/group.ts`、新 admin schemas | 公开私有字段隔离、输入/输出语义 |
-| `functions/_lib/repositories/group-repository.ts` | query builder、动态排序、事务与 version 竞态 |
-| `functions/_lib/routes/admin-assets.ts` | R2/D1 部分失败、引用保护、幂等重试 |
-| `src/shared/api/client.ts` | AbortSignal 与现有 headers/body 调用兼容 |
-| `useAdminGroups.ts` / `useAdminGroupDraft.ts` | URL 状态、请求乱序、草稿与权威状态 |
-| `AdminGroupDrawer.vue` / 动态编辑器 | 焦点、dirty guard、稳定 key、窄屏布局 |
-| `GroupCard.vue` / `QrCodeDialog.vue` | 二维码公开交互和内部字段泄漏 |
-
-## 7. 回滚点
-
-1. **契约/查询回滚点**：在 UI 接入前，先让旧 UI 可继续调用兼容的列表默认值。
-2. **Migration 回滚点**：`0002` 只新增表/列/索引；应用回滚时保留结构，不立即删列。
-3. **聚合写入回滚点**：新 POST/PATCH 通过契约测试后再切换前端；失败可回到旧路由实现，但不得回滚已写入的新 asset 引用数据。
-4. **二维码公开回滚点**：如公开 UI 失败，回滚展示组件但保留 asset 数据；不要恢复一个永久为真的 `qrCodePublic` 死开关。
-5. **清理流程回滚点**：任何不确定情况下停止在 `pending/delete_failed`，禁止继续删除 R2 或 D1。
+- 仍以时间戳或 version 作为请求唯一标识。
+- batch 成功与否仍通过提交后 SELECT 推断。
+- asset 测试仍只使用不存在的固定 UUID。
+- API 返回二维码 URL但草稿/组件没有消费。
+- Playwright 没有发现测试。
+- 任一要求的门禁非零退出。
 
 ## 8. 完成定义
 
-- 三个子任务各自通过质量门禁并归档。
-- 父任务 `prd.md` 的 `AC-01`–`AC-20` 全部可由测试或明确人工验证证明。
-- 按 `trellis-update-spec` 更新 API、数据库、前端状态/组件和测试规范中的真实源码示例。
-- 父任务完成最终集成 Review、全量命令和迁移演练后再归档。
+- `AC-S01`–`AC-S14` 全部由代码和对应测试证明。
+- 原 `AC-01`–`AC-20` 无回归。
+- 实现 Agent 提交一份逐场景证据表，列出 D1、R2、API、UI 和测试文件。
+- 独立验收 Agent 不依赖实现总结，能够从仓库和命令结果复现结论。
 
+## 9. 最终验收证据（2026-07-29）
+
+| 场景 | D1 断言 | R2 断言 | API/UI 断言 | 主要测试 |
+|---|---|---|---|---|
+| 同版本、同时间 PATCH | 仅赢家完整聚合提交，失败者零副作用，token 清空 | 旧资源删除、赢家/输家资源状态正确 | 一个 200、一个 409，后续合法更新成功 | `tests/workers/admin-resource-lifecycle.spec.ts` |
+| batch 中途失败 | groups/version/tags/join_methods/notes/ref_count 全回滚 | 原对象保留 | 安全 500 | `tests/workers/admin-resource-lifecycle.spec.ts` |
+| staged/ready 生命周期 | adoption 与真实引用数一致；归零删除；pending/failed 可重试 | 上传、保留、删除和重试均检查对象 | purge 200/409、cleanup 实际成功计数 | `tests/workers/admin-resource-lifecycle.spec.ts`、`tests/workers/admin-assets.spec.ts` |
+| 永久删除 | 共享引用减一；独占 asset 与群组在最终 batch 删除；D1 失败保留 tombstone | 独占对象删除；R2 失败后可重试 | 成功 200，依赖失败 502 | `tests/workers/admin-resource-lifecycle.spec.ts` |
+| 搜索与排序分页 | 标题/简介/标签字面 LIKE；标签空分区置后；尾页无假 cursor | 不适用 | 中文与 `%` 搜索、跨页无重复遗漏 | `tests/workers/groups.spec.ts`、`tests/workers/admin-groups.spec.ts` |
+| 管理员已有二维码 | ready asset 和引用不变 | 对象存在 | DTO URL → 草稿 → 抽屉远端预览 | `AdminGroupDrawer.spec.ts`、`admin-qr.spec.ts` |
+| 上传并公开查看二维码 | staged → ready，ref_count=1；afterEach 软删/永久删除清数据 | 测试 R2 对象创建并最终清理 | 上传、保存、主页二维码对话框图片可见 | `admin-qr.spec.ts`（桌面 + 移动） |
+| 抽屉交互 | staged 替换/取消只 purge 本会话资源 | purge 请求精确一次 | footer 保存提交一次；dirty 导航两种决策；移动宽度等于视口 | `AdminGroupDrawer.spec.ts`、`admin-qr.spec.ts` |
+
+最终门禁：
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm format:check` | 通过 |
+| `pnpm lint` | 通过，0 errors / 0 warnings |
+| `pnpm typecheck` | 通过 |
+| `pnpm test` | 72/72 |
+| `pnpm test:workers` | 61/61 |
+| `pnpm test:e2e` | 4/4（桌面 2 + 移动 2） |
+| `pnpm build` | 通过 |
+| `git diff --check` | 通过 |
+
+自动化测试全部使用 `wrangler.test.jsonc` 的本地 D1/R2；未连接用户个人浏览器，
+未写入远端 `lgqh-dev`。

@@ -4,6 +4,16 @@
 
 把 admin 群组管理页从基础列表和有限编辑能力，完善为可以高效定位记录、稳定排序，并完整维护群组及其关联数据的管理工具；同时统一主页与管理端搜索语义，补齐二维码加群方式从上传、编辑到公开使用和安全清理的闭环。
 
+## 当前收敛阶段
+
+三个实现子任务已经完成，当前不再扩展产品能力，只修复最终集成验收暴露出的三个根问题：
+
+1. **聚合更新必须使用真正唯一的写入令牌。** 现有单 batch 方向保留，但不得继续把毫秒级 `updated_at` 当作请求唯一标识。两个携带相同旧版本、在同一毫秒进入的请求中，只允许一个请求修改 `groups`、标签、加群方式、审核备注和 asset 引用。
+2. **管理员必须能查看已有二维码。** 管理 API 已能返回 `assetUrl`/`qrCodeUrl`，该 URL 必须完整传递到抽屉草稿，并在没有本地 Object URL 时作为二维码预览回退。
+3. **验收必须证明真实行为。** 不再以测试数量或固定 UUID 的 401/404 作为资源生命周期证明；必须创建真实 staged/ready asset、真实群组引用和可控 R2 失败，并断言 D1、R2、HTTP 与 UI 的最终状态。
+
+本阶段采用单 Agent 串行实现，禁止再次拆成多个并行补丁。实现前先补失败测试；测试不能证明的行为不视为完成。
+
 ## 背景与仓库事实
 
 - 群组业务状态固定为 `pending`、`published`、`rejected`、`delisted`；软删除由独立的 `deleted_at` 表示，不是第五种业务状态（`migrations/0001_initial.sql:12`，`.trellis/tasks/archive/2026-07/00-bootstrap-guidelines/prd.md:54-57,98`）。
@@ -127,3 +137,42 @@
 - `AC-19`：共享契约、migration、Worker 集成测试、Vue 组件测试和 Playwright 关键路径覆盖上述行为。
 - `AC-20`：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test`、`pnpm test:workers`、`pnpm test:e2e`、`pnpm build` 全部通过。
 
+## 收敛修复验收标准
+
+- `AC-S01`：新增有序 migration 为 `groups` 增加可空 `mutation_token`；不得修改已经应用的 `0001` 或 `0002`。
+- `AC-S02`：每次 PATCH 生成 `crypto.randomUUID()` token；主表条件 UPDATE、asset 引用对账、标签/加群方式替换、审核备注 upsert 和 token 清除位于同一个 D1 batch。
+- `AC-S03`：所有关联语句只在本次 token 匹配时执行；过期请求即使与成功请求同毫秒生成，也不得修改任何关联表或 asset 引用。
+- `AC-S04`：是否发生版本冲突以 batch 第一条条件 UPDATE 的 `meta.changes` 为准，不得通过提交后的 SELECT 推断本请求是否成功。
+- `AC-S05`：batch 任一语句失败时，主表、关联表、asset 引用和 token 全部回滚；接口返回安全错误，前端保留草稿。
+- `AC-S06`：管理员列表和单条查询返回 ready QR 的可用 `assetUrl`/`qrCodeUrl`；公开响应仍不包含 asset ID、R2 key、version 或私有字段。
+- `AC-S07`：`DraftJoinMethod` 保存远端二维码 URL；编辑器优先使用本次上传的 Object URL，否则显示远端 URL。移除或替换 asset 时同步清空旧远端 URL。
+- `AC-S08`：删除整条本次上传的二维码方式、点击二维码“移除”、取消抽屉三条路径都请求 purge；已有 ready asset 不被前端 purge，保存后由服务端引用对账处理。
+- `AC-S09`：真实 Worker 测试覆盖 staged purge 成功、ready purge 拒绝、引用保护、staged→ready、ready 引用增加/归零、R2 失败进入 `delete_failed`、cleanup 重试和带 QR 永久删除。
+- `AC-S10`：并发回归测试固定相同时间戳并提交相同旧版本，证明只有一个 mutation token 获胜且失败请求关联操作为零副作用。
+- `AC-S11`：Vue 测试覆盖已有二维码远端预览、本地预览优先、删除整行触发 cleanup、ready asset 不被误 purge。
+- `AC-S12`：Playwright 至少覆盖“管理员打开已有 QR 群组并看到二维码”和“上传 QR→保存→主页查看”两条关键路径；使用隔离的 headless 测试浏览器，不接管用户个人浏览器会话。
+- `AC-S13`：资源清理维护入口具有真实 Worker 测试；文档明确它是人工命令还是定时调用。若本阶段不接入调度，不得声称存在自动后台回收。
+- `AC-S14`：全量门禁零退出码；ESLint warning 应清零或在规划中列为明确延期，禁止新增文件级规则压制。
+
+## 状态验收矩阵
+
+| 场景 | D1 最终状态 | R2 最终状态 | API/UI 结果 | 证明层 |
+|---|---|---|---|---|
+| 同版本并发 PATCH | 仅一个 token 对应的完整聚合提交，token 清空 | 无误删 | 一个成功、一个 `VERSION_CONFLICT` | Worker 并发测试 |
+| batch 中途失败 | 主表、关联表、asset 引用均保持原值 | 不变 | 安全错误，抽屉保留草稿 | Repository/Worker 故障注入 |
+| 打开已有 QR 群组 | ready asset 与引用保持不变 | 对象存在 | 抽屉显示远端二维码 | Vue + Playwright |
+| 上传 QR 后保存 | staged→ready，`ref_count` 正确 | 对象存在 | 保存成功，主页可查看 | Worker + Playwright |
+| 上传 QR 后取消/删除整行 | staged asset 行删除 | 对象删除 | 抽屉关闭或草稿继续可用 | Vue + Worker |
+| 删除最后一个 ready QR 引用 | `ref_count=0`，进入清理并最终删除或 `delete_failed` | 成功删除或保留待重试 | 保存成功；失败可维护重试 | Worker |
+| purge ready asset | 数据和引用不变 | 对象存在 | `STATE_CONFLICT` | Worker |
+| R2 删除失败后重试 | 先 `delete_failed`，重试成功后删除行 | 重试后不存在 | 首次依赖错误，维护命令可恢复 | Worker 故障注入 |
+| 带 QR 永久删除 | 群组关联删除，无孤立 ready asset | 无引用对象删除 | `purgeState=done` 或安全可重试错误 | Worker |
+
+## 收敛阶段不在范围
+
+- 重新设计筛选、搜索、排序、抽屉布局或公开二维码视觉。
+- 新增角色、审计历史、批量操作、FTS 或其他原父任务范围外能力。
+- 为了规避原子性要求而放宽 `AC-13`。
+- 继续用时间戳、版本号或事后补偿替代唯一 mutation token。
+
+当前没有阻塞性的产品问题；剩余工作均为已确定的实现与验证任务。

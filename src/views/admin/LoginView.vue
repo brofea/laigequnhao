@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAdminAuth } from "@/features/admin/composables/useAdminAuth";
@@ -26,7 +25,7 @@ async function handleLogin() {
     <div class="w-full max-w-sm rounded-xl border bg-white p-8 shadow-sm">
       <h1 class="mb-6 text-center text-xl font-bold text-gray-900">来个群号 — 管理后台</h1>
 
-      <form @submit.prevent="handleLogin" class="space-y-4">
+      <form class="space-y-4" @submit.prevent="handleLogin">
         <label class="block">
           <span class="text-sm font-medium text-gray-700">管理员密码</span>
           <input
@@ -38,7 +37,9 @@ async function handleLogin() {
             placeholder="请输入密码"
           />
         </label>
-        <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
+        <p v-if="error" class="text-sm text-red-500">
+          {{ error }}
+        </p>
         <button
           type="submit"
           :disabled="loading"

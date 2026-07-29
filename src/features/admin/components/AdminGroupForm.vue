@@ -15,9 +15,9 @@ const emit = defineEmits<{
 const form = ref({
   title: "",
   description: "",
-  kind: "interest" as string,
+  kind: "interest",
   platform: "",
-  status: "pending" as string,
+  status: "pending",
 });
 
 // 打开弹窗或切换编辑目标时，重置表单
@@ -33,7 +33,13 @@ watch(
         status: g.status,
       };
     } else if (isOpen && !g) {
-      form.value = { title: "", description: "", kind: "interest", platform: "", status: "pending" };
+      form.value = {
+        title: "",
+        description: "",
+        kind: "interest",
+        platform: "",
+        status: "pending",
+      };
     }
   },
 );

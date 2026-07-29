@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* eslint-disable no-useless-assignment */
 const emit = defineEmits<{
   confirm: [];
   cancel: [];

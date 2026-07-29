@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "laigequnhao-test",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // 本文件只供自动化测试使用。未设置 remote，D1/R2 均由 workerd 本地模拟。
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lgqh-test-local",
+      "database_id": "98f266f6-fdf8-48ea-8f4a-1ce921741cd7",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "lgqh-test-local",
+    },
+  ],
+  "vars": {
+    "SKIP_TURNSTILE": "true",
+    "SECURE_COOKIE": "true",
+  },
+}
