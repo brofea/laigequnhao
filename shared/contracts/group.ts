@@ -170,7 +170,7 @@ export const joinMethodInputSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("qr_code"),
-    assetId: z.string().uuid("无效的二维码资源 ID"),
+    assetId: z.string().uuid("请上传有效的二维码图片"),
     sortOrder: z.number().int().min(0),
   }),
 ]);
@@ -191,6 +191,10 @@ export const groupCreateSchema = z
       .default([]),
     joinMethods: z.array(joinMethodInputSchema).min(1, "至少需要一个加群方式"),
     auditNotes: z.string().max(2000).nullable().optional().default(null),
+    /** Logo R2 key（上传后由服务端校验） */
+    logoR2Key: z.string().nullable().optional(),
+    /** 需要 adopt 的 staged asset ID 列表 */
+    adoptAssetIds: z.array(z.string()).optional(),
   })
   .refine(
     (data) => {
@@ -238,6 +242,10 @@ export const groupUpdateSchema = z
       .optional(),
     joinMethods: z.array(joinMethodInputSchema).min(1, "至少需要一个加群方式").optional(),
     auditNotes: z.string().max(2000).nullable().optional(),
+    /** Logo R2 key（上传后由服务端校验） */
+    logoR2Key: z.string().nullable().optional(),
+    /** 需要 adopt 的 staged asset ID 列表 */
+    adoptAssetIds: z.array(z.string()).optional(),
     /** 乐观锁版本号（必传） */
     version: z.number().int().nonnegative("版本号必须是非负整数"),
   })

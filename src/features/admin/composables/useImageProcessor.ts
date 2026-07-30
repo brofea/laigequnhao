@@ -16,45 +16,58 @@ export function useImageProcessor() {
     URL.revokeObjectURL(url);
   }
 
-  /**
-   * 处理图片文件 → WebP
-   * @param file 输入文件 (JPG/PNG/WebP)
-   * @param maxBytes 最大字节数
-   * @param quality WebP 质量 0-1
-   */
   async function process(
     file: File,
     maxBytes = 100 * 1024,
-    quality = 0.8,
+    targetBytes?: number,
+    maxDimension?: number,
   ): Promise<ProcessResult | null> {
     loading.value = true;
     error.value = "";
 
     try {
+      // 格式校验
+      if (!file.type.startsWith("image/")) {
+        error.value = "仅支持图片格式";
+        loading.value = false;
+        return null;
+      }
+
+      // 大小校验
+      if (file.size > maxBytes) {
+        error.value = `文件大小 ${formatBytes(file.size)} 超过限制 ${formatBytes(maxBytes)}`;
+        loading.value = false;
+        return null;
+      }
+
       // 读取文件
       const dataUrl = await readAsDataURL(file);
       const img = await loadImage(dataUrl);
 
+      let { width, height } = img;
+
+      if (maxDimension && Math.max(width, height) > maxDimension) {
+        const scale = maxDimension / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+
       // Canvas 绘制
       const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = width;
+      canvas.height = height;
       const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas not supported");
+      if (!ctx) throw new Error("Canvas 不可用");
 
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(img, 0, 0, width, height);
 
-      // 转换为 WebP blob
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(
-          (b) => {
-            if (b) resolve(b);
-            else reject(new Error("Conversion failed"));
-          },
-          "image/webp",
-          quality,
-        );
-      });
+      // 转换为 WebP blob（QR codes use binary search for size target）
+      let blob: Blob;
+      if (targetBytes) {
+        blob = await compressToTarget(canvas, targetBytes);
+      } else {
+        blob = await canvasToBlob(canvas);
+      }
 
       const byteLength = blob.size;
 
@@ -69,8 +82,8 @@ export function useImageProcessor() {
 
       const result: ProcessResult = {
         blob,
-        width: img.width,
-        height: img.height,
+        width,
+        height,
         byteLength,
         previewUrl,
       };
@@ -87,14 +100,58 @@ export function useImageProcessor() {
   return { loading, error, process, revokePreview };
 }
 
+// ── helpers ──
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality = 0.8): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => {
+        if (b) resolve(b);
+        else reject(new Error("图片转换失败"));
+      },
+      "image/webp",
+      quality,
+    );
+  });
+}
+
+/** Binary search quality (0.05–1.0) to fit within targetBytes */
+async function compressToTarget(canvas: HTMLCanvasElement, targetBytes: number): Promise<Blob> {
+  let bestWithinTarget: Blob | null = null;
+  let lo = 0.05;
+  let hi = 1.0;
+
+  for (let i = 0; i < 8; i++) {
+    const mid = (lo + hi) / 2;
+    const blob = await canvasToBlob(canvas, mid);
+    if (blob.size <= targetBytes) {
+      if (!bestWithinTarget || blob.size > bestWithinTarget.size) {
+        bestWithinTarget = blob;
+      }
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  if (!bestWithinTarget) {
+    throw new Error(`图片压缩后仍超过 ${formatBytes(targetBytes)}`);
+  }
+  return bestWithinTarget;
+}
+
 function readAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      resolve(reader.result as string);
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("文件读取失败"));
+      }
     };
     reader.onerror = () => {
-      reject(new Error("Failed to read file"));
+      reject(new Error("文件读取失败"));
     };
     reader.readAsDataURL(file);
   });
@@ -107,7 +164,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
       resolve(img);
     };
     img.onerror = () => {
-      reject(new Error("Failed to load image"));
+      reject(new Error("图片加载失败"));
     };
     img.src = src;
   });

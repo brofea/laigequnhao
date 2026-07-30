@@ -1,4 +1,4 @@
-import { ref, computed, watch, type Ref } from "vue";
+import { ref, computed, watch, onUnmounted, type Ref } from "vue";
 import type { AdminGroupDto } from "@shared/contracts/group";
 import type { GroupCreateInput, GroupUpdateInput } from "@shared/contracts/group";
 import type { GroupKind, GroupStatus, JoinMethod } from "@shared/domain";
@@ -29,6 +29,10 @@ export interface DraftState {
   auditNotes: string | null;
   submissionContact: string | null;
   version: number;
+  /** 新上传的 logo Blob（未保存状态），null 表示无新上传 */
+  logoBlob: Blob | null;
+  /** 是否已删除已有 logo（编辑模式） */
+  logoRemoved: boolean;
 }
 
 let clientKeyCounter = 0;
@@ -56,6 +60,8 @@ function dtoToDraft(dto: AdminGroupDto): DraftState {
     auditNotes: dto.auditNotes,
     submissionContact: dto.submissionContact,
     version: dto.version,
+    logoBlob: null,
+    logoRemoved: false,
   };
 }
 
@@ -81,6 +87,8 @@ function emptyDraft(): DraftState {
     auditNotes: null,
     submissionContact: null,
     version: 0,
+    logoBlob: null,
+    logoRemoved: false,
   };
 }
 
@@ -90,13 +98,26 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
   const originalJson = ref<string>("");
   const fieldErrors = ref<Record<string, string[]>>({});
 
+  // ── Logo 预览（需在 watch 之前定义，因为 watch 回调中引用）──
+  const logoPreviewUrl = ref<string | null>(null);
+
+  /** 撤销当前 object URL（如果存在），避免内存泄漏 */
+  function revokeLogoPreview() {
+    if (logoPreviewUrl.value && logoPreviewUrl.value.startsWith("blob:")) {
+      URL.revokeObjectURL(logoPreviewUrl.value);
+    }
+    logoPreviewUrl.value = null;
+  }
+
   // 当 group 变化时重置草稿
   watch(
     () => group.value,
     (g) => {
+      revokeLogoPreview();
       if (g) {
         draft.value = dtoToDraft(g);
         originalJson.value = JSON.stringify(draft.value);
+        if (g.logoUrl) logoPreviewUrl.value = g.logoUrl;
       } else {
         draft.value = emptyDraft();
         originalJson.value = JSON.stringify(draft.value);
@@ -118,9 +139,37 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
     return siteConfig.platforms.find((p) => p.id === draft.value.platform);
   });
 
-  const allowedJoinMethods = computed<JoinMethod[]>(() => {
-    return currentPlatform.value?.allowedJoinMethods ?? [];
+  // ── Logo 操作 ──
+
+  /** 当前 Logo 的展示 URL（ref 驱动，不在 computed 内调用 createObjectURL） */
+  const logoUrl = computed(() => logoPreviewUrl.value);
+
+  /** 设置新 Logo（上传回调） */
+  function setLogo(blob: Blob) {
+    revokeLogoPreview();
+    logoPreviewUrl.value = URL.createObjectURL(blob);
+    draft.value.logoBlob = blob;
+    draft.value.logoRemoved = false;
+  }
+
+  /** 删除 Logo（编辑模式） */
+  function removeLogo() {
+    revokeLogoPreview();
+    draft.value.logoBlob = null;
+    draft.value.logoRemoved = true;
+  }
+
+  onUnmounted(() => {
+    revokeLogoPreview();
   });
+
+  /** 强制重置草稿（新建模式重新打开时调用） */
+  function resetDraft() {
+    revokeLogoPreview();
+    draft.value = emptyDraft();
+    originalJson.value = JSON.stringify(draft.value);
+    fieldErrors.value = {};
+  }
 
   // ── 标签操作 ──
 
@@ -160,6 +209,9 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
 
   const joinMethodError = computed<string | null>(() => {
     if (draft.value.joinMethods.length === 0) return "至少需要一个加群方式";
+    if (draft.value.joinMethods.some((m) => m.type === "qr_code" && !m.assetId)) {
+      return "请上传二维码图片";
+    }
 
     // 检查完全重复
     const keys = draft.value.joinMethods.map((m) => {
@@ -169,15 +221,12 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
     });
     if (new Set(keys).size !== keys.length) return "加群方式存在完全重复的项";
 
-    // 平台兼容性
-    const incompatible = draft.value.joinMethods.filter(
-      (m) => !allowedJoinMethods.value.includes(m.type),
-    );
-    if (incompatible.length > 0) {
-      return `平台不支持：${incompatible.map((m) => m.type).join("、")}`;
-    }
-
     return null;
+  });
+
+  /** QR 二维码加群方式存在但未上传图片时为 true */
+  const qrImageMissing = computed(() => {
+    return draft.value.joinMethods.some((m) => m.type === "qr_code" && !m.assetId);
   });
 
   function addJoinMethod(type: JoinMethod) {
@@ -227,8 +276,11 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
 
   // ── 保存数据转换 ──
 
-  function toCreateInput(): GroupCreateInput {
-    return {
+  function toCreateInput(logo?: {
+    logoR2Key?: string | null;
+    adoptAssetIds?: string[];
+  }): GroupCreateInput {
+    const input: GroupCreateInput = {
       title: draft.value.title,
       description: draft.value.description,
       kind: draft.value.kind,
@@ -251,11 +303,23 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
       }),
       auditNotes: draft.value.auditNotes,
     };
+    // Logo 处理：有删除标记 → null；有上传 → r2Key；无变化 → 不传
+    if (draft.value.logoRemoved) {
+      input.logoR2Key = null;
+    } else if (logo?.logoR2Key) {
+      input.logoR2Key = logo.logoR2Key;
+      input.adoptAssetIds = logo.adoptAssetIds ?? [];
+    }
+    return input;
   }
 
-  function toUpdateInput(): GroupUpdateInput {
+  function toUpdateInput(logo?: {
+    logoR2Key?: string | null;
+    adoptAssetIds?: string[];
+  }): GroupUpdateInput {
+    const create = toCreateInput(logo);
     return {
-      ...toCreateInput(),
+      ...create,
       version: draft.value.version,
     };
   }
@@ -278,7 +342,13 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
     isCreate,
     isDirty,
     currentPlatform,
-    allowedJoinMethods,
+    // logo
+    logoBlob: computed(() => draft.value.logoBlob),
+    logoRemoved: computed(() => draft.value.logoRemoved),
+    logoUrl,
+    setLogo,
+    removeLogo,
+    resetDraft,
     // tag
     tagError,
     addTag,
@@ -286,6 +356,7 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
     moveTag,
     // join method
     joinMethodError,
+    qrImageMissing,
     addJoinMethod,
     removeJoinMethod,
     updateJoinMethod,

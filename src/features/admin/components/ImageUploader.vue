@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from "vue";
+import { ref, onUnmounted, watch } from "vue";
 import { useImageProcessor, formatBytes } from "../composables/useImageProcessor";
-import { LOGO_MAX_BYTES, QR_CODE_MAX_BYTES } from "@shared/contracts/asset";
+import {
+  LOGO_MAX_BYTES,
+  QR_CODE_MAX_BYTES,
+  QR_CODE_MAX_DIMENSION,
+  QR_CODE_TARGET_BYTES,
+} from "@shared/contracts/asset";
 
 const props = defineProps<{
   purpose: "logo" | "qr_code";
@@ -18,6 +23,17 @@ const { loading, error, process, revokePreview } = useImageProcessor();
 const dragging = ref(false);
 const previewUrl = ref<string | null>(props.existingUrl ?? null);
 const meta = ref<{ width: number; height: number; byteLength: number } | null>(null);
+
+watch(
+  () => props.existingUrl,
+  (existingUrl) => {
+    if (previewUrl.value?.startsWith("blob:")) {
+      revokePreview(previewUrl.value);
+    }
+    previewUrl.value = existingUrl ?? null;
+    meta.value = null;
+  },
+);
 
 const maxBytes = props.purpose === "logo" ? LOGO_MAX_BYTES : QR_CODE_MAX_BYTES;
 const label = props.purpose === "logo" ? "Logo" : "二维码";
@@ -41,11 +57,16 @@ async function onFileChange(e: Event) {
 }
 
 async function handleFile(file: File) {
-  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-    error.value = "仅支持 JPG、PNG、WebP 格式";
+  if (!file.type.startsWith("image/")) {
+    error.value = "仅支持图片格式";
     return;
   }
-  const result = await process(file, maxBytes);
+  const result = await process(
+    file,
+    maxBytes,
+    props.purpose === "qr_code" ? QR_CODE_TARGET_BYTES : undefined,
+    props.purpose === "qr_code" ? QR_CODE_MAX_DIMENSION : undefined,
+  );
   if (result) {
     if (previewUrl.value) revokePreview(previewUrl.value);
     previewUrl.value = result.previewUrl;
@@ -105,16 +126,9 @@ onUnmounted(() => {
         <p class="text-sm text-gray-400">拖拽图片到此处，或</p>
         <label class="cursor-pointer text-sm text-brand-primary hover:underline">
           选择文件
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            class="hidden"
-            @change="onFileChange"
-          />
+          <input type="file" accept="image/*" class="hidden" @change="onFileChange" />
         </label>
-        <p class="mt-1 text-xs text-gray-400">
-          支持 JPG/PNG/WebP，上限 {{ formatBytes(maxBytes) }}
-        </p>
+        <p class="mt-1 text-xs text-gray-400">支持任意图片格式，上限 {{ formatBytes(maxBytes) }}</p>
       </div>
 
       <!-- 加载 -->
@@ -126,7 +140,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <p v-if="error" class="text-xs text-red-500">
+    <p v-if="error" class="text-xs text-red-500" role="alert" aria-live="polite">
       {{ error }}
     </p>
   </div>

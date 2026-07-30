@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { assetInfoSchema } from "@shared/contracts/asset";
+import { assetInfoSchema, LOGO_MAX_BYTES, QR_CODE_TARGET_BYTES } from "@shared/contracts/asset";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createAssetService } from "../services/asset-service";
 import { authRequired, csrfProtection } from "../middleware/auth";
@@ -74,7 +74,7 @@ adminAssetsRoute.post("/assets", csrfProtection(), async (c) => {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
-        error: { code: "VALIDATION_FAILED", message: "Missing fields." },
+        error: { code: "VALIDATION_FAILED", message: "缺少文件或资源用途。" },
         requestId,
       }),
       400,
@@ -84,7 +84,7 @@ adminAssetsRoute.post("/assets", csrfProtection(), async (c) => {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
-        error: { code: "VALIDATION_FAILED", message: "Invalid purpose." },
+        error: { code: "VALIDATION_FAILED", message: "资源用途无效。" },
         requestId,
       }),
       400,
@@ -95,14 +95,14 @@ adminAssetsRoute.post("/assets", csrfProtection(), async (c) => {
   const actualByteLength = buffer.byteLength;
 
   // 使用实际文件大小校验（不信任客户端提交的 byteLength）
-  const maxBytes = purpose === "logo" ? 100 * 1024 : 300 * 1024;
+  const maxBytes = purpose === "logo" ? LOGO_MAX_BYTES : QR_CODE_TARGET_BYTES;
   if (actualByteLength > maxBytes) {
     return c.json(
       apiErrorSchema.parse({
         ok: false,
         error: {
           code: "PAYLOAD_TOO_LARGE",
-          message: `File size ${actualByteLength} exceeds limit of ${maxBytes} bytes.`,
+          message: `文件大小 ${actualByteLength} 字节，超过 ${maxBytes} 字节限制。`,
         },
         requestId,
       }),
@@ -116,7 +116,7 @@ adminAssetsRoute.post("/assets", csrfProtection(), async (c) => {
         ok: false,
         error: {
           code: "UNSUPPORTED_MEDIA_TYPE",
-          message: "Not a valid WebP file.",
+          message: "文件不是有效的 WebP 图片。",
         },
         requestId,
       }),
@@ -132,7 +132,7 @@ adminAssetsRoute.post("/assets", csrfProtection(), async (c) => {
         ok: false,
         error: {
           code: "VALIDATION_FAILED",
-          message: "Cannot determine valid image dimensions from file.",
+          message: "无法从文件中识别有效的图片尺寸。",
         },
         requestId,
       }),

@@ -89,16 +89,18 @@ const statusLabels: Record<GroupStatus, string> = {
       <!-- 平台 -->
       <label class="block">
         <span class="text-sm font-medium text-gray-600">平台</span>
-        <select
+        <input
+          list="platform-list"
           :value="platform"
-          class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm"
-          :class="fieldErrors.platform ? 'border-red-400' : ''"
-          @change="emit('update:platform', ($event.target as HTMLSelectElement).value)"
-        >
-          <option v-for="p in siteConfig.platforms" :key="p.id" :value="p.id">
-            {{ p.name }}
-          </option>
-        </select>
+          type="text"
+          placeholder="选择或输入平台名称"
+          class="mt-1 block w-full rounded border px-3 py-2 text-sm"
+          :class="fieldErrors.platform ? 'border-red-400' : 'border-gray-300'"
+          @input="emit('update:platform', ($event.target as HTMLInputElement).value)"
+        />
+        <datalist id="platform-list">
+          <option v-for="p in siteConfig.platforms" :key="p.id" :value="p.name" />
+        </datalist>
         <p v-if="fieldErrors.platform" class="mt-1 text-xs text-red-500">
           {{ fieldErrors.platform.join("、") }}
         </p>

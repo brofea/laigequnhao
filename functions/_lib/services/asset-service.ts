@@ -108,6 +108,7 @@ export function createAssetService(
         width: meta.width,
         height: meta.height,
         status: "staged",
+        publicUrl: r2Adapter.getPublicUrl(key),
       };
     },
 
@@ -252,6 +253,17 @@ export function createAssetService(
     /** 按 ID 查询 asset（管理员视图） */
     async getById(id: string): Promise<AdminAssetDto | null> {
       const row = await db.prepare("SELECT * FROM assets WHERE id = ?").bind(id).first<AssetRow>();
+
+      if (!row) return null;
+      return mapToAdminDto(row, r2Adapter.getPublicUrl(row.r2_key));
+    },
+
+    /** 按 R2 key 查询 asset（Logo 聚合写入校验使用） */
+    async getByR2Key(r2Key: string): Promise<AdminAssetDto | null> {
+      const row = await db
+        .prepare("SELECT * FROM assets WHERE r2_key = ?")
+        .bind(r2Key)
+        .first<AssetRow>();
 
       if (!row) return null;
       return mapToAdminDto(row, r2Adapter.getPublicUrl(row.r2_key));

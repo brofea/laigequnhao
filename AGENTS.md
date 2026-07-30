@@ -19,3 +19,33 @@ If you're using Codex or another agent-capable tool, additional project-scoped h
 Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
 
 <!-- TRELLIS:END -->
+
+## Sub-Agent Dispatch Protocol
+
+### Git Safety (MANDATORY)
+
+**Sub-agents MUST NEVER use destructive git operations.** This rule prevents parallel agents from wiping each other's changes.
+
+**FORBIDDEN** for all sub-agents:
+- `git checkout` / `git restore` / `git reset` — anything that modifies the working tree
+- `git stash` / `git stash pop` — anything that moves changes between stacks
+- `git clean` — anything that deletes untracked files
+- `git rebase --abort` — anything that discards in-progress work
+
+**ALLOWED** for sub-agents:
+- `Edit` tool — the ONLY way to modify files
+- `Write` tool — for creating new files only
+- `git status` / `git diff` / `git log` — read-only inspection
+- `git add` — only when explicitly part of a commit step
+
+### Why This Matters
+
+When multiple sub-agents run in parallel and edit overlapping files, a single `git restore` by one agent wipes ALL changes from ALL agents. This has caused entire batches of work to be silently lost.
+
+### Conflict Resolution
+
+If a sub-agent encounters a conflict (file was edited since it started):
+- **Do NOT use git to resolve it** — that destroys other agents' work
+- Re-read the file with the `Read` tool to get the latest state
+- Re-apply edits using the `Edit` tool against the current file content
+- If the conflict is too complex to resolve, **report to the main agent and stop**

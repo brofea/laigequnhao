@@ -13,9 +13,18 @@ import { createR2Adapter } from "../adapters/r2-adapter";
 import { authRequired, csrfProtection } from "../middleware/auth";
 import type { Env } from "../env";
 import type { SiteConfig } from "@shared/domain";
+import type { AdminGroupDto } from "@shared/contracts/group";
 
 type Vars = { requestId: string; sessionId: string };
 export const adminGroupsRoute = new Hono<{ Bindings: Env; Variables: Vars }>();
+
+function resolveLogoUrl(
+  dto: AdminGroupDto,
+  r2Adapter: ReturnType<typeof createR2Adapter>,
+): AdminGroupDto {
+  dto.logoUrl = dto.logoR2Key ? r2Adapter.getPublicUrl(dto.logoR2Key) : null;
+  return dto;
+}
 
 // 所有路由需要认证
 adminGroupsRoute.use("*", authRequired());
@@ -63,7 +72,9 @@ adminGroupsRoute.get("/", async (c) => {
 
   // 为 QR 加群方式解析 asset URL
   const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+  const r2Adapter = createR2Adapter(c.env.R2, c.env);
   for (const item of items) {
+    resolveLogoUrl(item, r2Adapter);
     for (const jm of item.joinMethods) {
       if (jm.type === "qr_code" && jm.assetId) {
         const url = await assetService.getPublicUrl(jm.assetId);
@@ -121,6 +132,7 @@ adminGroupsRoute.get(
 
     // 为 QR 加群方式解析 asset URL
     const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+    resolveLogoUrl(dto, createR2Adapter(c.env.R2, c.env));
     for (const jm of dto.joinMethods) {
       if (jm.type === "qr_code" && jm.assetId) {
         const url = await assetService.getPublicUrl(jm.assetId);
@@ -167,60 +179,18 @@ adminGroupsRoute.post("/", csrfProtection(), async (c) => {
 
   const input = parsed.data;
 
-  // 平台校验
-  const config = (await import("../../../site.config")).default as SiteConfig;
-  const platformConfig = config.platforms.find((p) => p.id === input.platform);
-  if (!platformConfig) {
-    return c.json(
-      apiErrorSchema.parse({
-        ok: false,
-        error: {
-          code: "VALIDATION_FAILED",
-          message: "无效的平台。",
-          fieldErrors: { platform: [`平台 "${input.platform}" 不在配置中`] },
-        },
-        requestId,
-      }),
-      400,
-    );
-  }
-
-  // 平台兼容性检查
-  const incompatibleMethods: number[] = [];
-  for (let i = 0; i < input.joinMethods.length; i++) {
-    const m = input.joinMethods[i]!;
-    if (!platformConfig.allowedJoinMethods.includes(m.type)) {
-      incompatibleMethods.push(i);
-    }
-  }
-  if (incompatibleMethods.length > 0) {
-    return c.json(
-      apiErrorSchema.parse({
-        ok: false,
-        error: {
-          code: "VALIDATION_FAILED",
-          message: `平台 "${platformConfig.name}" 不支持所选加群方式。`,
-          fieldErrors: {
-            joinMethods: incompatibleMethods.map(
-              (i) =>
-                `第 ${i + 1} 个加群方式类型 "${input.joinMethods[i]!.type}" 不兼容平台 "${platformConfig.name}"`,
-            ),
-          },
-        },
-        requestId,
-      }),
-      400,
-    );
-  }
-
   const repo = createGroupRepository(c.env.DB);
 
   // 收集需要 adopt 的 staged asset（仅 staged；ready 由 diff 逻辑处理 ref_count）
   const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
   const allQrAssetIds = input.joinMethods
     .filter((m) => m.type === "qr_code")
-    .map((m) => (m as { assetId: string }).assetId);
+    .map((m) => (m as { assetId: string }).assetId)
+    .filter((id) => id); // skip empty assetId
   const adoptAssetIds: string[] = [];
+  let createLogo:
+    | { id: string; publicUrl: string; width: number; height: number; byteLength: number }
+    | undefined;
 
   // 验证所有 asset 存在且可用
   for (const assetId of allQrAssetIds) {
@@ -274,6 +244,26 @@ adminGroupsRoute.post("/", csrfProtection(), async (c) => {
     adoptAssetIds.push(assetId);
   }
 
+  if (input.logoR2Key) {
+    const logoAsset = await assetService.getByR2Key(input.logoR2Key);
+    if (!logoAsset || logoAsset.purpose !== "logo" || logoAsset.status !== "staged") {
+      return c.json(
+        apiErrorSchema.parse({
+          ok: false,
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "Logo 资源不可用。",
+            fieldErrors: { logoR2Key: ["Logo 必须引用刚上传的 staged Logo 资源。"] },
+          },
+          requestId,
+        }),
+        400,
+      );
+    }
+    adoptAssetIds.push(logoAsset.id);
+    createLogo = logoAsset;
+  }
+
   // 创建群聊（含 asset adoption，全部原子执行）
   const result = await repo.create({
     title: input.title,
@@ -289,9 +279,18 @@ adminGroupsRoute.post("/", csrfProtection(), async (c) => {
       sortOrder: i,
     })),
     auditNotes: input.auditNotes,
-    logoR2Key: null,
+    logoR2Key: input.logoR2Key ?? null,
+    logoUrl: createLogo?.publicUrl ?? null,
+    logoMeta: createLogo
+      ? {
+          width: createLogo.width,
+          height: createLogo.height,
+          byteLength: createLogo.byteLength,
+        }
+      : null,
     adoptAssetIds: adoptAssetIds.length > 0 ? adoptAssetIds : undefined,
   });
+  resolveLogoUrl(result, createR2Adapter(c.env.R2, c.env));
 
   c.header("Cache-Control", "no-store");
   return c.json(
@@ -361,71 +360,18 @@ adminGroupsRoute.patch("/:id", csrfProtection(), async (c) => {
     );
   }
 
-  // 平台校验（如果提供了 platform；joinMethods 兼容性检查需要 platform）
-  const config = (await import("../../../site.config")).default as SiteConfig;
-  const effectivePlatform = input.platform ?? existing.platform;
-  const platformConfig = config.platforms.find((p) => p.id === effectivePlatform);
-
-  if (input.platform && !platformConfig) {
-    return c.json(
-      apiErrorSchema.parse({
-        ok: false,
-        error: {
-          code: "VALIDATION_FAILED",
-          message: "无效的平台。",
-          fieldErrors: { platform: [`平台 "${input.platform}" 不在配置中`] },
-        },
-        requestId,
-      }),
-      400,
-    );
-  }
-
-  // 平台兼容检查：无论 joinMethods 是否提交，都需校验与 effectivePlatform 的兼容性
-  if (platformConfig) {
-    const methodsToCheck = input.joinMethods ?? (existing.joinMethods as { type: string }[]);
-    if (methodsToCheck.length > 0) {
-      const incompatibleMethods: number[] = [];
-      for (let i = 0; i < methodsToCheck.length; i++) {
-        const m = methodsToCheck[i]!;
-        if (
-          !platformConfig.allowedJoinMethods.includes(
-            m.type as (typeof platformConfig.allowedJoinMethods)[number],
-          )
-        ) {
-          incompatibleMethods.push(i);
-        }
-      }
-      if (incompatibleMethods.length > 0) {
-        return c.json(
-          apiErrorSchema.parse({
-            ok: false,
-            error: {
-              code: "VALIDATION_FAILED",
-              message: `平台 "${platformConfig.name}" 不支持当前加群方式。`,
-              fieldErrors: {
-                joinMethods: incompatibleMethods.map(
-                  (i) =>
-                    `第 ${i + 1} 个加群方式类型 "${methodsToCheck[i]!.type}" 不兼容平台 "${platformConfig.name}"`,
-                ),
-              },
-            },
-            requestId,
-          }),
-          400,
-        );
-      }
-    }
-  }
-
   // 收集 qr_code asset IDs，区分 staged（需 adopt）和 ready（diff 处理 ref_count）
   const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
   const allPatchQrAssetIds = input.joinMethods
     ? input.joinMethods
         .filter((m) => m.type === "qr_code")
         .map((m) => (m as { assetId: string }).assetId)
+        .filter((id) => id)
     : [];
   const patchAdoptAssetIds: string[] = [];
+  let patchLogoAssetId: string | null | undefined;
+  let patchLogo:
+    { publicUrl: string; width: number; height: number; byteLength: number } | null | undefined;
 
   // 验证所有 asset 存在
   for (const assetId of allPatchQrAssetIds) {
@@ -479,6 +425,36 @@ adminGroupsRoute.patch("/:id", csrfProtection(), async (c) => {
     }
   }
 
+  if (input.logoR2Key !== undefined) {
+    if (input.logoR2Key === null) {
+      patchLogoAssetId = null;
+      patchLogo = null;
+    } else {
+      const logoAsset = await assetService.getByR2Key(input.logoR2Key);
+      if (
+        !logoAsset ||
+        logoAsset.purpose !== "logo" ||
+        (logoAsset.status !== "staged" && logoAsset.status !== "ready")
+      ) {
+        return c.json(
+          apiErrorSchema.parse({
+            ok: false,
+            error: {
+              code: "VALIDATION_FAILED",
+              message: "Logo 资源不可用。",
+              fieldErrors: { logoR2Key: ["Logo 必须引用可用的 Logo 资源。"] },
+            },
+            requestId,
+          }),
+          400,
+        );
+      }
+      patchLogoAssetId = logoAsset.id;
+      patchLogo = logoAsset;
+      if (logoAsset.status === "staged") patchAdoptAssetIds.push(logoAsset.id);
+    }
+  }
+
   const result = await repo.update(id, {
     title: input.title,
     description: input.description,
@@ -493,6 +469,16 @@ adminGroupsRoute.patch("/:id", csrfProtection(), async (c) => {
       sortOrder: i,
     })),
     auditNotes: input.auditNotes,
+    logoR2Key: input.logoR2Key,
+    logoAssetId: patchLogoAssetId,
+    logoUrl: patchLogo?.publicUrl ?? null,
+    logoMeta: patchLogo
+      ? {
+          width: patchLogo.width,
+          height: patchLogo.height,
+          byteLength: patchLogo.byteLength,
+        }
+      : null,
     version: input.version,
     adoptAssetIds: patchAdoptAssetIds.length > 0 ? patchAdoptAssetIds : undefined,
   });
@@ -523,9 +509,17 @@ adminGroupsRoute.patch("/:id", csrfProtection(), async (c) => {
   }
 
   // 清理因 joinMethods 移除而变成 delete_pending 的孤儿 asset
-  if (input.joinMethods) {
+  if (input.joinMethods || input.logoR2Key !== undefined) {
     const orphanAssets = await c.env.DB.prepare(
-      "SELECT id FROM assets WHERE status = 'delete_pending' AND id NOT IN (SELECT DISTINCT asset_id FROM join_methods WHERE asset_id IS NOT NULL)",
+      `SELECT id
+       FROM assets
+       WHERE status = 'delete_pending'
+         AND id NOT IN (
+           SELECT DISTINCT asset_id FROM join_methods WHERE asset_id IS NOT NULL
+         )
+         AND r2_key NOT IN (
+           SELECT logo_r2_key FROM groups WHERE logo_r2_key IS NOT NULL
+         )`,
     ).all<{ id: string }>();
     for (const a of orphanAssets.results) {
       try {
@@ -535,6 +529,8 @@ adminGroupsRoute.patch("/:id", csrfProtection(), async (c) => {
       }
     }
   }
+
+  resolveLogoUrl(result.dto, createR2Adapter(c.env.R2, c.env));
 
   c.header("Cache-Control", "no-store");
   return c.json(
@@ -590,6 +586,8 @@ adminGroupsRoute.post("/:id/restore", csrfProtection(), async (c) => {
       404,
     );
   }
+
+  resolveLogoUrl(result, createR2Adapter(c.env.R2, c.env));
 
   return c.json(apiSuccessSchema(adminGroupDtoSchema).parse({ ok: true, data: result, requestId }));
 });
@@ -662,25 +660,27 @@ adminGroupsRoute.delete("/trash/groups/:id", csrfProtection(), async (c) => {
       let logoCleanupOk = true;
       if (step.logoR2Key) {
         try {
-          await r2Adapter.delete(step.logoR2Key);
+          const sharedLogo = await c.env.DB.prepare(
+            "SELECT 1 FROM groups WHERE logo_r2_key = ? AND id != ? LIMIT 1",
+          )
+            .bind(step.logoR2Key, id)
+            .first();
+          if (!sharedLogo) {
+            await r2Adapter.delete(step.logoR2Key);
+          }
         } catch {
-          // 仅对象不存在（404）视为成功
           logoCleanupOk = false;
         }
       }
 
       if (!qrCleanupOk || !logoCleanupOk) {
-        await repo.markR2PurgeFailed(
-          id,
-          "R2_CLEANUP_FAILED",
-          "Some R2 objects could not be deleted.",
-        );
+        await repo.markR2PurgeFailed(id, "R2_CLEANUP_FAILED", "部分图片资源删除失败。");
         return c.json(
           apiErrorSchema.parse({
             ok: false,
             error: {
               code: "DEPENDENCY_UNAVAILABLE",
-              message: "R2 cleanup partially failed. Retry.",
+              message: "图片存储清理未完成，请重试。",
             },
             requestId,
           }),

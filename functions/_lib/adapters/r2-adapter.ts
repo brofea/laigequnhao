@@ -1,14 +1,10 @@
 import type { Env } from "../env";
-
-/** Logo 上传硬上限 */
-const LOGO_MAX_BYTES = 100 * 1024;
-/** 二维码上传硬上限 */
-const QR_CODE_MAX_BYTES = 300 * 1024;
+import { LOGO_MAX_BYTES, QR_CODE_TARGET_BYTES } from "@shared/contracts/asset";
 
 /** R2 自定义域名（从环境变量读取，不硬编码 r2.dev） */
 function getPublicBaseUrl(env: Env): string {
   // 生产环境应通过 wrangler secret put R2_PUBLIC_BASE_URL 设置
-  return (env.R2_PUBLIC_BASE_URL as string | undefined) ?? "";
+  return (env.R2_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
 }
 
 /** R2 适配器 — 资源上传/删除/公开 URL */
@@ -50,7 +46,7 @@ export function createR2Adapter(r2: R2Bucket, env: Env) {
 
     /** 验证二维码大小限制 */
     validateQrCodeSize(byteLength: number): boolean {
-      return byteLength > 0 && byteLength <= QR_CODE_MAX_BYTES;
+      return byteLength > 0 && byteLength <= QR_CODE_TARGET_BYTES;
     },
   };
 }

@@ -15,7 +15,9 @@ export type AssetUploadMeta = z.infer<typeof assetUploadMetaSchema>;
 // ─── Logo 上传限制 ───────────────────────────────────────
 
 export const LOGO_MAX_BYTES = 100 * 1024; // 100 KB
-export const QR_CODE_MAX_BYTES = 300 * 1024; // 300 KB
+export const QR_CODE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB upload limit
+export const QR_CODE_TARGET_BYTES = 300 * 1024; // 300 KB compression target
+export const QR_CODE_MAX_DIMENSION = 1024; // 1024px longest edge
 
 export const assetUploadLimitsSchema = z.union([
   z.object({
@@ -24,7 +26,7 @@ export const assetUploadLimitsSchema = z.union([
   }),
   z.object({
     purpose: z.literal("qr_code"),
-    byteLength: z.number().int().max(QR_CODE_MAX_BYTES),
+    byteLength: z.number().int().max(QR_CODE_TARGET_BYTES),
   }),
 ]);
 
@@ -39,6 +41,7 @@ export const assetInfoSchema = z.object({
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   status: z.enum(["staged", "ready", "delete_pending", "delete_failed"]),
+  publicUrl: z.string().url(),
 });
 export type AssetInfo = z.infer<typeof assetInfoSchema>;
 
@@ -50,7 +53,6 @@ export const adminAssetDtoSchema = assetInfoSchema.extend({
   deleteLastError: z.string().nullable(),
   deleteLastErrorCode: z.string().nullable(),
   createdAt: z.string().datetime(),
-  publicUrl: z.string(),
 });
 export type AdminAssetDto = z.infer<typeof adminAssetDtoSchema>;
 

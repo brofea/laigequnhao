@@ -69,7 +69,8 @@ export function useAdminGroups(csrfToken: () => string) {
       : undefined;
   });
 
-  const sortDir = computed<AdminSortDir>(() => {
+  const sortDir = computed<AdminSortDir | undefined>(() => {
+    if (!sortBy.value) return undefined;
     const v = route.query.sortDir as string | undefined;
     return v === "asc" ? "asc" : "desc";
   });
@@ -126,7 +127,11 @@ export function useAdminGroups(csrfToken: () => string) {
 
   function setSort(field: AdminSortField) {
     if (sortBy.value === field) {
-      updateQuery({ sortDir: sortDir.value === "asc" ? "desc" : "asc" });
+      if (sortDir.value === "asc") {
+        updateQuery({ sortDir: "desc" });
+      } else {
+        updateQuery({ sortBy: undefined, sortDir: undefined });
+      }
     } else {
       updateQuery({ sortBy: field, sortDir: "asc" });
     }
@@ -148,8 +153,13 @@ export function useAdminGroups(csrfToken: () => string) {
         qs.set("deleted", "true");
       }
       if (searchQuery.value) qs.set("q", searchQuery.value);
-      if (sortBy.value) qs.set("sortBy", sortBy.value);
-      if (sortDir.value !== "desc") qs.set("sortDir", sortDir.value);
+      if (sortBy.value) {
+        qs.set("sortBy", sortBy.value);
+        qs.set("sortDir", sortDir.value ?? "asc");
+      } else {
+        qs.set("sortBy", "status");
+        qs.set("sortDir", "asc");
+      }
       if (cursor) qs.set("cursor", cursor);
       qs.set("limit", "50");
 

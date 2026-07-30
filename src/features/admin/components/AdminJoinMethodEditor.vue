@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import type { JoinMethod } from "@shared/domain";
 import type { DraftJoinMethod } from "../composables/useAdminGroupDraft";
 import { uploadQrAsset } from "../api";
+import { useImageProcessor } from "../composables/useImageProcessor";
+import {
+  QR_CODE_MAX_BYTES,
+  QR_CODE_MAX_DIMENSION,
+  QR_CODE_TARGET_BYTES,
+} from "@shared/contracts/asset";
 
 const props = defineProps<{
   methods: DraftJoinMethod[];
-  allowedTypes: JoinMethod[];
   error: string | null;
   csrfToken?: string;
 }>();
@@ -16,7 +21,7 @@ const emit = defineEmits<{
   remove: [clientKey: string];
   "update:value": [clientKey: string, value: string];
   "update:url": [clientKey: string, url: string];
-  "update:assetId": [clientKey: string, assetId: string];
+  "update:assetId": [clientKey: string, assetId: string, assetUrl?: string | null];
   "move-up": [clientKey: string];
   "move-down": [clientKey: string];
   /** 上传了新二维码资源 → 父组件应跟踪以便取消时清理 */
@@ -30,6 +35,18 @@ const typeLabels: Record<JoinMethod, string> = {
   url: "链接",
   qr_code: "二维码",
 };
+
+const ALL_JOIN_TYPES = [
+  { type: "qr_code" as const, label: "添加二维码" },
+  { type: "group_number" as const, label: "添加群号" },
+  { type: "url" as const, label: "添加链接" },
+];
+
+const { error: processError, process: processImage } = useImageProcessor();
+
+const availableTypes = computed(() =>
+  ALL_JOIN_TYPES.filter((t) => !props.methods.some((m) => m.type === t.type)),
+);
 
 // ── 二维码上传状态 ──
 const qrUploading = ref<Record<string, boolean>>({});
@@ -46,7 +63,7 @@ function revokePreview(clientKey: string) {
 function removeQrAsset(method: DraftJoinMethod) {
   if (method.assetId) emit("cleanup-asset", method.assetId);
   revokePreview(method.clientKey);
-  emit("update:assetId", method.clientKey, "");
+  emit("update:assetId", method.clientKey, "", null);
 }
 
 function removeMethod(method: DraftJoinMethod) {
@@ -57,74 +74,34 @@ function removeMethod(method: DraftJoinMethod) {
   emit("remove", method.clientKey);
 }
 
-/** 转换图片为 WebP 格式 */
-async function convertToWebP(file: File): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const canvas = document.createElement("canvas");
-      const maxDim = 2048;
-      let w = img.naturalWidth;
-      let h = img.naturalHeight;
-      if (w > maxDim || h > maxDim) {
-        const ratio = Math.min(maxDim / w, maxDim / h);
-        w = Math.round(w * ratio);
-        h = Math.round(h * ratio);
-      }
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("Canvas context not available"));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, w, h);
-      canvas.toBlob(
-        (blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error("WebP conversion failed"));
-        },
-        "image/webp",
-        0.85,
-      );
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Failed to load image"));
-    };
-    img.src = url;
-  });
-}
-
 /** 处理二维码文件选择并上传 */
 async function handleQrFile(clientKey: string, file: File) {
-  if (!file.type.startsWith("image/")) {
-    qrUploadError.value[clientKey] = "仅支持图片文件";
-    return;
-  }
-
   qrUploading.value[clientKey] = true;
   qrUploadError.value[clientKey] = "";
 
   try {
-    // 转换为 WebP
-    const webpBlob = await convertToWebP(file);
+    // 使用统一图片处理器：5MB 上限 → 缩放到 1024px → webp 压缩到 ≤300KB
+    const result = await processImage(
+      file,
+      QR_CODE_MAX_BYTES,
+      QR_CODE_TARGET_BYTES,
+      QR_CODE_MAX_DIMENSION,
+    );
+    if (!result) {
+      qrUploadError.value[clientKey] = processError.value || "图片处理失败";
+      return;
+    }
 
-    // 创建预览 URL
-    const previewUrl = URL.createObjectURL(webpBlob);
     revokePreview(clientKey);
-    qrPreviewUrls.value[clientKey] = previewUrl;
+    qrPreviewUrls.value[clientKey] = result.previewUrl;
 
-    const result = await uploadQrAsset(webpBlob, props.csrfToken ?? "");
-    if (!result.ok) throw new Error(result.error.message);
+    const uploadResult = await uploadQrAsset(result.blob, props.csrfToken ?? "");
+    if (!uploadResult.ok) throw new Error(uploadResult.error.message);
 
     const oldAssetId =
       props.methods.find((method) => method.clientKey === clientKey)?.assetId ?? null;
-    emit("update:assetId", clientKey, result.data.id);
-    // 通知父组件跟踪此新资源
-    emit("asset-uploaded", oldAssetId, result.data.id);
+    emit("update:assetId", clientKey, uploadResult.data.id, uploadResult.data.publicUrl);
+    emit("asset-uploaded", oldAssetId, uploadResult.data.id);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "上传失败";
     qrUploadError.value[clientKey] = msg;
@@ -155,7 +132,13 @@ onBeforeUnmount(() => {
         class="rounded-lg border border-gray-200 bg-gray-50 p-3"
       >
         <div class="mb-2 flex items-center justify-between">
-          <span class="text-xs font-medium text-gray-500">
+          <span class="flex items-center gap-1.5 text-xs font-medium text-gray-500">
+            <img
+              v-if="m.type === 'qr_code' && (m.assetUrl || qrPreviewUrls[m.clientKey])"
+              :src="qrPreviewUrls[m.clientKey] ?? m.assetUrl ?? ''"
+              class="inline-block h-6 w-6 rounded border object-cover"
+              alt="QR 预览"
+            />
             {{ typeLabels[m.type] }}
           </span>
           <div class="flex items-center gap-1">
@@ -240,7 +223,7 @@ onBeforeUnmount(() => {
                 <span v-else>选择二维码图片</span>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/*"
                   class="hidden"
                   :disabled="qrUploading[m.clientKey]"
                   @change="
@@ -253,7 +236,12 @@ onBeforeUnmount(() => {
                 />
               </label>
             </div>
-            <p v-if="qrUploadError[m.clientKey]" class="mt-1 text-xs text-red-500">
+            <p
+              v-if="qrUploadError[m.clientKey]"
+              class="mt-1 text-xs text-red-500"
+              role="alert"
+              aria-live="polite"
+            >
               {{ qrUploadError[m.clientKey] }}
             </p>
           </template>
@@ -262,19 +250,16 @@ onBeforeUnmount(() => {
     </ul>
 
     <!-- 添加新方式 -->
-    <div class="flex gap-2">
-      <select
-        class="rounded border border-gray-300 px-3 py-1.5 text-sm"
-        @change="
-          emit('add', ($event.target as HTMLSelectElement).value as JoinMethod);
-          ($event.target as HTMLSelectElement).value = '';
-        "
+    <div class="flex flex-wrap gap-2">
+      <button
+        v-for="t in availableTypes"
+        :key="t.type"
+        type="button"
+        class="rounded border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 hover:border-brand-primary hover:text-brand-primary"
+        @click="emit('add', t.type)"
       >
-        <option value="" disabled selected>添加加群方式…</option>
-        <option v-for="t in allowedTypes" :key="t" :value="t">
-          {{ typeLabels[t] }}
-        </option>
-      </select>
+        {{ t.label }}
+      </button>
     </div>
 
     <p v-if="error" class="text-xs text-red-500">

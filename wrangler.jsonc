@@ -22,7 +22,6 @@
       "binding": "DB",
       "database_name": "lgqh-dev",
       "database_id": "66acce6c-7415-4193-a0fe-a9899006ee61",
-      "remote": true,
     },
   ],
   // ─── R2 存储桶 ────────────────────────────────────────────
@@ -30,7 +29,6 @@
     {
       "binding": "R2",
       "bucket_name": "lgqh-dev",
-      "remote": true,
     },
   ],
   // ─── 本地环境变量 ─────────────────────────────────────────

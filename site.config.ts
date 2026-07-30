@@ -31,11 +31,11 @@ const rawConfig: SiteConfig = {
   },
 
   platforms: [
-    { id: "qq", name: "QQ", allowedJoinMethods: ["group_number", "qr_code"] },
-    { id: "wechat", name: "微信", allowedJoinMethods: ["qr_code"] },
-    { id: "dingtalk", name: "钉钉", allowedJoinMethods: ["group_number", "qr_code"] },
-    { id: "discord", name: "Discord", allowedJoinMethods: ["url"] },
-    { id: "telegram", name: "Telegram", allowedJoinMethods: ["url"] },
+    { id: "qq", name: "QQ" },
+    { id: "wechat", name: "微信" },
+    { id: "dingtalk", name: "钉钉" },
+    { id: "discord", name: "Discord" },
+    { id: "telegram", name: "Telegram" },
   ],
 
   features: {},

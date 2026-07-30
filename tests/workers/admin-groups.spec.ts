@@ -36,6 +36,26 @@ function apiFetch(method: string, path: string, body?: unknown): Promise<Respons
   return app.fetch(req, env);
 }
 
+async function uploadLogo(): Promise<{ id: string; r2Key: string; publicUrl: string }> {
+  const formData = new FormData();
+  formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "logo.webp");
+  formData.append("purpose", "logo");
+  const response = await app.fetch(
+    new Request("http://localhost/api/v1/admin/assets", {
+      method: "POST",
+      headers: authHeaders,
+      body: formData,
+    }),
+    env,
+  );
+  expect(response.status).toBe(201);
+  return (
+    (await response.json()) as {
+      data: { id: string; r2Key: string; publicUrl: string };
+    }
+  ).data;
+}
+
 describe("Admin Groups CRUD", () => {
   it("returns 401 without auth", async () => {
     const req = new Request("http://localhost/api/v1/admin", {
@@ -378,5 +398,128 @@ describe("QR resource lifecycle (ref_count +1/-1/delete_pending)", () => {
 
     // Cleanup
     await apiFetch("DELETE", `/api/v1/admin/${created.id}`);
+  });
+});
+
+describe("Create group with empty QR assetId", () => {
+  it("二维码加群方式没有图片时返回字段校验错误", async () => {
+    const response = await apiFetch("POST", "/api/v1/admin", {
+      title: "空 QR assetId 测试",
+      kind: "interest",
+      platform: "wechat",
+      status: "pending",
+      joinMethods: [
+        { type: "group_number", value: "111111", sortOrder: 0 },
+        { type: "qr_code", sortOrder: 1 },
+      ],
+    });
+    const json = await response.json();
+    expect(response.status).toBe(400);
+    expect(json.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      fieldErrors: { joinMethods: expect.any(Array) },
+    });
+  });
+});
+
+describe("Create group with logo", () => {
+  it("创建群聊时携带 logoR2Key 应成功", async () => {
+    const uploaded = await uploadLogo();
+
+    // Create group with logo
+    const response = await apiFetch("POST", "/api/v1/admin", {
+      title: "Logo 测试群",
+      kind: "interest",
+      platform: "discord",
+      status: "pending",
+      joinMethods: [{ type: "url", url: "https://discord.example.com", sortOrder: 0 }],
+      logoR2Key: uploaded.r2Key,
+      adoptAssetIds: [uploaded.id],
+    });
+    expect(response.status).toBe(201);
+    const json = await response.json();
+    expect(json.data.id).toBeDefined();
+    expect(json.data.logoR2Key).toBe(uploaded.r2Key);
+    expect(json.data.logoUrl).toBe(uploaded.publicUrl);
+    expect(json.data.logoMeta).toMatchObject({ width: 1, height: 1 });
+    expect(
+      await env.DB.prepare("SELECT status, ref_count FROM assets WHERE id = ?")
+        .bind(uploaded.id)
+        .first(),
+    ).toMatchObject({ status: "ready", ref_count: 1 });
+
+    const removeResponse = await apiFetch("PATCH", `/api/v1/admin/${json.data.id}`, {
+      version: json.data.version,
+      logoR2Key: null,
+    });
+    expect(removeResponse.status).toBe(200);
+    const removed = await removeResponse.json();
+    expect(removed.data.logoR2Key).toBeNull();
+    expect(removed.data.logoUrl).toBeNull();
+    expect(
+      await env.DB.prepare("SELECT id FROM assets WHERE id = ?").bind(uploaded.id).first(),
+    ).toBeNull();
+    expect(await env.R2.head(uploaded.r2Key)).toBeNull();
+  });
+
+  it("永久删除群聊时删除独占 Logo 的 R2 对象和 D1 行", async () => {
+    const uploaded = await uploadLogo();
+    const create = await apiFetch("POST", "/api/v1/admin", {
+      title: "独占 Logo 永久删除",
+      kind: "interest",
+      platform: "qq",
+      status: "pending",
+      joinMethods: [{ type: "group_number", value: "800001", sortOrder: 0 }],
+      logoR2Key: uploaded.r2Key,
+    });
+    const group = (await create.json()).data;
+
+    expect((await apiFetch("DELETE", `/api/v1/admin/${group.id}`)).status).toBe(200);
+    expect((await apiFetch("DELETE", `/api/v1/admin/trash/groups/${group.id}`)).status).toBe(200);
+    expect(await env.R2.head(uploaded.r2Key)).toBeNull();
+    expect(
+      await env.DB.prepare("SELECT id FROM assets WHERE id = ?").bind(uploaded.id).first(),
+    ).toBeNull();
+  });
+
+  it("永久删除一个群聊时保留另一个群聊共享的 Logo", async () => {
+    const uploaded = await uploadLogo();
+    const firstResponse = await apiFetch("POST", "/api/v1/admin", {
+      title: "共享 Logo 一",
+      kind: "interest",
+      platform: "qq",
+      status: "pending",
+      joinMethods: [{ type: "group_number", value: "800002", sortOrder: 0 }],
+      logoR2Key: uploaded.r2Key,
+    });
+    const first = (await firstResponse.json()).data;
+    const secondResponse = await apiFetch("POST", "/api/v1/admin", {
+      title: "共享 Logo 二",
+      kind: "interest",
+      platform: "qq",
+      status: "pending",
+      joinMethods: [{ type: "group_number", value: "800003", sortOrder: 0 }],
+    });
+    const second = (await secondResponse.json()).data;
+    const share = await apiFetch("PATCH", `/api/v1/admin/${second.id}`, {
+      version: second.version,
+      logoR2Key: uploaded.r2Key,
+    });
+    expect(share.status).toBe(200);
+    expect(
+      await env.DB.prepare("SELECT ref_count FROM assets WHERE id = ?").bind(uploaded.id).first(),
+    ).toEqual({ ref_count: 2 });
+
+    expect((await apiFetch("DELETE", `/api/v1/admin/${first.id}`)).status).toBe(200);
+    expect((await apiFetch("DELETE", `/api/v1/admin/trash/groups/${first.id}`)).status).toBe(200);
+
+    expect(await env.R2.head(uploaded.r2Key)).not.toBeNull();
+    expect(
+      await env.DB.prepare("SELECT status, ref_count FROM assets WHERE id = ?")
+        .bind(uploaded.id)
+        .first(),
+    ).toMatchObject({ status: "ready", ref_count: 1 });
+    const currentSecond = await apiFetch("GET", `/api/v1/admin/${second.id}`);
+    expect((await currentSecond.json()).data.logoUrl).toBe(uploaded.publicUrl);
   });
 });

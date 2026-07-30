@@ -9,6 +9,7 @@ import { publicGroupDtoSchema } from "@shared/contracts/group";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createGroupRepository } from "../repositories/group-repository";
 import { createAssetService } from "../services/asset-service";
+import { createR2Adapter } from "../adapters/r2-adapter";
 import { computeRotation } from "../services/rotation-service";
 import type { Env } from "../env";
 import type { SiteConfig } from "@shared/domain";
@@ -67,6 +68,7 @@ groupsRoute.get("/", async (c) => {
 
   // 解析 QR asset URL
   const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
+  const r2Adapter = createR2Adapter(c.env.R2, c.env);
 
   // 过滤 → PublicGroupDto
   const publicItems = await Promise.all(
@@ -100,7 +102,11 @@ groupsRoute.get("/", async (c) => {
         joinMethods: _jm,
         ...rest
       } = admin;
-      return publicGroupDtoSchema.parse({ ...rest, joinMethods: resolvedMethods });
+      return publicGroupDtoSchema.parse({
+        ...rest,
+        logoUrl: admin.logoR2Key ? r2Adapter.getPublicUrl(admin.logoR2Key) : null,
+        joinMethods: resolvedMethods,
+      });
     }),
   );
 

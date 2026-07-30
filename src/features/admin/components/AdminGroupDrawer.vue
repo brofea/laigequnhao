@@ -3,11 +3,13 @@ import { ref, watch, computed, nextTick, onBeforeUnmount } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import type { AdminGroupDto } from "@shared/contracts/group";
 import { useAdminGroupDraft } from "../composables/useAdminGroupDraft";
+import { useImageProcessor } from "../composables/useImageProcessor";
+import { LOGO_MAX_BYTES } from "@shared/contracts/asset";
 import AdminGroupFields from "./AdminGroupFields.vue";
 import AdminTagEditor from "./AdminTagEditor.vue";
 import AdminJoinMethodEditor from "./AdminJoinMethodEditor.vue";
 import AdminPrivateDetails from "./AdminPrivateDetails.vue";
-import { purgeStagedAsset } from "../api";
+import { purgeStagedAsset, uploadLogoAsset } from "../api";
 
 const props = defineProps<{
   group: AdminGroupDto | null;
@@ -33,9 +35,18 @@ watch(
     groupRef.value = g;
   },
 );
+// 新建模式每次打开重置草稿
+watch(
+  () => props.open,
+  (open) => {
+    if (open && isCreate.value) resetDraft();
+  },
+);
 
 // ── Staged asset 跟踪（用于取消时清理）──
 const stagedAssetIds = ref<Set<string>>(new Set());
+const logoStagedAssetId = ref<string | null>(null);
+const logoStagedR2Key = ref<string | null>(null);
 
 function trackAssetUpload(oldAssetId: string | null, newAssetId: string) {
   stagedAssetIds.value.add(newAssetId);
@@ -75,6 +86,8 @@ watch(
   (val) => {
     if (val) {
       stagedAssetIds.value = new Set();
+      logoStagedAssetId.value = null;
+      logoStagedR2Key.value = null;
     }
   },
 );
@@ -84,18 +97,27 @@ const {
   fieldErrors,
   isCreate,
   isDirty,
-  allowedJoinMethods,
+  // logo
+  logoBlob,
+  logoUrl,
+  setLogo,
+  removeLogo,
+  resetDraft,
+  // tag
   tagError,
   addTag,
   removeTag,
   moveTag,
+  // join method
   joinMethodError,
   addJoinMethod,
   removeJoinMethod,
   updateJoinMethod,
   moveJoinMethod,
+  // save
   toCreateInput,
   toUpdateInput,
+  // error
   setFieldErrors,
   clearFieldErrors,
 } = useAdminGroupDraft(groupRef);
@@ -223,8 +245,36 @@ onBeforeRouteLeave(() => {
 
 // ── 保存 ──
 const formError = ref("");
+const { error: logoError, process: processLogo } = useImageProcessor();
+const logoUploading = ref(false);
 
-function handleSave() {
+async function onLogoFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  if (logoStagedAssetId.value) {
+    await cleanupStagedAsset(logoStagedAssetId.value);
+    logoStagedAssetId.value = null;
+    logoStagedR2Key.value = null;
+  }
+  const result = await processLogo(file, LOGO_MAX_BYTES);
+  if (result) {
+    URL.revokeObjectURL(result.previewUrl);
+    setLogo(result.blob);
+  }
+  (e.target as HTMLInputElement).value = "";
+}
+
+async function onRemoveLogo() {
+  if (logoStagedAssetId.value) {
+    await cleanupStagedAsset(logoStagedAssetId.value);
+    logoStagedAssetId.value = null;
+    logoStagedR2Key.value = null;
+  }
+  removeLogo();
+}
+
+async function handleSave() {
+  if (logoUploading.value) return;
   formError.value = "";
   clearFieldErrors();
 
@@ -234,10 +284,29 @@ function handleSave() {
   }
 
   try {
-    const input = isCreate.value ? toCreateInput() : toUpdateInput();
+    // 上传 logo（如果有新 blob）
+    let logoPayload: { logoR2Key?: string | null; adoptAssetIds?: string[] } | undefined;
+    if (logoBlob.value) {
+      if (!logoStagedAssetId.value || !logoStagedR2Key.value) {
+        logoUploading.value = true;
+        const result = await uploadLogoAsset(logoBlob.value, props.csrfToken ?? "");
+        if (!result.ok) throw new Error(result.error.message);
+        logoStagedAssetId.value = result.data.id;
+        logoStagedR2Key.value = result.data.r2Key;
+        stagedAssetIds.value.add(result.data.id);
+      }
+      logoPayload = {
+        logoR2Key: logoStagedR2Key.value,
+        adoptAssetIds: [logoStagedAssetId.value],
+      };
+    }
+
+    const input = isCreate.value ? toCreateInput(logoPayload) : toUpdateInput(logoPayload);
     emit("save", input as unknown as Record<string, unknown>);
   } catch (e) {
     formError.value = e instanceof Error ? e.message : "保存失败";
+  } finally {
+    logoUploading.value = false;
   }
 }
 </script>
@@ -289,6 +358,41 @@ function handleSave() {
         class="flex-1 space-y-6 overflow-y-auto px-6 py-4"
         @submit.prevent="handleSave"
       >
+        <!-- Logo 头像编辑 -->
+        <div class="flex flex-col items-center">
+          <div class="relative">
+            <img
+              v-if="logoUrl"
+              :src="logoUrl"
+              class="h-24 w-24 rounded-full border-2 border-gray-200 object-cover"
+              alt="群聊 Logo"
+            />
+            <div
+              v-else
+              class="flex h-24 w-24 items-center justify-center rounded-full border-2 border-dashed border-gray-300 bg-gray-100 text-xs text-gray-400"
+            >
+              无头像
+            </div>
+            <p v-if="logoError" class="mt-1 text-center text-xs text-red-500">
+              {{ logoError }}
+            </p>
+          </div>
+          <div class="mt-2 flex justify-center gap-2">
+            <label class="cursor-pointer text-xs text-brand-primary hover:underline">
+              {{ logoUrl ? "更换头像" : "上传头像" }}
+              <input type="file" accept="image/*" class="hidden" @change="onLogoFileChange" />
+            </label>
+            <button
+              v-if="logoUrl"
+              type="button"
+              class="text-xs text-red-500 hover:underline"
+              @click="onRemoveLogo"
+            >
+              移除
+            </button>
+          </div>
+        </div>
+
         <!-- 基本信息 -->
         <AdminGroupFields
           :title="draft.title"
@@ -317,7 +421,6 @@ function handleSave() {
         <!-- 加群方式 -->
         <AdminJoinMethodEditor
           :methods="draft.joinMethods"
-          :allowed-types="allowedJoinMethods"
           :error="joinMethodError"
           :csrf-token="props.csrfToken ?? ''"
           @add="addJoinMethod($event)"
@@ -325,7 +428,8 @@ function handleSave() {
           @update:value="(key, val) => updateJoinMethod(key, { value: val })"
           @update:url="(key, url) => updateJoinMethod(key, { url })"
           @update:asset-id="
-            (key, id) => updateJoinMethod(key, { assetId: id || null, assetUrl: null })
+            (key, id, assetUrl) =>
+              updateJoinMethod(key, { assetId: id || null, assetUrl: assetUrl ?? null })
           "
           @move-up="moveJoinMethod($event, 'up')"
           @move-down="moveJoinMethod($event, 'down')"
@@ -361,9 +465,9 @@ function handleSave() {
             type="submit"
             form="admin-group-form"
             class="rounded bg-brand-primary px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
-            :disabled="saving"
+            :disabled="saving || logoUploading"
           >
-            {{ saving ? "保存中…" : "保存" }}
+            {{ saving || logoUploading ? "保存中…" : "保存" }}
           </button>
         </div>
       </footer>

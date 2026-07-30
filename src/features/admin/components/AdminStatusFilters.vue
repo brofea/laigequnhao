@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { GroupStatus } from "@shared/domain";
+import { STATUS_FILTER_ORDER } from "@/features/admin/constants";
 
 defineProps<{
   statuses: GroupStatus[];
@@ -10,8 +11,6 @@ const emit = defineEmits<{
   toggleStatus: [status: GroupStatus];
   toggleDeleted: [];
 }>();
-
-const STATUS_ORDER: GroupStatus[] = ["pending", "published", "rejected", "delisted"];
 
 const statusLabels: Record<GroupStatus, string> = {
   pending: "待审核",
@@ -31,7 +30,7 @@ const statusColors: Record<GroupStatus, string> = {
 <template>
   <div class="flex flex-wrap items-center gap-2">
     <button
-      v-for="s in STATUS_ORDER"
+      v-for="s in STATUS_FILTER_ORDER"
       :key="s"
       :disabled="deleted"
       class="rounded-full border px-3 py-1 text-sm font-medium transition-colors"

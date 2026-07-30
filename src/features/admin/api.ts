@@ -34,6 +34,18 @@ export async function uploadQrAsset(
   });
 }
 
+export async function uploadLogoAsset(
+  blob: Blob,
+  csrfToken: string,
+): Promise<ApiResponse<AssetInfo>> {
+  const formData = new FormData();
+  formData.append("file", blob, "logo.webp");
+  formData.append("purpose", "logo");
+  return api.postForm("/admin/assets", assetInfoSchema, formData, {
+    "X-CSRF-Token": csrfToken,
+  });
+}
+
 export async function purgeStagedAsset(
   assetId: string,
   csrfToken: string,

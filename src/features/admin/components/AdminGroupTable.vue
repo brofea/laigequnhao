@@ -9,7 +9,7 @@ defineProps<{
   total: number;
   nextCursor: string | null;
   sortBy: AdminSortField | undefined;
-  sortDir: AdminSortDir;
+  sortDir: AdminSortDir | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -49,7 +49,7 @@ const statusColors: Record<string, string> = {
             <th
               class="px-3 py-2"
               :aria-sort="
-                sortBy === 'title' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                sortBy === 'title' && sortDir ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               "
             >
               <button
@@ -65,7 +65,7 @@ const statusColors: Record<string, string> = {
             <th
               class="px-3 py-2"
               :aria-sort="
-                sortBy === 'kind' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                sortBy === 'kind' && sortDir ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               "
             >
               <button
@@ -81,7 +81,7 @@ const statusColors: Record<string, string> = {
             <th
               class="px-3 py-2"
               :aria-sort="
-                sortBy === 'status' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                sortBy === 'status' && sortDir ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               "
             >
               <button
@@ -97,7 +97,7 @@ const statusColors: Record<string, string> = {
             <th
               class="px-3 py-2"
               :aria-sort="
-                sortBy === 'platform' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                sortBy === 'platform' && sortDir ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               "
             >
               <button
@@ -113,7 +113,7 @@ const statusColors: Record<string, string> = {
             <th
               class="px-3 py-2"
               :aria-sort="
-                sortBy === 'tags' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                sortBy === 'tags' && sortDir ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               "
             >
               <button
@@ -129,7 +129,7 @@ const statusColors: Record<string, string> = {
             <th
               class="px-3 py-2"
               :aria-sort="
-                sortBy === 'likeCount' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                sortBy === 'likeCount' && sortDir ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               "
             >
               <button

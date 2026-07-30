@@ -65,7 +65,7 @@ function mapToAdminDto(
   detail: SubmissionDetailRow | null,
   assetLookup: Map<string, AssetJoinRow>,
 ): AdminGroupDto {
-  const hasLogo = group.logo_url !== null;
+  const hasLogo = group.logo_r2_key !== null;
   return {
     id: group.id,
     title: group.title,
@@ -366,6 +366,8 @@ export function createGroupRepository(db: D1Database) {
       joinMethods: { type: string; value?: string; assetId?: string; sortOrder?: number }[];
       auditNotes?: string | null;
       logoR2Key?: string | null;
+      logoUrl?: string | null;
+      logoMeta?: { width: number; height: number; byteLength: number } | null;
       adoptAssetIds?: string[];
       /** 提交者联系方式（用户提交入口使用） */
       contact?: string | null;
@@ -380,8 +382,12 @@ export function createGroupRepository(db: D1Database) {
       const batch: D1PreparedStatement[] = [
         db
           .prepare(
-            `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, logo_r2_key, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO groups (
+               id, title, description, kind, platform, status, rotation_key,
+               logo_r2_key, logo_url, logo_width, logo_height, logo_byte_length,
+               created_at, updated_at
+             )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             id,
@@ -392,6 +398,10 @@ export function createGroupRepository(db: D1Database) {
             status,
             rotationKey,
             input.logoR2Key ?? null,
+            input.logoUrl ?? null,
+            input.logoMeta?.width ?? null,
+            input.logoMeta?.height ?? null,
+            input.logoMeta?.byteLength ?? null,
             now,
             now,
           ),
@@ -412,22 +422,30 @@ export function createGroupRepository(db: D1Database) {
         const m = input.joinMethods[i]!;
         const sortOrder = m.sortOrder ?? i;
         if (m.type === "qr_code") {
+          const hasAsset = m.assetId && m.assetId.length > 0;
           batch.push(
             db
               .prepare(
-                `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id)
-                 VALUES (?, ?, ?, NULL, ?, COALESCE(
-                   (SELECT id FROM assets WHERE id = ? AND status IN ('staged', 'ready')),
-                   ?
-                 ))`,
+                hasAsset
+                  ? `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id)
+                     VALUES (?, ?, ?, NULL, ?, COALESCE(
+                       (SELECT id FROM assets WHERE id = ? AND status IN ('staged', 'ready')),
+                       ?
+                     ))`
+                  : `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id)
+                     VALUES (?, ?, ?, NULL, ?, NULL)`,
               )
               .bind(
-                crypto.randomUUID(),
-                id,
-                m.type,
-                sortOrder,
-                m.assetId ?? "",
-                `invalid-${crypto.randomUUID()}`,
+                ...(hasAsset
+                  ? [
+                      crypto.randomUUID(),
+                      id,
+                      m.type,
+                      sortOrder,
+                      m.assetId ?? "",
+                      `invalid-${crypto.randomUUID()}`,
+                    ]
+                  : [crypto.randomUUID(), id, m.type, sortOrder]),
               ),
           );
         } else {
@@ -733,6 +751,10 @@ export function createGroupRepository(db: D1Database) {
         tags?: string[];
         joinMethods?: { type: string; value?: string; assetId?: string; sortOrder?: number }[];
         auditNotes?: string | null;
+        logoR2Key?: string | null;
+        logoAssetId?: string | null;
+        logoUrl?: string | null;
+        logoMeta?: { width: number; height: number; byteLength: number } | null;
         version: number;
         adoptAssetIds?: string[];
       },
@@ -740,7 +762,7 @@ export function createGroupRepository(db: D1Database) {
       const now = new Date().toISOString();
       const mutationToken = crypto.randomUUID();
 
-      // 预读当前 join_methods asset ID（batch 前获取，batch 内引用）
+      // 预读当前 join_methods / Logo asset ID（batch 前获取，batch 内引用）
       let oldAssetIds: Set<string> = new Set();
       if (input.joinMethods !== undefined) {
         const oldMethods = await db
@@ -749,11 +771,24 @@ export function createGroupRepository(db: D1Database) {
           .all<{ asset_id: string }>();
         oldAssetIds = new Set(oldMethods.results.map((r) => r.asset_id));
       }
+      if (input.logoR2Key !== undefined) {
+        const oldLogo = await db
+          .prepare(
+            `SELECT a.id
+             FROM groups g
+             JOIN assets a ON a.r2_key = g.logo_r2_key
+             WHERE g.id = ?`,
+          )
+          .bind(id)
+          .first<{ id: string }>();
+        if (oldLogo) oldAssetIds.add(oldLogo.id);
+      }
       const newAssetIds = new Set(
         (input.joinMethods ?? [])
           .filter((m) => m.type === "qr_code" && m.assetId)
           .map((m) => m.assetId!),
       );
+      if (input.logoAssetId) newAssetIds.add(input.logoAssetId);
 
       // 审核备注 upsert 预读
       const hasSubmissionDetails = input.auditNotes !== undefined;
@@ -784,6 +819,22 @@ export function createGroupRepository(db: D1Database) {
           setters.push(`${key} = ?`);
           ub.push(input[key]);
         }
+      }
+      if (input.logoR2Key !== undefined) {
+        setters.push(
+          "logo_r2_key = ?",
+          "logo_url = ?",
+          "logo_width = ?",
+          "logo_height = ?",
+          "logo_byte_length = ?",
+        );
+        ub.push(
+          input.logoR2Key,
+          input.logoUrl ?? null,
+          input.logoMeta?.width ?? null,
+          input.logoMeta?.height ?? null,
+          input.logoMeta?.byteLength ?? null,
+        );
       }
       ub.push(id, input.version);
       batch.push(
@@ -861,12 +912,11 @@ export function createGroupRepository(db: D1Database) {
         );
         for (let i = 0; i < input.joinMethods.length; i++) {
           const m = input.joinMethods[i]!;
-          const assetIdSql =
-            m.type === "qr_code"
-              ? "COALESCE((SELECT id FROM assets WHERE id = ? AND status IN ('staged', 'ready')), ?)"
-              : "NULL";
-          const assetBindings =
-            m.type === "qr_code" ? [m.assetId ?? "", `invalid-${crypto.randomUUID()}`] : [];
+          const hasAsset = m.type === "qr_code" && m.assetId && m.assetId.length > 0;
+          const assetIdSql = hasAsset
+            ? "COALESCE((SELECT id FROM assets WHERE id = ? AND status IN ('staged', 'ready')), ?)"
+            : "NULL";
+          const assetBindings = hasAsset ? [m.assetId ?? "", `invalid-${crypto.randomUUID()}`] : [];
           batch.push(
             db
               .prepare(
@@ -951,6 +1001,21 @@ export function createGroupRepository(db: D1Database) {
         .run();
 
       if (!result.success) return null;
+
+      // 恢复 logo asset 的 ref_count
+      const group = await db
+        .prepare("SELECT logo_r2_key FROM groups WHERE id = ?")
+        .bind(id)
+        .first<{ logo_r2_key: string | null }>();
+      if (group?.logo_r2_key) {
+        await db
+          .prepare(
+            "UPDATE assets SET ref_count = ref_count + 1, updated_at = ? WHERE r2_key = ? AND status = 'ready'",
+          )
+          .bind(now, group.logo_r2_key)
+          .run();
+      }
+
       return this.getById(id);
     },
 
@@ -1082,6 +1147,21 @@ export function createGroupRepository(db: D1Database) {
               )
               .bind(asset.asset_id),
           ),
+          db
+            .prepare(
+              `UPDATE assets
+               SET ref_count = MAX(0, ref_count - 1),
+                   updated_at = ?
+               WHERE r2_key = (SELECT logo_r2_key FROM groups WHERE id = ?)`,
+            )
+            .bind(now, id),
+          db
+            .prepare(
+              `DELETE FROM assets
+               WHERE r2_key = (SELECT logo_r2_key FROM groups WHERE id = ?)
+                 AND ref_count = 0`,
+            )
+            .bind(id),
           db.prepare("DELETE FROM groups WHERE id = ?").bind(id),
         ];
         await db.batch(batch);

@@ -10,7 +10,7 @@ const validConfig = {
   copyright: "© 2026",
   theme: { primaryColor: "#2563eb", accentColor: "#f59e0b", defaultMode: "light" as const },
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
-  platforms: [{ id: "qq", name: "QQ", allowedJoinMethods: ["group_number" as const] }],
+  platforms: [{ id: "qq", name: "QQ" }],
   features: {},
 };
 
@@ -31,8 +31,8 @@ describe("siteConfigSchema", () => {
     const config = {
       ...validConfig,
       platforms: [
-        { id: "qq", name: "QQ", allowedJoinMethods: ["group_number"] },
-        { id: "qq", name: "QQ 重复", allowedJoinMethods: ["qr_code"] },
+        { id: "qq", name: "QQ" },
+        { id: "qq", name: "QQ 重复" },
       ],
     };
     expect(() => siteConfigSchema.parse(config)).toThrow();
@@ -85,14 +85,5 @@ describe("siteConfigSchema", () => {
 
   it("拒绝空平台列表", () => {
     expect(() => siteConfigSchema.parse({ ...validConfig, platforms: [] })).toThrow();
-  });
-
-  it("拒绝空的 allowedJoinMethods", () => {
-    expect(() =>
-      siteConfigSchema.parse({
-        ...validConfig,
-        platforms: [{ id: "qq", name: "QQ", allowedJoinMethods: [] }],
-      }),
-    ).toThrow();
   });
 });

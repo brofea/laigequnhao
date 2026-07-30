@@ -91,6 +91,54 @@
 
 资源上传使用 `multipart/form-data`，但只接受一个最终 WebP。用途为 `logo` 或 `qr_code`；硬上限分别为 100 KB 和 300 KB。写入 R2 前，服务端必须验证 RIFF/WEBP 签名、可解析尺寸、用途和实际字节长度。
 
+## 场景：管理员图片资源的本地访问与聚合保存
+
+### 1. Scope / Trigger
+
+- 涉及 R2 上传、Logo/二维码预览或群组创建/PATCH 时，必须同时检查“对象已写入”“URL 可访问”“资源已纳入群组聚合保存”三条链路。
+
+### 2. Signatures
+
+- `POST /api/v1/admin/assets` 返回 `{ id, r2Key, purpose, publicUrl, width, height, byteLength }`。
+- `POST /api/v1/admin/groups` 与 `PATCH /api/v1/admin/groups/:id` 使用 `logoR2Key?: string | null`；二维码加群方式使用 `assetId`。
+- 群组响应使用 `logoUrl` 和 `joinMethods[].assetUrl`，不得要求前端拼接 R2 key。
+
+### 3. Contracts
+
+- `R2_PUBLIC_BASE_URL` 是服务端生成公开 URL 的唯一基址，返回前须移除尾部 `/`。
+- 本地 Miniflare R2 持久化目录不自带 HTTP 服务；开发环境由 Vite 的 `/assets/*` 中间件只读提供文件，基址为 `http://localhost:5173/assets`。
+- 上传成功后，前端必须把 `publicUrl` 写入当前草稿的 `assetUrl`；保存群组时仍提交 `r2Key/assetId`，URL 只用于展示。
+- 服务端按当前环境和持久化的 R2 key 重建响应 URL，不能信任数据库中的历史域名。
+
+### 4. Validation & Error Matrix
+
+- `logoR2Key` 不存在、用途不是 `logo`、状态不可采用 → `VALIDATION_FAILED`，字段为 `logoR2Key`。
+- 二维码 `assetId` 不存在、用途不匹配或状态不可采用 → `VALIDATION_FAILED`，字段定位到对应加群方式。
+- `/assets/*` key 为空、路径越界或对象不存在 → 本地文件服务返回 `404`，不得回退到 SPA。
+- 删除仍被其他群组引用的 Logo → 只减少当前群组引用，不删除共享 R2 对象。
+
+### 5. Good / Base / Bad Cases
+
+- Good：上传返回 `publicUrl`，界面立即预览，保存后重新获取仍返回当前环境的 URL。
+- Base：旧数据保存了失效域名，但存在 `logo_r2_key`；读取时使用当前 `R2_PUBLIC_BASE_URL` 恢复显示。
+- Bad：只把对象写入 Miniflare 目录，或只在界面保存临时 URL，却没有提交 `logoR2Key/assetId`。
+
+### 6. Tests Required
+
+- 前端单测断言上传后向父组件传递 `publicUrl`，删除时同时清空 `assetId` 与 `assetUrl`。
+- Worker 契约测试断言创建、替换、清空和共享 Logo 的 URL、状态及 `ref_count`。
+- 本地验证必须直接请求 `/assets/<r2-key>`，断言 `200`、正确 `Content-Type`，并确认浏览器图片具有非零 `naturalWidth`。
+
+### 7. Wrong vs Correct
+
+```ts
+// Wrong：上传成功后只保存 ID，界面和群组聚合都丢失图片状态
+emit("update:assetId", clientKey, result.id);
+
+// Correct：展示 URL 立即进入草稿，保存时服务端再采用稳定资源标识
+emit("update:assetId", clientKey, result.id, result.publicUrl);
+```
+
 ## 认证与请求安全
 
 - 会话 Cookie 必须签名、带有效期，并设置 `HttpOnly`、`Secure`、`SameSite=Lax` 和适当的 Path。

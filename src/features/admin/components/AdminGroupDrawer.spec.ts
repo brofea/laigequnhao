@@ -116,6 +116,29 @@ describe("AdminGroupDrawer staged asset ownership", () => {
     );
   });
 
+  it("stores the uploaded asset ID and public URL in the draft", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const wrapper = await mountDrawer();
+    const editor = wrapper.getComponent(AdminJoinMethodEditor);
+    const readyMethod = editor.props("methods")[0];
+    expect(readyMethod).toBeDefined();
+    if (!readyMethod) throw new Error("Expected an existing QR method.");
+
+    editor.vm.$emit(
+      "update:assetId",
+      readyMethod.clientKey,
+      "33333333-3333-4333-8333-333333333333",
+      "http://localhost:5173/assets/qr_code/replacement.webp",
+    );
+    await flushPromises();
+
+    const updatedMethod = wrapper.getComponent(AdminJoinMethodEditor).props("methods")[0];
+    expect(updatedMethod).toBeDefined();
+    if (!updatedMethod) throw new Error("Expected the QR draft method to remain.");
+    expect(updatedMethod.assetId).toBe("33333333-3333-4333-8333-333333333333");
+    expect(updatedMethod.assetUrl).toBe("http://localhost:5173/assets/qr_code/replacement.webp");
+  });
+
   it("clears both asset ID and stale remote URL when the editor removes an asset", async () => {
     vi.stubGlobal("fetch", vi.fn());
     const wrapper = await mountDrawer();
@@ -124,7 +147,7 @@ describe("AdminGroupDrawer staged asset ownership", () => {
     expect(readyMethod).toBeDefined();
     if (!readyMethod) throw new Error("Expected an existing QR method.");
 
-    editor.vm.$emit("update:assetId", readyMethod.clientKey, "");
+    editor.vm.$emit("update:assetId", readyMethod.clientKey, "", null);
     await flushPromises();
 
     const updatedMethod = wrapper.getComponent(AdminJoinMethodEditor).props("methods")[0];
