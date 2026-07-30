@@ -402,3 +402,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 修复群组头像上传 — R2 serve + 压缩标准化
+
+**Date**: 2026-07-30
+**Task**: 修复群组头像上传 — R2 serve + 压缩标准化
+**Branch**: `main`
+
+### Summary
+
+诊断并修复群组头像上传不显示问题：1) 根因是 Miniflare 本地 R2 持久化路径不一致（wrangler r2 put --local 与 c.env.R2.put() 写入不同目录），Vite 中间件只能读取种子脚本路径；2) 通过在 Hono API 添加 GET /api/v1/assets/:key 路由统一 serve R2 对象修复；3) 统一种子脚本和浏览器上传的压缩参数（logo 128px/80KB alpha 质量递减，QR 512px/400KB opaque 质量递减）；4) 重写种子脚本为 100 群 / API 上传。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b4d99d1` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

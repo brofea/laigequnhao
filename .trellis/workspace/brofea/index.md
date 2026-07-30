@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
+- **Total Sessions**: 13
 - **Last Active**: 2026-07-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~404 | Active |
+| `journal-1.md` | ~437 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-07-30 | 修复群组头像上传 — R2 serve + 压缩标准化 | `b4d99d1` | `main` |
 | 12 | 2026-07-30 | 修复管理端群组管理与图片资源链路 | `3b80f80` | `main` |
 | 11 | 2026-07-29 | 完成 admin 页面功能与验收 | `3385b71` | `main` |
 | 10 | 2026-07-28 | 实现群组聚合编辑：原子 CRUD + 响应式抽屉 | `f8a2fa6` | `main` |
