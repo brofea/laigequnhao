@@ -369,3 +369,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: 修复管理端群组管理与图片资源链路
+
+**Date**: 2026-07-30
+**Task**: 修复管理端群组管理与图片资源链路
+**Branch**: `main`
+
+### Summary
+
+完成管理端筛选排序、平台解绑、加群方式编辑、草稿重置、图片压缩上传与本地 R2 展示；修复 Logo/二维码聚合保存、资源引用计数及删除恢复生命周期，并补充中文错误、seed 全链路、回归测试和代码规范。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3b80f80` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
