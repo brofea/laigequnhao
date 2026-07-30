@@ -12,22 +12,23 @@ export const assetUploadMetaSchema = z.object({
 });
 export type AssetUploadMeta = z.infer<typeof assetUploadMetaSchema>;
 
-// ─── Logo 上传限制 ───────────────────────────────────────
+// ─── Logo 上传限制和压缩参数 ───────────────────────────────────────
 
-export const LOGO_MAX_BYTES = 80 * 1024; // 80 KB
-export const LOGO_MAX_DIMENSION = 128; // 128px longest edge
-export const LOGO_START_QUALITY = 85;
-export const LOGO_MIN_QUALITY = 5;
-export const LOGO_QUALITY_STEP = 20;
+export const LOGO_CODE_MAX_BYTES = 5 * 1024 * 1024;  // 5 MB  原始文件限制
+export const LOGO_MAX_BYTES = 80 * 1024;             // 80 KB 压缩后文件限制
+export const LOGO_MAX_DIMENSION = 128;               // 128px 最大长边
+export const LOGO_START_QUALITY = 85;                // 起始压缩质量
+export const LOGO_MIN_QUALITY = 45;                  // 最低压缩质量
+export const LOGO_QUALITY_STEP = 20;                 // 步进降低压缩质量
 
-// ─── 二维码上传限制 ───────────────────────────────────────
+// ─── 二维码上传限制和压缩参数 ───────────────────────────────────────
 
-export const QR_CODE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB upload limit (原始文件)
-export const QR_CODE_TARGET_BYTES = 400 * 1024; // 400 KB compression target
-export const QR_CODE_MAX_DIMENSION = 512; // 512px longest edge
-export const QR_START_QUALITY = 95;
-export const QR_MIN_QUALITY = 15;
-export const QR_QUALITY_STEP = 20;
+export const QR_CODE_MAX_BYTES = 5 * 1024 * 1024;     // 5 MB  原始文件限制
+export const QR_CODE_TARGET_BYTES = 400 * 1024;       // 400 KB 压缩后文件限制
+export const QR_CODE_MAX_DIMENSION = 1024;            // 1024px 最大边长
+export const QR_START_QUALITY = 95;                   // 起始压缩质量
+export const QR_MIN_QUALITY = 55;                     // 最低压缩质量
+export const QR_QUALITY_STEP = 10;                    // 步进降低压缩质量
 
 export const assetUploadLimitsSchema = z.union([
   z.object({

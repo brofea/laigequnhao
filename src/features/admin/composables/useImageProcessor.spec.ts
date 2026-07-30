@@ -7,14 +7,14 @@ function createImageFile(size = 1024, type = "image/png"): File {
 
 const TEST_LOGO_OPTS: CompressOptions = {
   maxDimension: 128, maxBytes: 80 * 1024,
-  startQuality: 85, minQuality: 5, qualityStep: 20,
-  preserveAlpha: true,
+  startQuality: 85, minQuality: 45, qualityStep: 20,
+  preserveAlpha: true, originalMaxBytes: 5 * 1024 * 1024,
 };
 
 const TEST_QR_OPTS: CompressOptions = {
-  maxDimension: 1024, maxBytes: 300 * 1024,
-  startQuality: 95, minQuality: 15, qualityStep: 20,
-  preserveAlpha: false,
+  maxDimension: 1024, maxBytes: 400 * 1024,
+  startQuality: 95, minQuality: 55, qualityStep: 10,
+  preserveAlpha: false, originalMaxBytes: 5 * 1024 * 1024,
 };
 
 describe("formatBytes", () => {

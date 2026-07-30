@@ -2,11 +2,13 @@
 import { ref, onUnmounted, watch } from "vue";
 import { useImageProcessor, formatBytes } from "../composables/useImageProcessor";
 import {
+  LOGO_CODE_MAX_BYTES,
   LOGO_MAX_BYTES,
   LOGO_MAX_DIMENSION,
   LOGO_START_QUALITY,
   LOGO_MIN_QUALITY,
   LOGO_QUALITY_STEP,
+  QR_CODE_MAX_BYTES,
   QR_CODE_MAX_DIMENSION,
   QR_CODE_TARGET_BYTES,
   QR_START_QUALITY,
@@ -41,7 +43,7 @@ watch(
   },
 );
 
-const maxBytes = props.purpose === "logo" ? LOGO_MAX_BYTES : QR_CODE_TARGET_BYTES;
+const maxBytes = props.purpose === "logo" ? LOGO_CODE_MAX_BYTES : QR_CODE_MAX_BYTES;
 const label = props.purpose === "logo" ? "Logo" : "二维码";
 
 function onDragOver(e: DragEvent) {
@@ -75,6 +77,7 @@ async function handleFile(file: File) {
         minQuality: LOGO_MIN_QUALITY,
         qualityStep: LOGO_QUALITY_STEP,
         preserveAlpha: true,
+        originalMaxBytes: LOGO_CODE_MAX_BYTES,
       }
     : {
         maxDimension: QR_CODE_MAX_DIMENSION,
@@ -83,6 +86,7 @@ async function handleFile(file: File) {
         minQuality: QR_MIN_QUALITY,
         qualityStep: QR_QUALITY_STEP,
         preserveAlpha: false,
+        originalMaxBytes: QR_CODE_MAX_BYTES,
       };
   const result = await process(file, opts);
   if (result) {

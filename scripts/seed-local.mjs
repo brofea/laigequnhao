@@ -5,7 +5,11 @@
  *
  * 前提: 先启动 pnpm pages:dev:local（API 在 localhost:8788）
  *
- * 下载 → 压缩（logo 128px/80KB, QR 512px/400KB）→ 通过 API 上传 R2 → 写 D1
+ * 下载 → 压缩（logo 128px/80KB, QR 1024px/400KB）→ 通过 API 上传 R2 → 写 D1
+ *
+ * 群组分布: 60待审核 + 10回收站 + 40已上架 + 10已拒绝 + 20已下架 = 140
+ * 已上架全部有头像(40)，前20有二维码，后20有群号，URL随机
+ * 已下架无头像无二维码，群号/URL随机有一
  */
 import { execSync } from "node:child_process";
 import { writeFileSync, unlinkSync, readFileSync } from "node:fs";
@@ -15,8 +19,8 @@ import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const GROUP_COUNT = 100;
-const IMAGE_COUNT = 20;
+const GROUP_COUNT = 140;
+const IMAGE_COUNT = 40;
 const SQL_FILE = join(__dirname, "..", "seed-local.sql");
 const API_BASE = "http://localhost:8788/api/v1";
 const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -25,14 +29,14 @@ const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
 const LOGO_MAX_DIM = 128;
 const LOGO_MAX_BYTES = 80 * 1024;
 const LOGO_START_Q = 85;
-const LOGO_MIN_Q = 5;
+const LOGO_MIN_Q = 45;
 const LOGO_Q_STEP = 20;
 
-const QR_MAX_DIM = 512;
+const QR_MAX_DIM = 1024;
 const QR_MAX_BYTES = 400 * 1024;
 const QR_START_Q = 95;
-const QR_MIN_Q = 15;
-const QR_Q_STEP = 20;
+const QR_MIN_Q = 55;
+const QR_Q_STEP = 10;
 
 // ─── 读取 .dev.vars ───────────────────────────────────────
 function readAdminPassword() {
@@ -64,13 +68,8 @@ const now = () => new Date().toISOString();
 const esc = (s) => s.replace(/'/g, "''");
 
 // ─── 数据池 ────────────────────────────────────────────────
-const PLATFORMS = {
-  qq: { name: "QQ", joinTypes: ["group_number", "qr_code"] },
-  wechat: { name: "微信", joinTypes: ["qr_code"] },
-  dingtalk: { name: "钉钉", joinTypes: ["group_number", "qr_code"] },
-  discord: { name: "Discord", joinTypes: ["url"] },
-  telegram: { name: "Telegram", joinTypes: ["url"] },
-};
+const PLATFORMS = ["qq", "wechat", "dingtalk", "discord", "telegram"];
+const PLATFORM_NAMES = { qq: "QQ", wechat: "微信", dingtalk: "钉钉", discord: "Discord", telegram: "Telegram" };
 const TAG_POOL = [
   "技术","游戏","学习","考研","实习","摄影","音乐","动漫","运动","美食",
   "编程","留学","社团","竞赛","文艺","电竞","二手","租房","旅游","读书",
@@ -94,7 +93,6 @@ const DESCRIPTIONS = [
   "不定期举办线下活动，欢迎参与。",
 ];
 const KINDS = ["official", "interest"];
-const STATUS_WEIGHTS = { pending: 18, published: 50, rejected: 12, delisted: 12, deleted: 8 };
 
 // ─── 图片压缩（sharp，质量递减）────────────────────────────
 async function compressToSize(buf, w, h, opts) {
@@ -134,7 +132,7 @@ async function downloadAndProcess(count) {
       if (!meta.width || !meta.height) throw new Error("无法识别尺寸");
       let ow = meta.width, oh = meta.height;
 
-      // Logo 版本: 128px, 80KB, alpha, 85→5
+      // Logo 版本: 128px, 80KB, alpha, 85→45
       const lw = Math.max(ow, oh) > LOGO_MAX_DIM
         ? Math.round(ow * LOGO_MAX_DIM / Math.max(ow, oh)) : ow;
       const lh = Math.max(ow, oh) > LOGO_MAX_DIM
@@ -250,29 +248,42 @@ function generateSQL({ logos, qrs }) {
   }
 
   // Groups
-  const weighted = [];
-  for (const [s, w] of Object.entries(STATUS_WEIGHTS)) for (let i = 0; i < w; i++) weighted.push(s);
-  const pKeys = Object.keys(PLATFORMS);
   const logoPool = [...logos];
   const qrPool = [...qrs];
   const assetRefCounts = new Map();
 
   for (let i = 0; i < GROUP_COUNT; i++) {
     const id = uuid();
-    const status = weighted[i % weighted.length];
-    const platform = pKeys[i % pKeys.length];
+
+    // ── 状态分配 ──
+    let status, isDeleted;
+    if (i < 60) { status = "pending"; isDeleted = false; }              // 60 待审核
+    else if (i < 70) { status = "pending"; isDeleted = true; }          // 10 回收站+待审核
+    else if (i < 110) { status = "published"; isDeleted = false; }      // 40 已上架
+    else if (i < 120) { status = "rejected"; isDeleted = false; }       // 10 已拒绝
+    else { status = "delisted"; isDeleted = false; }                    // 20 已下架
+
+    const actualStatus = isDeleted ? "published" : status;
+    const delAt = isDeleted ? `'${daysAgo(rInt(1, 14))}'` : "NULL";
+    const likeCount = status === "published" ? rInt(0, 200) : 0;
+    const isPublished = i >= 70 && i < 110;
+    const isQrGroup = i >= 70 && i < 90;  // 已上架中前20有二维码
+    const isGroupNumGroup = i >= 90 && i < 110; // 已上架中后20有群号
+
+    // ── 平台（随机，与加群方式解绑）──
+    const platform = pick(PLATFORMS);
+
     const kind = pick(KINDS);
     const rotKey = uuid();
-    const likeCount = status === "published" ? rInt(0, 200) : 0;
 
     let title = pick(kind === "official" ? TITLES.official : TITLES.interest)
-      .replace("{平台}", PLATFORMS[platform].name)
+      .replace("{平台}", PLATFORM_NAMES[platform])
       .replace("{院系}", pick(["计算机","电子","机械","经管","外语","数学"]));
     const tags = pickN(TAG_POOL, 0, 5);
     title = title.replace("{标签}", tags.length > 0 ? pick(tags) : "综合");
 
-    // Logo: 前 20 个必须有，其余随机
-    const hasLogo = i < 20 ? logoPool.length > 0 : Math.random() < 0.3 && logoPool.length > 0;
+    // ── Logo: 已上架的全部有，其余没有 ──
+    const hasLogo = isPublished && logoPool.length > 0;
     let logoR2Key = "NULL", logoUrl = "NULL";
     let logoW = "NULL", logoH = "NULL", logoB = "NULL";
     if (hasLogo) {
@@ -283,30 +294,38 @@ function generateSQL({ logos, qrs }) {
       assetRefCounts.set(a.id, (assetRefCounts.get(a.id) ?? 0) + 1);
     }
 
-    const isDeleted = status === "deleted";
-    const delAt = isDeleted ? `'${daysAgo(rInt(1, 14))}'` : "NULL";
-    const actualStatus = isDeleted ? "published" : status;
-
     lines.push(
       `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, like_count, version, logo_r2_key, logo_url, logo_width, logo_height, logo_byte_length, deleted_at, created_at, updated_at) VALUES ('${id}', '${esc(title)}', '${esc(pick(DESCRIPTIONS))}', '${kind}', '${platform}', '${actualStatus}', '${rotKey}', ${likeCount}, 1, ${logoR2Key}, ${logoUrl}, ${logoW}, ${logoH}, ${logoB}, ${delAt}, '${daysAgo(rInt(1, 60))}', '${now()}');`,
     );
 
-    // Join methods
+    // ── 加群方式（与平台解绑，独立生成）──
     let sortOrder = 0;
-    for (const jt of PLATFORMS[platform].joinTypes) {
+
+    // QR：已上架前20必须有
+    if (isQrGroup && qrPool.length > 0) {
+      const a = qrPool.shift();
       const jmId = uuid();
-      let value = "NULL", assetId = "NULL";
-      if (jt === "group_number") value = `'${rInt(100000, 999999999)}'`;
-      if (jt === "url") value = `'https://${platform}.example.com/invite/${uuid().slice(0, 8)}'`;
-      // QR: 前 20 个必须有，其余随机
-      const hasQr = i < 20 ? qrPool.length > 0 : Math.random() < 0.3 && qrPool.length > 0;
-      if (jt === "qr_code" && hasQr) {
-        const a = qrPool.shift();
-        assetId = `'${a.id}'`;
-        assetRefCounts.set(a.id, (assetRefCounts.get(a.id) ?? 0) + 1);
-      }
       lines.push(
-        `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES ('${jmId}', '${id}', '${jt}', ${value}, ${sortOrder}, ${assetId});`,
+        `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES ('${jmId}', '${id}', 'qr_code', NULL, ${sortOrder}, '${a.id}');`,
+      );
+      sortOrder++;
+      assetRefCounts.set(a.id, (assetRefCounts.get(a.id) ?? 0) + 1);
+    }
+
+    // 群号：已上架后20必须有，其余随机有
+    if (isGroupNumGroup || Math.random() < 0.5) {
+      const jmId = uuid();
+      lines.push(
+        `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES ('${jmId}', '${id}', 'group_number', '${rInt(100000, 999999999)}', ${sortOrder}, NULL);`,
+      );
+      sortOrder++;
+    }
+
+    // URL：随机有或者没有
+    if (Math.random() < 0.5) {
+      const jmId = uuid();
+      lines.push(
+        `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES ('${jmId}', '${id}', 'url', 'https://${platform}.example.com/invite/${uuid().slice(0, 8)}', ${sortOrder}, NULL);`,
       );
       sortOrder++;
     }

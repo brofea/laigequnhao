@@ -77,10 +77,11 @@ pnpm db:migrate:local
 pnpm db:migrate:dev
 ```
 
-如需从头开始，运行：
+如需从头开始，运行迁移后生成种子数据：
 
 ```bash
-pnpm db:reset:local && pnpm db:migrate:local
+pnpm db:migrate:local
+pnpm seed:local
 ```
 
 ### 4. 启动开发服务器
@@ -197,8 +198,9 @@ pnpm pages:deploy
 | `pnpm db:migrate:local` | 本地 D1 迁移             |
 | `pnpm db:migrate:dev`   | 远端开发 D1 迁移         |
 | `pnpm db:migrate:prod`  | 生产 D1 迁移             |
-| `pnpm db:reset:local`   | 重置本地数据库           |
-| `pnpm pages:dev`        | 启动 Wrangler Pages 开发 |
+| `pnpm seed:local`       | 生成本地种子数据（需先启动 `pages:dev:local`） |
+| `pnpm pages:dev`        | 启动 Pages Functions（远程 D1/R2） |
+| `pnpm pages:dev:local`  | 启动 Pages Functions（本地 D1/R2） |
 | `pnpm pages:deploy`     | 部署到 Cloudflare Pages  |
 
 首次运行 E2E 前执行 `pnpm exec playwright install chromium`。E2E 会重建工作区内的

@@ -5,6 +5,7 @@ import type { DraftJoinMethod } from "../composables/useAdminGroupDraft";
 import { uploadQrAsset } from "../api";
 import { useImageProcessor } from "../composables/useImageProcessor";
 import {
+  QR_CODE_MAX_BYTES,
   QR_CODE_MAX_DIMENSION,
   QR_CODE_TARGET_BYTES,
   QR_START_QUALITY,
@@ -90,6 +91,7 @@ async function handleQrFile(clientKey: string, file: File) {
       minQuality: QR_MIN_QUALITY,
       qualityStep: QR_QUALITY_STEP,
       preserveAlpha: false,
+      originalMaxBytes: QR_CODE_MAX_BYTES,
     });
     if (!result) {
       qrUploadError.value[clientKey] = processError.value || "图片处理失败";

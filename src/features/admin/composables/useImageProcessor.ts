@@ -16,6 +16,8 @@ export interface CompressOptions {
   qualityStep: number;
   /** 是否保留透明度（logo=true, qr_code=false） */
   preserveAlpha: boolean;
+  /** 原始文件大小上限（默认 10MB） */
+  originalMaxBytes?: number;
 }
 
 export function useImageProcessor() {
@@ -40,9 +42,10 @@ export function useImageProcessor() {
         return null;
       }
 
-      // 原始文件上限 10MB 防呆
-      if (file.size > 10 * 1024 * 1024) {
-        error.value = `文件过大（${formatBytes(file.size)}），请选择小于 10MB 的图片`;
+      // 原始文件上限检查
+      const origMax = opts.originalMaxBytes ?? 10 * 1024 * 1024;
+      if (file.size > origMax) {
+        error.value = `文件过大（${formatBytes(file.size)}），请选择小于 ${formatBytes(origMax)} 的图片`;
         loading.value = false;
         return null;
       }
