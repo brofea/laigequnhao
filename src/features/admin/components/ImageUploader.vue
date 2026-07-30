@@ -3,9 +3,15 @@ import { ref, onUnmounted, watch } from "vue";
 import { useImageProcessor, formatBytes } from "../composables/useImageProcessor";
 import {
   LOGO_MAX_BYTES,
-  QR_CODE_MAX_BYTES,
+  LOGO_MAX_DIMENSION,
+  LOGO_START_QUALITY,
+  LOGO_MIN_QUALITY,
+  LOGO_QUALITY_STEP,
   QR_CODE_MAX_DIMENSION,
   QR_CODE_TARGET_BYTES,
+  QR_START_QUALITY,
+  QR_MIN_QUALITY,
+  QR_QUALITY_STEP,
 } from "@shared/contracts/asset";
 
 const props = defineProps<{
@@ -35,7 +41,7 @@ watch(
   },
 );
 
-const maxBytes = props.purpose === "logo" ? LOGO_MAX_BYTES : QR_CODE_MAX_BYTES;
+const maxBytes = props.purpose === "logo" ? LOGO_MAX_BYTES : QR_CODE_TARGET_BYTES;
 const label = props.purpose === "logo" ? "Logo" : "二维码";
 
 function onDragOver(e: DragEvent) {
@@ -61,12 +67,24 @@ async function handleFile(file: File) {
     error.value = "仅支持图片格式";
     return;
   }
-  const result = await process(
-    file,
-    maxBytes,
-    props.purpose === "qr_code" ? QR_CODE_TARGET_BYTES : undefined,
-    props.purpose === "qr_code" ? QR_CODE_MAX_DIMENSION : undefined,
-  );
+  const opts = props.purpose === "logo"
+    ? {
+        maxDimension: LOGO_MAX_DIMENSION,
+        maxBytes: LOGO_MAX_BYTES,
+        startQuality: LOGO_START_QUALITY,
+        minQuality: LOGO_MIN_QUALITY,
+        qualityStep: LOGO_QUALITY_STEP,
+        preserveAlpha: true,
+      }
+    : {
+        maxDimension: QR_CODE_MAX_DIMENSION,
+        maxBytes: QR_CODE_TARGET_BYTES,
+        startQuality: QR_START_QUALITY,
+        minQuality: QR_MIN_QUALITY,
+        qualityStep: QR_QUALITY_STEP,
+        preserveAlpha: false,
+      };
+  const result = await process(file, opts);
   if (result) {
     if (previewUrl.value) revokePreview(previewUrl.value);
     previewUrl.value = result.previewUrl;

@@ -37,6 +37,25 @@ app.get("/api/v1/health", (c) => {
   });
 });
 
+// R2 asset serving (public, no auth — used by both local dev and production)
+app.get("/api/v1/assets/:key{.+}", async (c) => {
+  const key = c.req.param("key");
+  if (!key) {
+    return c.notFound();
+  }
+
+  const object = await c.env.R2.get(key);
+  if (!object) {
+    return c.notFound();
+  }
+
+  const contentType = object.httpMetadata?.contentType ?? "image/webp";
+  c.header("Content-Type", contentType);
+  c.header("Cache-Control", "public, max-age=31536000, immutable");
+  c.header("X-Content-Type-Options", "nosniff");
+  return c.body(object.body);
+});
+
 // API routes
 app.route("/api/v1/groups", groupsRoute);
 app.route("/api/v1/submissions", submissionsRoute);

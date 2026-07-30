@@ -4,7 +4,7 @@ import { onBeforeRouteLeave } from "vue-router";
 import type { AdminGroupDto } from "@shared/contracts/group";
 import { useAdminGroupDraft } from "../composables/useAdminGroupDraft";
 import { useImageProcessor } from "../composables/useImageProcessor";
-import { LOGO_MAX_BYTES } from "@shared/contracts/asset";
+import { LOGO_MAX_BYTES, LOGO_MAX_DIMENSION, LOGO_START_QUALITY, LOGO_MIN_QUALITY, LOGO_QUALITY_STEP } from "@shared/contracts/asset";
 import AdminGroupFields from "./AdminGroupFields.vue";
 import AdminTagEditor from "./AdminTagEditor.vue";
 import AdminJoinMethodEditor from "./AdminJoinMethodEditor.vue";
@@ -256,7 +256,14 @@ async function onLogoFileChange(e: Event) {
     logoStagedAssetId.value = null;
     logoStagedR2Key.value = null;
   }
-  const result = await processLogo(file, LOGO_MAX_BYTES);
+  const result = await processLogo(file, {
+    maxDimension: LOGO_MAX_DIMENSION,
+    maxBytes: LOGO_MAX_BYTES,
+    startQuality: LOGO_START_QUALITY,
+    minQuality: LOGO_MIN_QUALITY,
+    qualityStep: LOGO_QUALITY_STEP,
+    preserveAlpha: true,
+  });
   if (result) {
     URL.revokeObjectURL(result.previewUrl);
     setLogo(result.blob);

@@ -5,9 +5,11 @@ import type { DraftJoinMethod } from "../composables/useAdminGroupDraft";
 import { uploadQrAsset } from "../api";
 import { useImageProcessor } from "../composables/useImageProcessor";
 import {
-  QR_CODE_MAX_BYTES,
   QR_CODE_MAX_DIMENSION,
   QR_CODE_TARGET_BYTES,
+  QR_START_QUALITY,
+  QR_MIN_QUALITY,
+  QR_QUALITY_STEP,
 } from "@shared/contracts/asset";
 
 const props = defineProps<{
@@ -81,12 +83,14 @@ async function handleQrFile(clientKey: string, file: File) {
 
   try {
     // 使用统一图片处理器：5MB 上限 → 缩放到 1024px → webp 压缩到 ≤300KB
-    const result = await processImage(
-      file,
-      QR_CODE_MAX_BYTES,
-      QR_CODE_TARGET_BYTES,
-      QR_CODE_MAX_DIMENSION,
-    );
+    const result = await processImage(file, {
+      maxDimension: QR_CODE_MAX_DIMENSION,
+      maxBytes: QR_CODE_TARGET_BYTES,
+      startQuality: QR_START_QUALITY,
+      minQuality: QR_MIN_QUALITY,
+      qualityStep: QR_QUALITY_STEP,
+      preserveAlpha: false,
+    });
     if (!result) {
       qrUploadError.value[clientKey] = processError.value || "图片处理失败";
       return;

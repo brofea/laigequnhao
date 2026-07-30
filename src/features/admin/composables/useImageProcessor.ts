@@ -8,6 +8,16 @@ export interface ProcessResult {
   previewUrl: string;
 }
 
+export interface CompressOptions {
+  maxDimension: number;
+  maxBytes: number;
+  startQuality: number;
+  minQuality: number;
+  qualityStep: number;
+  /** 是否保留透明度（logo=true, qr_code=false） */
+  preserveAlpha: boolean;
+}
+
 export function useImageProcessor() {
   const loading = ref(false);
   const error = ref("");
@@ -18,36 +28,33 @@ export function useImageProcessor() {
 
   async function process(
     file: File,
-    maxBytes = 100 * 1024,
-    targetBytes?: number,
-    maxDimension?: number,
+    opts: CompressOptions,
   ): Promise<ProcessResult | null> {
     loading.value = true;
     error.value = "";
 
     try {
-      // 格式校验
       if (!file.type.startsWith("image/")) {
         error.value = "仅支持图片格式";
         loading.value = false;
         return null;
       }
 
-      // 大小校验
-      if (file.size > maxBytes) {
-        error.value = `文件大小 ${formatBytes(file.size)} 超过限制 ${formatBytes(maxBytes)}`;
+      // 原始文件上限 10MB 防呆
+      if (file.size > 10 * 1024 * 1024) {
+        error.value = `文件过大（${formatBytes(file.size)}），请选择小于 10MB 的图片`;
         loading.value = false;
         return null;
       }
 
-      // 读取文件
       const dataUrl = await readAsDataURL(file);
       const img = await loadImage(dataUrl);
 
       let { width, height } = img;
 
-      if (maxDimension && Math.max(width, height) > maxDimension) {
-        const scale = maxDimension / Math.max(width, height);
+      // 缩放
+      if (Math.max(width, height) > opts.maxDimension) {
+        const scale = opts.maxDimension / Math.max(width, height);
         width = Math.round(width * scale);
         height = Math.round(height * scale);
       }
@@ -59,37 +66,49 @@ export function useImageProcessor() {
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas 不可用");
 
+      // 不透明模式：铺白底
+      if (!opts.preserveAlpha) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+      }
       ctx.drawImage(img, 0, 0, width, height);
 
-      // 转换为 WebP blob（QR codes use binary search for size target）
-      let blob: Blob;
-      if (targetBytes) {
-        blob = await compressToTarget(canvas, targetBytes);
-      } else {
-        blob = await canvasToBlob(canvas);
+      // 质量递减压缩
+      let blob: Blob | null = null;
+      let q = opts.startQuality;
+      while (q >= opts.minQuality) {
+        const candidate = await canvasToBlob(canvas, q / 100);
+        if (candidate.size <= opts.maxBytes) {
+          blob = candidate;
+          break;
+        }
+        q -= opts.qualityStep;
       }
 
-      const byteLength = blob.size;
+      // 最后一次尝试：最低质量
+      if (!blob) {
+        const candidate = await canvasToBlob(canvas, opts.minQuality / 100);
+        if (candidate.size <= opts.maxBytes) {
+          blob = candidate;
+        }
+      }
 
-      // 体积检查
-      if (byteLength > maxBytes) {
-        error.value = `图片过大（${formatBytes(byteLength)}），上限 ${formatBytes(maxBytes)}`;
+      if (!blob) {
+        error.value = `压缩失败：最低质量仍超过 ${formatBytes(opts.maxBytes)}`;
         loading.value = false;
         return null;
       }
 
       const previewUrl = URL.createObjectURL(blob);
 
-      const result: ProcessResult = {
+      loading.value = false;
+      return {
         blob,
         width,
         height,
-        byteLength,
+        byteLength: blob.size,
         previewUrl,
       };
-
-      loading.value = false;
-      return result;
     } catch (e) {
       error.value = e instanceof Error ? e.message : "图片处理失败";
       loading.value = false;
@@ -102,7 +121,7 @@ export function useImageProcessor() {
 
 // ── helpers ──
 
-function canvasToBlob(canvas: HTMLCanvasElement, quality = 0.8): Promise<Blob> {
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (b) => {
@@ -113,31 +132,6 @@ function canvasToBlob(canvas: HTMLCanvasElement, quality = 0.8): Promise<Blob> {
       quality,
     );
   });
-}
-
-/** Binary search quality (0.05–1.0) to fit within targetBytes */
-async function compressToTarget(canvas: HTMLCanvasElement, targetBytes: number): Promise<Blob> {
-  let bestWithinTarget: Blob | null = null;
-  let lo = 0.05;
-  let hi = 1.0;
-
-  for (let i = 0; i < 8; i++) {
-    const mid = (lo + hi) / 2;
-    const blob = await canvasToBlob(canvas, mid);
-    if (blob.size <= targetBytes) {
-      if (!bestWithinTarget || blob.size > bestWithinTarget.size) {
-        bestWithinTarget = blob;
-      }
-      lo = mid;
-    } else {
-      hi = mid;
-    }
-  }
-
-  if (!bestWithinTarget) {
-    throw new Error(`图片压缩后仍超过 ${formatBytes(targetBytes)}`);
-  }
-  return bestWithinTarget;
 }
 
 function readAsDataURL(file: File): Promise<string> {

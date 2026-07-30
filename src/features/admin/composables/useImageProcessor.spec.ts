@@ -1,9 +1,21 @@
 import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
-import { useImageProcessor, formatBytes } from "./useImageProcessor";
+import { useImageProcessor, formatBytes, type CompressOptions } from "./useImageProcessor";
 
 function createImageFile(size = 1024, type = "image/png"): File {
   return new File([new Uint8Array(size)], "test.png", { type });
 }
+
+const TEST_LOGO_OPTS: CompressOptions = {
+  maxDimension: 128, maxBytes: 80 * 1024,
+  startQuality: 85, minQuality: 5, qualityStep: 20,
+  preserveAlpha: true,
+};
+
+const TEST_QR_OPTS: CompressOptions = {
+  maxDimension: 1024, maxBytes: 300 * 1024,
+  startQuality: 95, minQuality: 15, qualityStep: 20,
+  preserveAlpha: false,
+};
 
 describe("formatBytes", () => {
   it("formats bytes", () => {
@@ -36,115 +48,116 @@ describe("useImageProcessor", () => {
 
   it("rejects non-image files", async () => {
     const file = new File(["hello"], "test.txt", { type: "text/plain" });
-    const result = await processor.process(file);
+    const result = await processor.process(file, TEST_LOGO_OPTS);
     expect(result).toBeNull();
     expect(processor.error.value).toBe("仅支持图片格式");
   });
 
-  it("rejects files exceeding maxBytes", async () => {
-    const file = createImageFile(5000);
-    const result = await processor.process(file, 1000);
+  it("rejects files exceeding 10MB sanity limit", async () => {
+    // 10MB + 1 byte
+    const file = createImageFile(10 * 1024 * 1024 + 1);
+    const result = await processor.process(file, TEST_LOGO_OPTS);
     expect(result).toBeNull();
-    expect(processor.error.value).toContain("超过限制");
+    expect(processor.error.value).toContain("10MB");
   });
 
-  it("sets Chinese error messages", async () => {
-    const file = new File(["x"], "bad.txt", { type: "text/plain" });
-    await processor.process(file);
-    expect(processor.error.value).toBe("仅支持图片格式");
-  });
-
-  it("resizes a QR image and returns a WebP no larger than the target", async () => {
+  it("accepts oversized source files (processed down to fit)", async () => {
+    // 100KB source should be accepted for logo (128px resize makes it fit)
     class MockFileReader {
       result: string | ArrayBuffer | null = null;
       onload: (() => void) | null = null;
       onerror: (() => void) | null = null;
-
-      readAsDataURL() {
-        this.result = "data:image/png;base64,AA==";
-        queueMicrotask(() => this.onload?.());
-      }
+      readAsDataURL() { this.result = "data:image/png;base64,AA=="; queueMicrotask(() => this.onload?.()); }
     }
     class MockImage {
-      width = 2048;
-      height = 1024;
+      width = 800; height = 600;
       onload: (() => void) | null = null;
       onerror: (() => void) | null = null;
-
-      set src(_value: string) {
-        queueMicrotask(() => this.onload?.());
-      }
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
     }
     vi.stubGlobal("FileReader", MockFileReader);
     vi.stubGlobal("Image", MockImage);
-    vi.stubGlobal("URL", {
-      createObjectURL: vi.fn(() => "blob:processed"),
-      revokeObjectURL: vi.fn(),
-    });
-
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:test"), revokeObjectURL: vi.fn() });
     vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
-      if (tagName !== "canvas") {
-        return document.createElementNS("http://www.w3.org/1999/xhtml", tagName);
-      }
+      if (tagName !== "canvas") return document.createElementNS("http://www.w3.org/1999/xhtml", tagName);
       return {
-        width: 0,
-        height: 0,
-        getContext: () => ({ drawImage: vi.fn() }),
+        width: 0, height: 0,
+        getContext: () => ({ drawImage: vi.fn(), fillStyle: "", fillRect: vi.fn() }),
         toBlob: (callback: BlobCallback, _type?: string, quality?: number) => {
-          const size = (quality ?? 0.8) > 0.4 ? 400 * 1024 : 250 * 1024;
+          const size = quality === 0.85 ? 60 * 1024 : 80 * 1024;
           callback(new Blob([new Uint8Array(size)], { type: "image/webp" }));
         },
       } as unknown as HTMLCanvasElement;
     });
 
-    const result = await processor.process(createImageFile(), 5 * 1024 * 1024, 300 * 1024, 1024);
+    const result = await processor.process(createImageFile(100 * 1024), TEST_LOGO_OPTS);
+    expect(result).not.toBeNull();
+  });
 
+  it("resizes a QR image and returns a WebP within target", async () => {
+    class MockFileReader {
+      result: string | ArrayBuffer | null = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL() { this.result = "data:image/png;base64,AA=="; queueMicrotask(() => this.onload?.()); }
+    }
+    class MockImage {
+      width = 2048; height = 1024;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    }
+    vi.stubGlobal("FileReader", MockFileReader);
+    vi.stubGlobal("Image", MockImage);
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:processed"), revokeObjectURL: vi.fn() });
+    vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
+      if (tagName !== "canvas") return document.createElementNS("http://www.w3.org/1999/xhtml", tagName);
+      return {
+        width: 0, height: 0,
+        getContext: () => ({ drawImage: vi.fn(), fillStyle: "", fillRect: vi.fn() }),
+        toBlob: (callback: BlobCallback) => {
+          callback(new Blob([new Uint8Array(250 * 1024)], { type: "image/webp" }));
+        },
+      } as unknown as HTMLCanvasElement;
+    });
+
+    const result = await processor.process(createImageFile(), TEST_QR_OPTS);
     expect(result).toMatchObject({
-      width: 1024,
-      height: 512,
+      width: 1024, height: 512,
       byteLength: 250 * 1024,
       previewUrl: "blob:processed",
     });
     expect(result?.blob.type).toBe("image/webp");
   });
 
-  it("reports an error when even minimum-quality WebP exceeds the target", async () => {
+  it("reports error when even min-quality exceeds target", async () => {
     class MockFileReader {
       result: string | ArrayBuffer | null = "data:image/png;base64,AA==";
       onload: (() => void) | null = null;
       onerror: (() => void) | null = null;
-      readAsDataURL() {
-        queueMicrotask(() => this.onload?.());
-      }
+      readAsDataURL() { queueMicrotask(() => this.onload?.()); }
     }
     class MockImage {
-      width = 100;
-      height = 100;
+      width = 100; height = 100;
       onload: (() => void) | null = null;
       onerror: (() => void) | null = null;
-      set src(_value: string) {
-        queueMicrotask(() => this.onload?.());
-      }
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
     }
     vi.stubGlobal("FileReader", MockFileReader);
     vi.stubGlobal("Image", MockImage);
     vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
-      if (tagName !== "canvas") {
-        return document.createElementNS("http://www.w3.org/1999/xhtml", tagName);
-      }
+      if (tagName !== "canvas") return document.createElementNS("http://www.w3.org/1999/xhtml", tagName);
       return {
-        width: 0,
-        height: 0,
-        getContext: () => ({ drawImage: vi.fn() }),
+        width: 0, height: 0,
+        getContext: () => ({ drawImage: vi.fn(), fillStyle: "", fillRect: vi.fn() }),
         toBlob: (callback: BlobCallback) => {
-          callback(new Blob([new Uint8Array(350 * 1024)], { type: "image/webp" }));
+          callback(new Blob([new Uint8Array(400 * 1024)], { type: "image/webp" }));
         },
       } as unknown as HTMLCanvasElement;
     });
 
-    const result = await processor.process(createImageFile(), 5 * 1024 * 1024, 300 * 1024, 1024);
-
+    const result = await processor.process(createImageFile(), TEST_LOGO_OPTS);
     expect(result).toBeNull();
-    expect(processor.error.value).toContain("压缩后仍超过 300.0 KB");
+    expect(processor.error.value).toContain("压缩失败");
   });
 });
