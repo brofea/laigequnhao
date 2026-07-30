@@ -435,3 +435,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 平台与加群方式解耦 + 压缩参数同步 + 种子脚本完善
+
+**Date**: 2026-07-30
+**Task**: 平台与加群方式解耦 + 压缩参数同步 + 种子脚本完善
+**Branch**: `main`
+
+### Summary
+
+1) 平台与加群方式彻底解耦：删除PlatformConfig类型，改为纯文本标签，前端用select+自定义输入。2) 压缩参数同步调整（logo 128px/80KB/45min，QR 1024px/400KB/55min），新增LOGO_CODE_MAX_BYTES(5MB)。3) 种子脚本重写：140群固定分布、质量递减压缩、API上传、平台中文名。4).gitignore添加seed-local.sql。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b92f354` | (see git log) |
+| `f06894f` | (see git log) |
+| `1b4de39` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
