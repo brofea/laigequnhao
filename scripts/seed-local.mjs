@@ -7,20 +7,19 @@
  *
  * 下载 → 压缩（logo 128px/80KB, QR 1024px/400KB）→ 通过 API 上传 R2 → 写 D1
  *
- * 群组分布: 60待审核 + 10回收站 + 40已上架 + 10已拒绝 + 20已下架 = 140
- * 已上架全部有头像(40)，前20有二维码，后20有群号，URL随机
- * 已下架无头像无二维码，群号/URL随机有一
+ * 群组分布: 100已发布 + 10待审核 + 10已下架 + 10已拒绝 + 10回收站(状态=已拒绝) = 140
+ * 所有140个群都有头像（logo压缩）
+ * 每种加群方式独立50%概率出现，但每组至少一种
+ * 有qr_code的群，二维码图片与头像同源，压缩参数不同（仅这些群额外压缩QR版本）
  */
 import { execSync } from "node:child_process";
-import { writeFileSync, unlinkSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync, readFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GROUP_COUNT = 140;
-const IMAGE_COUNT = 40;
 const SQL_FILE = join(__dirname, "..", "seed-local.sql");
 const API_BASE = "http://localhost:8788/api/v1";
 const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -68,27 +67,70 @@ const now = () => new Date().toISOString();
 const esc = (s) => s.replace(/'/g, "''");
 
 // ─── 数据池 ────────────────────────────────────────────────
-const PLATFORMS = ["QQ", "微信", "钉钉", "飞书", "小红书", "抖音", "百度贴吧", "Telegram", "Discord"];
+const PLATFORMS = [
+  "QQ",
+  "微信",
+  "钉钉",
+  "飞书",
+  "小红书",
+  "抖音",
+  "百度贴吧",
+  "Telegram",
+  "Discord",
+];
 const TAG_POOL = [
-  "技术","游戏","学习","考研","实习","摄影","音乐","动漫","运动","美食",
-  "编程","留学","社团","竞赛","文艺","电竞","二手","租房","旅游","读书",
-  "电影","设计","创业","志愿者",
+  "技术",
+  "游戏",
+  "学习",
+  "考研",
+  "实习",
+  "摄影",
+  "音乐",
+  "动漫",
+  "运动",
+  "美食",
+  "编程",
+  "留学",
+  "社团",
+  "竞赛",
+  "文艺",
+  "电竞",
+  "二手",
+  "租房",
+  "旅游",
+  "读书",
+  "电影",
+  "设计",
+  "创业",
+  "志愿者",
 ];
 const TITLES = {
   official: [
-    "学生会{平台}通知群","教务处{平台}公告群","{院系}学院{平台}群",
-    "校园{平台}官方群","研究生院{平台}交流群","校友会{平台}联络群",
-    "团委{平台}工作群","就业指导中心{平台}群",
+    "学生会{平台}通知群",
+    "教务处{平台}公告群",
+    "{院系}学院{平台}群",
+    "校园{平台}官方群",
+    "研究生院{平台}交流群",
+    "校友会{平台}联络群",
+    "团委{平台}工作群",
+    "就业指导中心{平台}群",
   ],
   interest: [
-    "{标签}爱好者{平台}群","{标签}交流{平台}群","{标签}同好{平台}群",
-    "一起{标签}{平台}群","{标签}小分队","每日{标签}打卡群",
-    "{标签}学习小组","{标签}资源共享群",
+    "{标签}爱好者{平台}群",
+    "{标签}交流{平台}群",
+    "{标签}同好{平台}群",
+    "一起{标签}{平台}群",
+    "{标签}小分队",
+    "每日{标签}打卡群",
+    "{标签}学习小组",
+    "{标签}资源共享群",
   ],
 };
 const DESCRIPTIONS = [
-  "欢迎加入，一起交流学习！","本群为校园官方群，请遵守群规。",
-  "技术交流、资源共享、项目合作。","日常水群，快乐摸鱼。",
+  "欢迎加入，一起交流学习！",
+  "本群为校园官方群，请遵守群规。",
+  "技术交流、资源共享、项目合作。",
+  "日常水群，快乐摸鱼。",
   "不定期举办线下活动，欢迎参与。",
 ];
 const KINDS = ["official", "interest"];
@@ -101,10 +143,12 @@ async function compressToSize(buf, w, h, opts) {
     const pipeline = sharp(buf).resize(w, h);
     if (!opts.preserveAlpha) pipeline.flatten({ background: "#ffffff" });
     const webp = await pipeline.webp({ quality: q, alphaQuality: 100 }).toBuffer();
-    if (webp.length <= opts.maxBytes) { best = webp; break; }
+    if (webp.length <= opts.maxBytes) {
+      best = webp;
+      break;
+    }
     q -= opts.qualityStep;
   }
-  // 最后一次：最低质量
   if (!best) {
     const pipeline = sharp(buf).resize(w, h);
     if (!opts.preserveAlpha) pipeline.flatten({ background: "#ffffff" });
@@ -114,59 +158,120 @@ async function compressToSize(buf, w, h, opts) {
   return best;
 }
 
-// ─── 下载 + 处理图片 ───────────────────────────────────────
+// ─── 下载 + 处理图片（全部下载并压缩logo；QR压缩在后续按需进行）───
 async function downloadAndProcess(count) {
-  console.log(`下载 + 压缩 ${count} 张图片...`);
+  console.log(`下载 + 压缩 ${count} 张图片（logo）...`);
   const results = [];
   for (let i = 0; i < count; i++) {
     try {
       const res = await fetch("https://www.loliapi.com/acg/", { redirect: "manual" });
-      const imgUrl = res.headers.get("location") || `https://esa-img.iloli.love/i/pc/img${380 + i}.webp`;
+      const imgUrl =
+        res.headers.get("location") || `https://esa-img.iloli.love/i/pc/img${380 + i}.webp`;
       process.stdout.write(`  [${i + 1}/${count}] ${imgUrl.slice(-40)}... `);
 
       const imgRes = await fetch(imgUrl);
-      if (!imgRes.ok) { console.log("下载失败"); continue; }
+      if (!imgRes.ok) {
+        console.log("下载失败");
+        continue;
+      }
       const buf = Buffer.from(await imgRes.arrayBuffer());
       const meta = await sharp(buf).metadata();
       if (!meta.width || !meta.height) throw new Error("无法识别尺寸");
-      let ow = meta.width, oh = meta.height;
+      const ow = meta.width,
+        oh = meta.height;
 
       // Logo 版本: 128px, 80KB, alpha, 85→45
-      const lw = Math.max(ow, oh) > LOGO_MAX_DIM
-        ? Math.round(ow * LOGO_MAX_DIM / Math.max(ow, oh)) : ow;
-      const lh = Math.max(ow, oh) > LOGO_MAX_DIM
-        ? Math.round(oh * LOGO_MAX_DIM / Math.max(ow, oh)) : oh;
+      const lw =
+        Math.max(ow, oh) > LOGO_MAX_DIM ? Math.round((ow * LOGO_MAX_DIM) / Math.max(ow, oh)) : ow;
+      const lh =
+        Math.max(ow, oh) > LOGO_MAX_DIM ? Math.round((oh * LOGO_MAX_DIM) / Math.max(ow, oh)) : oh;
       const logoBuf = await compressToSize(buf, lw, lh, {
-        startQuality: LOGO_START_Q, minQuality: LOGO_MIN_Q,
-        qualityStep: LOGO_Q_STEP, maxBytes: LOGO_MAX_BYTES, preserveAlpha: true,
+        startQuality: LOGO_START_Q,
+        minQuality: LOGO_MIN_Q,
+        qualityStep: LOGO_Q_STEP,
+        maxBytes: LOGO_MAX_BYTES,
+        preserveAlpha: true,
       });
 
-      // QR 版本: 512px, 400KB, opaque, 95→15
-      const qw = Math.max(ow, oh) > QR_MAX_DIM
-        ? Math.round(ow * QR_MAX_DIM / Math.max(ow, oh)) : ow;
-      const qh = Math.max(ow, oh) > QR_MAX_DIM
-        ? Math.round(oh * QR_MAX_DIM / Math.max(ow, oh)) : oh;
-      const qrBuf = await compressToSize(buf, qw, qh, {
-        startQuality: QR_START_Q, minQuality: QR_MIN_Q,
-        qualityStep: QR_Q_STEP, maxBytes: QR_MAX_BYTES, preserveAlpha: false,
-      });
-
-      const ok = [];
-      if (logoBuf) ok.push(`L:${(logoBuf.length / 1024).toFixed(0)}KB ${lw}x${lh}`);
-      else ok.push(`L:FAIL`);
-      if (qrBuf) ok.push(`Q:${(qrBuf.length / 1024).toFixed(0)}KB ${qw}x${qh}`);
-      else ok.push(`Q:FAIL`);
-      console.log(ok.join(" "));
-
-      if (logoBuf || qrBuf) {
-        results.push({ logoBuf, qrBuf, logoW: lw, logoH: lh, qrW: qw, qrH: qh });
+      if (logoBuf) {
+        console.log(`L:${(logoBuf.length / 1024).toFixed(0)}KB ${lw}x${lh}`);
+        results.push({ sourceBuf: buf, logoBuf, logoW: lw, logoH: lh });
+      } else {
+        console.log("L:FAIL");
+        results.push(null); // placeholder to keep index alignment
       }
     } catch (e) {
       console.log(`出错: ${e.message}`);
+      results.push(null);
     }
   }
-  console.log(`  完成 ${results.length}/${count} 张`);
-  return results;
+  const valid = results.filter(Boolean);
+  console.log(`  完成 ${valid.length}/${count} 张（有效）`);
+  return valid; // 只返回有效的，保持平坦索引
+}
+
+// ─── 按需生成 QR 压缩版本 ──────────────────────────────────
+async function compressQR(sourceBuf) {
+  const meta = await sharp(sourceBuf).metadata();
+  const ow = meta.width,
+    oh = meta.height;
+  const qw = Math.max(ow, oh) > QR_MAX_DIM ? Math.round((ow * QR_MAX_DIM) / Math.max(ow, oh)) : ow;
+  const qh = Math.max(ow, oh) > QR_MAX_DIM ? Math.round((oh * QR_MAX_DIM) / Math.max(ow, oh)) : oh;
+  return await compressToSize(sourceBuf, qw, qh, {
+    startQuality: QR_START_Q,
+    minQuality: QR_MIN_Q,
+    qualityStep: QR_Q_STEP,
+    maxBytes: QR_MAX_BYTES,
+    preserveAlpha: false,
+  });
+}
+
+// ─── 规划所有群组 ──────────────────────────────────────────
+function planGroups(imageCount) {
+  const groups = [];
+  for (let i = 0; i < GROUP_COUNT; i++) {
+    // 状态分配: 0-99 已发布, 100-109 待审核, 110-119 已下架, 120-129 已拒绝, 130-139 回收站
+    let status, isDeleted;
+    if (i < 100) {
+      status = "published";
+      isDeleted = false;
+    } else if (i < 110) {
+      status = "pending";
+      isDeleted = false;
+    } else if (i < 120) {
+      status = "delisted";
+      isDeleted = false;
+    } else if (i < 130) {
+      status = "rejected";
+      isDeleted = false;
+    } else {
+      status = "rejected";
+      isDeleted = true;
+    }
+
+    // 加群方式: 每种独立50%，至少一种
+    let hasGroupNumber = Math.random() < 0.5;
+    let hasUrl = Math.random() < 0.5;
+    let hasQrCode = Math.random() < 0.5;
+    if (!hasGroupNumber && !hasUrl && !hasQrCode) {
+      const choice = pick(["groupNumber", "url", "qrCode"]);
+      if (choice === "groupNumber") hasGroupNumber = true;
+      else if (choice === "url") hasUrl = true;
+      else hasQrCode = true;
+    }
+
+    // 图片索引（循环使用）
+    const imageIndex = i % imageCount;
+
+    groups.push({
+      index: i,
+      status: isDeleted ? "rejected" : status,
+      isDeleted,
+      joinMethods: { hasGroupNumber, hasUrl, hasQrCode },
+      imageIndex,
+    });
+  }
+  return groups;
 }
 
 // ─── API 认证 ─────────────────────────────────────────────
@@ -196,41 +301,91 @@ async function uploadViaApi(buffer, purpose) {
   const headers = { "X-CSRF-Token": csrfToken };
   if (sessionCookie) headers["Cookie"] = sessionCookie;
   const res = await fetch(`${API_BASE}/admin/assets`, {
-    method: "POST", headers, body: form,
+    method: "POST",
+    headers,
+    body: form,
   });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`上传失败(${purpose}): HTTP ${res.status} ${text.slice(0, 200)}`);
+  }
   const json = await res.json();
   if (!json.ok) throw new Error(`上传失败(${purpose}): ${json.error?.message}`);
   return { id: json.data.id, r2Key: json.data.r2Key, publicUrl: json.data.publicUrl };
 }
 
 // ─── 上传所有资源 ──────────────────────────────────────────
-async function uploadAssets(images) {
-  const logos = [];
-  const qrs = [];
-  for (let i = 0; i < images.length; i++) {
-    const img = images[i];
-    process.stdout.write(`  上传 ${i + 1}/${images.length} logo... `);
-    if (img.logoBuf) {
-      const asset = await uploadViaApi(img.logoBuf, "logo");
-      logos.push({ ...asset, width: img.logoW, height: img.logoH, byteLength: img.logoBuf.length });
-      console.log(`OK ${asset.id.slice(0, 8)}`);
-    } else {
-      console.log("SKIP");
+async function uploadAll(images, groups) {
+  const logos = new Array(groups.length).fill(null);
+  const qrCodes = new Array(groups.length).fill(null);
+
+  // 先统计需要上传的总数
+  let logoCount = 0,
+    qrCount = 0;
+  for (const g of groups) {
+    const img = images[g.imageIndex];
+    if (img) logoCount++;
+    if (g.joinMethods.hasQrCode && img) qrCount++;
+  }
+
+  // 上传 logos
+  let done = 0;
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    const img = images[g.imageIndex];
+    if (!img) {
+      console.log(`  logo ${i + 1}/${logoCount}: SKIP（无源图）`);
+      continue;
     }
-    process.stdout.write(`  上传 ${i + 1}/${images.length} QR... `);
-    if (img.qrBuf) {
-      const asset = await uploadViaApi(img.qrBuf, "qr_code");
-      qrs.push({ ...asset, width: img.qrW, height: img.qrH, byteLength: img.qrBuf.length });
+    process.stdout.write(`  logo ${done + 1}/${logoCount}... `);
+    try {
+      const asset = await uploadViaApi(img.logoBuf, "logo");
+      logos[i] = { ...asset, width: img.logoW, height: img.logoH, byteLength: img.logoBuf.length };
       console.log(`OK ${asset.id.slice(0, 8)}`);
-    } else {
-      console.log("SKIP");
+      done++;
+    } catch (e) {
+      console.log(`FAIL: ${e.message}`);
     }
   }
-  return { logos, qrs };
+
+  // 上传 QR codes（仅对有 qr_code 的群）
+  done = 0;
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    if (!g.joinMethods.hasQrCode) continue;
+    const img = images[g.imageIndex];
+    if (!img) {
+      console.log(`  QR ${i + 1}/${qrCount}: SKIP（无源图）`);
+      continue;
+    }
+    process.stdout.write(`  QR ${done + 1}/${qrCount}... `);
+    try {
+      const qrBuf = await compressQR(img.sourceBuf);
+      const qrMeta = await sharp(qrBuf).metadata();
+      const asset = await uploadViaApi(qrBuf, "qr_code");
+      qrCodes[i] = {
+        ...asset,
+        width: qrMeta.width,
+        height: qrMeta.height,
+        byteLength: qrBuf.length,
+      };
+      console.log(
+        `OK ${asset.id.slice(0, 8)} ${(qrBuf.length / 1024).toFixed(0)}KB ${qrMeta.width}x${qrMeta.height}`,
+      );
+      done++;
+    } catch (e) {
+      console.log(`FAIL: ${e.message}`);
+    }
+  }
+
+  console.log(
+    `R2 上传: ${logos.filter(Boolean).length} logos + ${qrCodes.filter(Boolean).length} QRs`,
+  );
+  return { logos, qrCodes };
 }
 
 // ─── 生成 SQL ─────────────────────────────────────────────
-function generateSQL({ logos, qrs }) {
+function generateSQL(groups, { logos, qrCodes }) {
   const lines = [];
   lines.push("BEGIN TRANSACTION;");
   lines.push("DELETE FROM likes; DELETE FROM group_tags; DELETE FROM join_methods;");
@@ -238,71 +393,73 @@ function generateSQL({ logos, qrs }) {
   lines.push("DELETE FROM rate_limits;");
   lines.push("");
 
-  // Asset INSERTs
-  for (const a of [...logos, ...qrs]) {
-    const t = now();
-    lines.push(
-      `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', '${a.r2Key.startsWith("logo") ? "logo" : "qr_code"}', 'image/webp', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}');`,
-    );
-  }
-
-  // Groups
-  const logoPool = [...logos];
-  const qrPool = [...qrs];
+  // Asset INSERTs（先插 logos，再插 QR codes）
   const assetRefCounts = new Map();
+  const logoAssetIds = new Array(groups.length).fill(null);
+  const qrAssetIds = new Array(groups.length).fill(null);
 
-  for (let i = 0; i < GROUP_COUNT; i++) {
+  for (let i = 0; i < groups.length; i++) {
+    const a = logos[i];
+    if (a) {
+      const t = now();
+      lines.push(
+        `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', 'logo', 'image/webp', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}');`,
+      );
+      logoAssetIds[i] = a.id;
+    }
+  }
+  for (let i = 0; i < groups.length; i++) {
+    const a = qrCodes[i];
+    if (a) {
+      const t = now();
+      lines.push(
+        `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', 'qr_code', 'image/webp', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}');`,
+      );
+      qrAssetIds[i] = a.id;
+    }
+  }
+  lines.push("");
+
+  // Groups + join methods + tags + likes
+  for (const g of groups) {
     const id = uuid();
-
-    // ── 状态分配 ──
-    let status, isDeleted;
-    if (i < 60) { status = "pending"; isDeleted = false; }              // 60 待审核
-    else if (i < 70) { status = "pending"; isDeleted = true; }          // 10 回收站+待审核
-    else if (i < 110) { status = "published"; isDeleted = false; }      // 40 已上架
-    else if (i < 120) { status = "rejected"; isDeleted = false; }       // 10 已拒绝
-    else { status = "delisted"; isDeleted = false; }                    // 20 已下架
-
-    const actualStatus = isDeleted ? "published" : status;
-    const delAt = isDeleted ? `'${daysAgo(rInt(1, 14))}'` : "NULL";
-    const likeCount = status === "published" ? rInt(0, 200) : 0;
-    const isPublished = i >= 70 && i < 110;
-    const isQrGroup = i >= 70 && i < 90;  // 已上架中前20有二维码
-    const isGroupNumGroup = i >= 90 && i < 110; // 已上架中后20有群号
-
-    // ── 平台（随机，与加群方式解绑）──
     const platform = pick(PLATFORMS);
-
     const kind = pick(KINDS);
     const rotKey = uuid();
 
     let title = pick(kind === "official" ? TITLES.official : TITLES.interest)
       .replace("{平台}", platform)
-      .replace("{院系}", pick(["计算机","电子","机械","经管","外语","数学"]));
+      .replace("{院系}", pick(["计算机", "电子", "机械", "经管", "外语", "数学"]));
     const tags = pickN(TAG_POOL, 0, 5);
     title = title.replace("{标签}", tags.length > 0 ? pick(tags) : "综合");
 
-    // ── Logo: 已上架的全部有，其余没有 ──
-    const hasLogo = isPublished && logoPool.length > 0;
-    let logoR2Key = "NULL", logoUrl = "NULL";
-    let logoW = "NULL", logoH = "NULL", logoB = "NULL";
-    if (hasLogo) {
-      const a = logoPool.shift();
-      logoR2Key = `'${a.r2Key}'`;
-      logoUrl = `'${a.publicUrl}'`;
-      logoW = a.width; logoH = a.height; logoB = a.byteLength;
-      assetRefCounts.set(a.id, (assetRefCounts.get(a.id) ?? 0) + 1);
+    const likeCount = g.status === "published" ? rInt(0, 200) : 0;
+    const delAt = g.isDeleted ? `'${daysAgo(rInt(1, 14))}'` : "NULL";
+
+    // Logo: 所有群都有
+    const logoAsset = logos[g.index];
+    let logoR2Key = "NULL",
+      logoUrl = "NULL";
+    let logoW = "NULL",
+      logoH = "NULL",
+      logoB = "NULL";
+    if (logoAsset) {
+      logoR2Key = `'${logoAsset.r2Key}'`;
+      logoUrl = `'${logoAsset.publicUrl}'`;
+      logoW = logoAsset.width;
+      logoH = logoAsset.height;
+      logoB = logoAsset.byteLength;
+      assetRefCounts.set(logoAsset.id, (assetRefCounts.get(logoAsset.id) ?? 0) + 1);
     }
 
     lines.push(
-      `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, like_count, version, logo_r2_key, logo_url, logo_width, logo_height, logo_byte_length, deleted_at, created_at, updated_at) VALUES ('${id}', '${esc(title)}', '${esc(pick(DESCRIPTIONS))}', '${kind}', '${platform}', '${actualStatus}', '${rotKey}', ${likeCount}, 1, ${logoR2Key}, ${logoUrl}, ${logoW}, ${logoH}, ${logoB}, ${delAt}, '${daysAgo(rInt(1, 60))}', '${now()}');`,
+      `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, like_count, version, logo_r2_key, logo_url, logo_width, logo_height, logo_byte_length, deleted_at, created_at, updated_at) VALUES ('${id}', '${esc(title)}', '${esc(pick(DESCRIPTIONS))}', '${kind}', '${platform}', '${g.status}', '${rotKey}', ${likeCount}, 1, ${logoR2Key}, ${logoUrl}, ${logoW}, ${logoH}, ${logoB}, ${delAt}, '${daysAgo(rInt(1, 60))}', '${now()}');`,
     );
 
-    // ── 加群方式（与平台解绑，独立生成）──
+    // 加群方式
     let sortOrder = 0;
-
-    // QR：已上架前20必须有
-    if (isQrGroup && qrPool.length > 0) {
-      const a = qrPool.shift();
+    if (g.joinMethods.hasQrCode && qrCodes[g.index]) {
+      const a = qrCodes[g.index];
       const jmId = uuid();
       lines.push(
         `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES ('${jmId}', '${id}', 'qr_code', NULL, ${sortOrder}, '${a.id}');`,
@@ -310,21 +467,17 @@ function generateSQL({ logos, qrs }) {
       sortOrder++;
       assetRefCounts.set(a.id, (assetRefCounts.get(a.id) ?? 0) + 1);
     }
-
-    // 群号：已上架后20必须有，其余随机有
-    if (isGroupNumGroup || Math.random() < 0.5) {
+    if (g.joinMethods.hasGroupNumber) {
       const jmId = uuid();
       lines.push(
         `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES ('${jmId}', '${id}', 'group_number', '${rInt(100000, 999999999)}', ${sortOrder}, NULL);`,
       );
       sortOrder++;
     }
-
-    // URL：随机有或者没有
-    if (Math.random() < 0.5) {
+    if (g.joinMethods.hasUrl) {
       const jmId = uuid();
       lines.push(
-        `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES ('${jmId}', '${id}', 'url', 'https://${platform}.example.com/invite/${uuid().slice(0, 8)}', ${sortOrder}, NULL);`,
+        `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES ('${jmId}', '${id}', 'url', 'https://${platform.toLowerCase()}.example.com/invite/${uuid().slice(0, 8)}', ${sortOrder}, NULL);`,
       );
       sortOrder++;
     }
@@ -332,27 +485,38 @@ function generateSQL({ logos, qrs }) {
     // Tags
     let to = 0;
     for (const tag of tags) {
-      lines.push(`INSERT INTO group_tags (id, group_id, tag, sort_order) VALUES ('${uuid()}', '${id}', '${esc(tag)}', ${to});`);
+      lines.push(
+        `INSERT INTO group_tags (id, group_id, tag, sort_order) VALUES ('${uuid()}', '${id}', '${esc(tag)}', ${to});`,
+      );
       to++;
     }
 
+    // Submission details (40%)
     if (Math.random() < 0.4) {
-      lines.push(`INSERT INTO submission_details (id, group_id, contact, notes) VALUES ('${uuid()}', '${id}', ${Math.random() < 0.6 ? `'user${rInt(1,99)}@example.com'` : "NULL"}, ${Math.random() < 0.5 ? `'${esc(pick(["请通过一下谢谢","求拉群","老群友推荐",""]))}'` : "NULL"});`);
+      lines.push(
+        `INSERT INTO submission_details (id, group_id, contact, notes) VALUES ('${uuid()}', '${id}', ${Math.random() < 0.6 ? `'user${rInt(1, 99)}@example.com'` : "NULL"}, ${Math.random() < 0.5 ? `'${esc(pick(["请通过一下谢谢", "求拉群", "老群友推荐", ""]))}'` : "NULL"});`,
+      );
     }
 
+    // Likes（仅已发布群）
     if (likeCount > 0) {
       for (let v = 0; v < Math.min(likeCount, rInt(1, 30)); v++) {
-        lines.push(`INSERT INTO likes (group_id, voter_hash) VALUES ('${id}', '${uuid().replace(/-/g, "").slice(0, 16)}');`);
+        lines.push(
+          `INSERT INTO likes (group_id, voter_hash) VALUES ('${id}', '${uuid().replace(/-/g, "").slice(0, 16)}');`,
+        );
       }
     }
     lines.push("");
   }
 
+  // ref_count updates
   for (const [assetId, refCount] of assetRefCounts) {
     lines.push(`UPDATE assets SET ref_count = ${refCount} WHERE id = '${assetId}';`);
   }
   lines.push("COMMIT;");
-  lines.push(`-- ${GROUP_COUNT} groups, ${logos.length} logos, ${qrs.length} QRs`);
+  lines.push(
+    `-- ${GROUP_COUNT} groups, ${logos.filter(Boolean).length} logos, ${qrCodes.filter(Boolean).length} QRs`,
+  );
   return lines.join("\n");
 }
 
@@ -362,19 +526,37 @@ async function main() {
   console.log(`API: ${API_BASE}`);
   await authenticate();
 
-  const images = await downloadAndProcess(IMAGE_COUNT);
-  if (images.length === 0) { console.error("无图片"); process.exit(1); }
+  // 1. 下载所有图片（全部压缩logo）
+  const images = await downloadAndProcess(GROUP_COUNT);
+  if (images.length === 0) {
+    console.error("无有效图片");
+    process.exit(1);
+  }
 
-  const assets = await uploadAssets(images);
-  console.log(`R2 上传: ${assets.logos.length} logos + ${assets.qrs.length} QRs`);
+  // 2. 规划群组
+  const groups = planGroups(images.length);
+  console.log(
+    `群组: ${groups.filter((g) => g.status === "published").length} 已发布, ${groups.filter((g) => !g.isDeleted && g.status === "pending").length} 待审核, ${groups.filter((g) => !g.isDeleted && g.status === "delisted").length} 已下架, ${groups.filter((g) => !g.isDeleted && g.status === "rejected").length} 已拒绝, ${groups.filter((g) => g.isDeleted).length} 回收站`,
+  );
+  const qrGroups = groups.filter((g) => g.joinMethods.hasQrCode).length;
+  console.log(
+    `加群方式: ${qrGroups} 个有二维码, ${groups.filter((g) => g.joinMethods.hasGroupNumber).length} 个有群号, ${groups.filter((g) => g.joinMethods.hasUrl).length} 个有链接`,
+  );
 
-  const sql = generateSQL(assets);
+  // 3. 上传
+  const assets = await uploadAll(images, groups);
+
+  // 4. 生成 SQL
+  const sql = generateSQL(groups, assets);
   writeFileSync(SQL_FILE, sql, "utf-8");
   console.log(`SQL: ${SQL_FILE} (${(sql.length / 1024).toFixed(0)}KB)`);
 
+  // 5. 执行
   try {
     execSync(`${NPX} wrangler d1 execute lgqh-dev --local --file "${SQL_FILE}"`, {
-      encoding: "utf-8", timeout: 300000, stdio: "pipe",
+      encoding: "utf-8",
+      timeout: 300000,
+      stdio: "pipe",
     });
     console.log("✅ 种子数据完成");
   } catch (err) {
