@@ -47,7 +47,9 @@
 - [Cloudflare](https://dash.cloudflare.com/)（部署时）
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)（`npx wrangler`）
 
-## Quick Start — 本地开发
+## 快速开始
+
+支持本地开发，同时支持连接远端 Cloudflare D1/R2 进行云端测试。
 
 ### 1. 克隆并安装依赖
 
@@ -57,7 +59,7 @@ cd laigequnhao
 pnpm install
 ```
 
-### 2. 配置本地环境变量
+### 2. 配置环境变量
 
 ```bash
 # 复制模板文件
@@ -69,42 +71,46 @@ cp .dev.vars.example .dev.vars
 
 ### 3. 初始化数据库
 
-```bash
-# 自动化测试和离线开发使用本地隔离 D1
-pnpm db:migrate:local
-
-# 连接团队开发环境前，初始化远端开发 D1
-pnpm db:migrate:dev
-```
-
-如需从头开始，运行迁移后生成种子数据：
+本地开发使用：
 
 ```bash
 pnpm db:migrate:local
+# 可用如下命令生成本地种子数据
 pnpm seed:local
 ```
 
-### 4. 启动开发服务器
+云端测试使用：
+
+```bash
+pnpm db:migrate:dev
+```
+
+### 4. 启动前端
 
 ```bash
 pnpm dev
 ```
 
-访问 http://localhost:5173 查看首页。
+访问 http://localhost:5173 查看首页
 
-### 5. 启动 Pages Functions（连接远端开发资源）
+### 5. 启动后端
+
+运行前请在另一个终端保持前端运行
+
+本地开发使用：
 
 ```bash
-# 使用 wrangler.jsonc 中的远端 lgqh-dev D1/R2
-# 运行前请在另一个终端保持 pnpm dev
-pnpm pages:dev
+pnpm pages:dev:local
 ```
 
-此时 API 运行在 http://localhost:8788，Vite 代理会自动转发 `/api` 请求。
+云端测试使用：
 
-开发环境资源统一命名为 `lgqh-dev`，应用 binding 固定为 `DB` 和 `R2`。自动化测试读取
-`wrangler.test.jsonc`，使用本地模拟资源，不会写入远端开发库；生产部署由
-`wrangler.jsonc` 的 `env.production` 单独覆盖。
+```bash
+pnpm pages:dev
+# D1/R2 配置文件在 wrangler.jsonc
+```
+
+此时 API 运行在 http://localhost:8788，Vite 会自动转发 `/api` 请求。
 
 ### 资源清理维护
 
@@ -115,9 +121,9 @@ CSRF token。
 当前版本没有部署 Cron 或其他定时调度；这是管理员按需调用的人工维护入口。若后续接入
 Cloudflare Cron，应继续复用同一清理服务，并保留 D1/R2 失败可重试和实际成功计数语义。
 
-## Cloudflare 部署
+## 使用 Cloudflare 服务快速部署
 
-### 1. Fork 项目到 GitHub
+### 1. Fork 本项目到 GitHub
 
 将项目推送到你自己的 GitHub 仓库。
 
