@@ -47,23 +47,16 @@
 - 只允许暂存当前任务明确涉及的文件，使用 `git add -- <明确路径列表>`。禁止使用 `git add .`、`git add -A` 或可能包含无关文件的宽泛通配符。
 - 不认识、无法确认归属或属于并行工作的脏文件必须保持原样，不得暂存、修改或提交。
 - 每个 commit 只包含一个连贯的任务单元。提交后必须检查 `git show --stat --oneline HEAD` 和 `git status --short`，确认提交范围与剩余脏文件符合预期。
-- Trellis 包装命令若生成的 commit 不符合本规范，必须使用其 `--no-commit` 等选项关闭自动提交，再对产生的当前任务文件创建合规 commit；禁止用 amend 修补不合规提交。
-- 当前任务尚无工作 commit，且任务成果、质量门禁和 spec 更新已经全部完成时，必须先运行 `task.py archive <task-name> --no-commit`，再把任务成果、spec 更新和归档状态放入同一个工作 commit。禁止先提交成果、随后只为归档再创建第二个工作提交。
-- 工作 commit 成功后，再运行 `add_session.py --commit <work-sha> --no-commit`。`.trellis/workspace/` 中产生的 journal 和索引允许作为独立的 `chore(journal)` commit 提交，以便 journal 引用已经存在的工作 SHA。
-- Journal commit 只能包含本次更新的 `.trellis/workspace/<developer>/` 文件及必要的 `.trellis/workspace/index.md`。提交标题必须为中文且开头为 `chore(journal)`；禁止让 `add_session.py` 使用不符合本规范的默认自动提交。
-- 当前任务已经存在多个有独立意义的工作 commit 时，不得仅为减少提交数量而重写历史。Journal 应记录这些工作 SHA，并单独创建一个符合本规范的 `chore(journal)` commit。已经推送或被其他工作引用的历史尤其不得在没有用户明确授权时重写。
+- Trellis 脚本自动提交的 Archive Task 和 Journal 不受上述规范约束
+
 
 一次性交付任务的正确顺序：
 
 ```text
 完成任务成果与质量检查
-→ 更新 spec
-→ task.py archive <task-name> --no-commit
-→ 只暂存当前任务成果、spec 和归档文件
-→ 创建带 scope 与中文 body 的工作 commit
-→ add_session.py --commit <work-sha> --no-commit
-→ 只暂存本次 journal 与 workspace 索引
-→ 使用固定标题 chore(journal): 记录项目开发会话，并填写中文 body
+→ Commit 任务成果
+→ 等待用户执行 /trellis-finish-work 命令
+→ 完成 /trellis-finish-work 命令中的任务，归档任务并更新 Journal
 ```
 
 正确示例：
