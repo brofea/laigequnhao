@@ -1,14 +1,8 @@
 import { siteConfigSchema } from "@shared/domain/config";
-import type {
-  SiteConfig,
-  PlatformConfig,
-  JoinMethod,
-  GroupKind,
-  GroupStatus,
-} from "@shared/domain";
+import type { SiteConfig, JoinMethod, GroupKind, GroupStatus } from "@shared/domain";
 
 // Re-export for consumers
-export type { SiteConfig, PlatformConfig, JoinMethod, GroupKind, GroupStatus };
+export type { SiteConfig, JoinMethod, GroupKind, GroupStatus };
 
 /** 默认示例配置 — 部署时替换为实际机构 */
 const rawConfig: SiteConfig = {
@@ -31,11 +25,15 @@ const rawConfig: SiteConfig = {
   },
 
   platforms: [
-    { id: "qq", name: "QQ" },
-    { id: "wechat", name: "微信" },
-    { id: "dingtalk", name: "钉钉" },
-    { id: "discord", name: "Discord" },
-    { id: "telegram", name: "Telegram" },
+    "QQ",
+    "微信",
+    "钉钉",
+    "飞书",
+    "小红书",
+    "抖音",
+    "百度贴吧",
+    "Telegram",
+    "Discord",
   ],
 
   features: {},

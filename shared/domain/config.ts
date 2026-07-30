@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { platformConfigSchema } from "./platform";
 
 // ─── 主题配置 ────────────────────────────────────────────
 export const themeConfigSchema = z.object({
@@ -57,13 +56,7 @@ export const siteConfigSchema = z.object({
 
   theme: themeConfigSchema,
   rotation: rotationConfigSchema,
-  platforms: z
-    .array(platformConfigSchema)
-    .min(1)
-    .refine((platforms) => {
-      const ids = platforms.map((p) => p.id);
-      return new Set(ids).size === ids.length;
-    }, "平台 ID 不可重复"),
+  platforms: z.array(z.string().min(1)).min(1).refine((p) => new Set(p).size === p.length, "平台名不可重复"),
 
   features: featuresConfigSchema,
 });

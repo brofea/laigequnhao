@@ -68,8 +68,7 @@ const now = () => new Date().toISOString();
 const esc = (s) => s.replace(/'/g, "''");
 
 // ─── 数据池 ────────────────────────────────────────────────
-const PLATFORMS = ["qq", "wechat", "dingtalk", "discord", "telegram"];
-const PLATFORM_NAMES = { qq: "QQ", wechat: "微信", dingtalk: "钉钉", discord: "Discord", telegram: "Telegram" };
+const PLATFORMS = ["QQ", "微信", "钉钉", "飞书", "小红书", "抖音", "百度贴吧", "Telegram", "Discord"];
 const TAG_POOL = [
   "技术","游戏","学习","考研","实习","摄影","音乐","动漫","运动","美食",
   "编程","留学","社团","竞赛","文艺","电竞","二手","租房","旅游","读书",
@@ -277,7 +276,7 @@ function generateSQL({ logos, qrs }) {
     const rotKey = uuid();
 
     let title = pick(kind === "official" ? TITLES.official : TITLES.interest)
-      .replace("{平台}", PLATFORM_NAMES[platform])
+      .replace("{平台}", platform)
       .replace("{院系}", pick(["计算机","电子","机械","经管","外语","数学"]));
     const tags = pickN(TAG_POOL, 0, 5);
     title = title.replace("{标签}", tags.length > 0 ? pick(tags) : "综合");

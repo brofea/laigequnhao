@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { submissionRequestSchema, type SubmissionRequest } from "@shared/contracts/submission";
 import siteConfig from "../../../../site.config";
 import { submitGroup } from "../api";
@@ -14,7 +14,7 @@ const open = defineModel<boolean>("open", { default: false });
 const form = ref<Partial<SubmissionRequest> & { tagsStr: string }>({
   title: "",
   kind: "interest",
-  platform: siteConfig.platforms[0]?.id ?? "",
+  platform: siteConfig.platforms[0] ?? "",
   groupNumber: "",
   url: "",
   tagsStr: "",
@@ -28,13 +28,32 @@ const formError = ref<string | null>(null);
 const validationErrors = ref<Record<string, string>>({});
 const submitted = ref(false);
 
-const platforms = computed(() => siteConfig.platforms);
+const isCustomPlatform = ref(false);
+
+watch(() => form.value.platform, (val) => {
+  if (val && !siteConfig.platforms.includes(val)) {
+    isCustomPlatform.value = true;
+  }
+});
+
+const platformSelect = computed({
+  get: () => isCustomPlatform.value ? "__custom__" : (form.value.platform ?? ""),
+  set: (val: string) => {
+    if (val === "__custom__") {
+      isCustomPlatform.value = true;
+      form.value.platform = "";
+    } else {
+      isCustomPlatform.value = false;
+      form.value.platform = val;
+    }
+  },
+});
 
 function clearForm() {
   form.value = {
     title: "",
     kind: "interest",
-    platform: siteConfig.platforms[0]?.id ?? "",
+    platform: siteConfig.platforms[0] ?? "",
     groupNumber: "",
     url: "",
     tagsStr: "",
@@ -154,11 +173,19 @@ function close() {
           <label class="block">
             <span class="text-sm font-medium text-gray-700">平台 *</span>
             <select
-              v-model="form.platform"
+              v-model="platformSelect"
               class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm"
             >
-              <option v-for="p in platforms" :key="p.id" :value="p.id">{{ p.name }}</option>
+              <option v-for="p in siteConfig.platforms" :key="p" :value="p">{{ p }}</option>
+              <option value="__custom__">自定义…</option>
             </select>
+            <input
+              v-if="isCustomPlatform"
+              v-model="form.platform"
+              type="text"
+              placeholder="输入平台名称"
+              class="mt-2 block w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
           </label>
 
           <!-- 群号 -->

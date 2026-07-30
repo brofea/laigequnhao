@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { computed, ref, watch } from "vue";
 import type { GroupKind, GroupStatus } from "@shared/domain";
 import siteConfig from "@/../site.config";
 
-defineProps<{
+const props = defineProps<{
   title: string;
   description: string;
   kind: GroupKind;
@@ -30,6 +31,28 @@ const statusLabels: Record<GroupStatus, string> = {
   rejected: "已拒绝",
   delisted: "已下架",
 };
+
+const isCustom = ref(false);
+
+// 编辑回显时，如果 platform 不在预设列表中，自动进入自定义模式
+watch(() => props.platform, (val) => {
+  if (val && !siteConfig.platforms.includes(val)) {
+    isCustom.value = true;
+  }
+}, { immediate: true });
+
+const selectValue = computed({
+  get: () => isCustom.value ? "__custom__" : props.platform,
+  set: (val: string) => {
+    if (val === "__custom__") {
+      isCustom.value = true;
+      emit("update:platform", "");
+    } else {
+      isCustom.value = false;
+      emit("update:platform", val);
+    }
+  },
+});
 </script>
 
 <template>
@@ -89,18 +112,23 @@ const statusLabels: Record<GroupStatus, string> = {
       <!-- 平台 -->
       <label class="block">
         <span class="text-sm font-medium text-gray-600">平台</span>
-        <input
-          list="platform-list"
-          :value="platform"
-          type="text"
-          placeholder="选择或输入平台名称"
+        <select
+          :value="selectValue"
           class="mt-1 block w-full rounded border px-3 py-2 text-sm"
           :class="fieldErrors.platform ? 'border-red-400' : 'border-gray-300'"
+          @change="selectValue = ($event.target as HTMLSelectElement).value"
+        >
+          <option v-for="p in siteConfig.platforms" :key="p" :value="p">{{ p }}</option>
+          <option value="__custom__">自定义…</option>
+        </select>
+        <input
+          v-if="isCustom"
+          :value="platform"
+          type="text"
+          placeholder="输入平台名称"
+          class="mt-2 block w-full rounded border border-gray-300 px-3 py-2 text-sm"
           @input="emit('update:platform', ($event.target as HTMLInputElement).value)"
         />
-        <datalist id="platform-list">
-          <option v-for="p in siteConfig.platforms" :key="p.id" :value="p.name" />
-        </datalist>
         <p v-if="fieldErrors.platform" class="mt-1 text-xs text-red-500">
           {{ fieldErrors.platform.join("、") }}
         </p>

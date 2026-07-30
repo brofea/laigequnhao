@@ -3,7 +3,6 @@ import type { AdminGroupDto } from "@shared/contracts/group";
 import type { GroupCreateInput, GroupUpdateInput } from "@shared/contracts/group";
 import type { GroupKind, GroupStatus, JoinMethod } from "@shared/domain";
 import siteConfig from "@/../site.config";
-import type { PlatformConfig } from "@shared/domain";
 
 // ─── 草稿类型（扩展 DTO，加入 client key 用于动态列表）───
 
@@ -70,7 +69,7 @@ function emptyDraft(): DraftState {
     title: "",
     description: "",
     kind: "interest",
-    platform: siteConfig.platforms[0]?.id ?? "",
+    platform: siteConfig.platforms[0] ?? "",
     status: "pending",
     tags: [],
     joinMethods: [
@@ -133,10 +132,6 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
 
   const isDirty = computed(() => {
     return JSON.stringify(draft.value) !== originalJson.value;
-  });
-
-  const currentPlatform = computed<PlatformConfig | undefined>(() => {
-    return siteConfig.platforms.find((p) => p.id === draft.value.platform);
   });
 
   // ── Logo 操作 ──
@@ -341,7 +336,6 @@ export function useAdminGroupDraft(group: Ref<AdminGroupDto | null>) {
     // derived
     isCreate,
     isDirty,
-    currentPlatform,
     // logo
     logoBlob: computed(() => draft.value.logoBlob),
     logoRemoved: computed(() => draft.value.logoRemoved),
