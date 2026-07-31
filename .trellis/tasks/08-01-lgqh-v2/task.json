@@ -3,7 +3,7 @@
   "name": "lgqh-v2",
   "title": "网站 V2 大版本升级总任务",
   "description": "依据 docs/PRD/v2/RPD.md 建立网站 V2 大版本升级总任务，负责总体规划、依赖协调、跨任务集成与最终验收；本阶段仅进入 planning，不创建子任务。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
