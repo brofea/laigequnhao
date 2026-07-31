@@ -9,17 +9,17 @@
 - 当前状态：`planning`。
 - 本次只创建规划文件，不执行 `task.py start`，不进入实现阶段。
 - 未来审计仍不得修改业务代码、migration、测试代码、快照、Tailwind 配置或依赖。
+- 已确认的产品决策“已下架群组完全不公开”作为后续所有差异表、所有权和阻塞判断的硬约束，不再保留旧公开行为作为实现选项。
 - 允许的未来产出是 `research.md`、`impact-map.md` 和有证据的父任务 PRD 修订建议。
 
 ## 2. 阶段一：建立材料清单
 
 1. 找到全部 Spec、AGENTS、workflow 和相关技能规范。
 2. 找到全部归档任务及其可用规划、验收和结果记录。
-3. 找到当前父任务和所有 V2 子任务 PRD；确认旧 `07-30-frontend-overhaul` 目录是否为空、是否被引用。
-4. 找到总 PRD、已冻结产品决策和父任务依赖图。
-5. 找到真实源码目录：`src/`、`shared/`、`functions/`、`migrations/`、`tests/`。
-6. 找到 `package.json`、Vitest/Workers Vitest/Playwright 配置、Wrangler 配置和测试初始化。
-7. 记录缺失、不可读取、命名与源 PRD 不同的材料。
+3. 找到总 PRD、已冻结产品决策和父任务依赖图。
+4. 找到真实源码目录：`src/`、`shared/`、`functions/`、`migrations/`、`tests/`。
+5. 找到 `package.json`、Vitest/Workers Vitest/Playwright 配置、Wrangler 配置和测试初始化。
+6. 记录缺失、不可读取、命名与源 PRD 不同的材料。
 
 ### 材料清单最低覆盖
 
@@ -73,7 +73,7 @@
 2. 搜索输入、debounce、IME、URL/历史、字段、排序、cursor、取消、重复和无限滚动。
 3. 旋转排序的 epoch、时区、槽位、循环移位、作用范围、cursor 耦合和固定时间测试。
 4. 管理列表 keyset、筛选、排序、URL、total count、删除退页、表格和测试。
-5. 状态集合、转换入口、公开过滤、管理显示和 `last_published_at` 候选入口。
+5. 状态集合、转换入口、公开过滤、管理显示和 `last_published_at` 候选入口；公开过滤必须验证 `delisted` 在列表、搜索、板块和详情路径全部被排除。
 6. 回收站、恢复、永久删除、R2、D1 batch、突变令牌、冲突、失败恢复和关联清理。
 7. 主题 Token、Tailwind、挂载时机、localStorage、系统检测、公共状态和硬编码颜色。
 8. Playwright 矩阵、夹具、登录、D1、移动 viewport、WebKit、截图、剪贴板、拖拽、触摸、时间和选择器。
@@ -116,6 +116,7 @@
 - 所有高风险冲突有处理建议和后续任务归属。
 - 所有 C4/C5 问题单独列出，不用模糊措辞掩盖。
 - 所有待决策问题确实无法由仓库证据解决。
+- 已确认的“已下架完全不公开”已从待决策项移出，并在后续影响图中作为硬依赖记录。
 - PRD 修订未遗漏已冻结产品规则。
 - 子任务影响图没有遗漏高冲突共享文件。
 
