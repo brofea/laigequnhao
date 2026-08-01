@@ -123,7 +123,7 @@ Dialog overlay 不应因区域请求失败关闭，也不应在模式 watcher �
 
 ### 6.1 Query contract
 
-使用 `published`、`deleted_at IS NULL`/现有公开 filter，`ORDER BY last_published_at DESC, id`，limit 10。等价时间/NULL 语义由 T04 设计确认；不能用 created_at 或 default rotation。仅选 `PublicGroupSummary` 字段。
+使用 `published`、`deleted_at IS NULL`/现有公开 filter，`ORDER BY last_published_at DESC, id DESC`，limit 10。初始 `last_published_at` 全部为 `NULL` 时也必须保持确定性；不能用 `created_at` 或 default rotation。仅选 `PublicGroupSummary` 字段。
 
 ### 6.2 UI
 

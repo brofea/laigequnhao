@@ -41,7 +41,7 @@
 
 | 方法 | 路径 | 契约 |
 |---|---|---|
-| `GET` | `/groups` | 已发布/已下架群聊的游标页；query 为 `q`、`cursor`、`limit` |
+| `GET` | `/groups` | 仅已发布群聊的游标页；query 为 `q`、`cursor`、`limit` |
 | `POST` | `/submissions` | 访客纯文本提交及 Turnstile token |
 | `PUT` | `/groups/:id/like` | 幂等创建当前浏览器的点赞 |
 | `DELETE` | `/groups/:id/like` | 幂等移除当前浏览器的点赞 |
@@ -54,7 +54,66 @@
 
 点赞路由通过 `X-Device-Id` header 接收由浏览器生成并持久化的 UUID。缺失或格式无效时返回 `VALIDATION_FAILED`。持久化前，使用 Secret pepper 对规范化后的设备 ID 做 hash。成功的 PUT/DELETE 返回权威点赞数和最终 `liked` 状态；不得把设备 ID 或 hash 放入响应。
 
-公开二维码操作受 `site.config.ts` 中的阶段功能开关控制。开关启用前，公开 DTO 不返回 `qr_code` 加群方式，管理员 DTO 仍可读取和配置它；群聊要调整为 `published` 或 `delisted` 时，必须至少保留一种当前阶段可公开使用的加群方式。开关启用后，公开 DTO 才返回二维码资源的公开 URL 和展示元数据，仍不得返回 R2 key。
+公开二维码操作受 `site.config.ts` 中的阶段功能开关控制。开关启用前，公开 DTO 不返回 `qr_code` 加群方式，管理员 DTO 仍可读取和配置它；群聊要调整为 `published` 时，必须至少保留一种当前阶段可公开使用的加群方式。`delisted` 仍是管理员可维护的业务状态，但不进入任何公开 DTO 或公开查询。开关启用后，公开 DTO 才返回二维码资源的公开 URL 和展示元数据，仍不得返回 R2 key。
+
+## 场景：V2 公开可见性与发布时间初始化
+
+### 1. Scope / Trigger
+
+- 触发原因：V2 已冻结“已下架群组完全不公开”，并确认当前网站尚未上架。
+- 适用范围：公开列表、搜索、板块成员、详情深链、状态转换和新增发布时间字段。
+- 目标：把公开过滤、管理可见性、软删除和发布时间写入规则固定为可执行契约。
+
+### 2. Signatures
+
+- 公开读取：`GET /api/v1/groups?q=<query>&cursor=<opaque>&limit=<n>`，以及公开详情/板块查询。
+- 管理读取：`GET /api/v1/admin/groups` 和管理板块成员查询，可读取 `delisted`。
+- 状态写入：管理员状态转换命令；只有成功的“非 `published` → `published`”转换写入服务端当前时间。
+- 数据边界：`groups.status` 为 `pending | published | rejected | delisted`；`deleted_at` 独立表示软删除；`last_published_at` 可为 `NULL`。
+
+### 3. Contracts
+
+- 公开查询必须在 repository/service 边界使用 `status = 'published' AND deleted_at IS NULL`，不能先返回下架记录再由前端隐藏。
+- 公开 DTO 与管理员 DTO 分离；公开 DTO 不包含 `delisted`、软删除、内部版本、mutation token、R2 key 或联系方式。
+- 管理端可以查看、编辑和显式重新发布 `delisted`；软删除 restore 只清除删除状态并恢复资源引用，不自动发布。
+- 当前数据库中的 `last_published_at` 全部初始化为 `NULL`；不得使用 `created_at`、`updated_at`、当前状态或 migration 时间推断历史发布时间。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+|---|---|
+| 公开查询命中 `delisted`、回收站或永久删除群组 | 返回安全的不存在/不可见结果，不泄露状态 |
+| 公开板块只含下架成员 | 返回空成员列表，不返回下架群组摘要 |
+| 管理员执行 restore | 清除 `deleted_at`；不改变 `status`，不更新 `last_published_at` |
+| 管理员执行非发布状态 → `published` | 原子更新状态和服务端 `last_published_at` |
+| 普通编辑、`published` → `delisted`、冲突或失败重试 | 不更新 `last_published_at` |
+| 客户端提交 `last_published_at` | 忽略或拒绝该管理字段，不信任客户端值 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：公开 repository 直接过滤 `published`，管理查询仍能看到 `delisted`，公开响应中不存在下架记录。
+- Base：迁移后所有现有群组的 `last_published_at` 为 `NULL`；seed 生成的标题/简介满足显示宽度 Contract。
+- Bad：公开 API 返回 `delisted` 并让 GroupCard 隐藏徽章，或用 `created_at` 为现有记录伪造发布时间。
+
+### 6. Tests Required
+
+- Workers：列表、搜索、板块、详情深链均断言下架/软删除不出现在公开响应。
+- Workers：状态转换断言仅非发布到发布写入服务端时间，restore 和冲突不写入。
+- Migration：从当前 `0001`–`0003` schema 升级后断言所有现有 `last_published_at` 为 `NULL`。
+- Contract：公开 DTO 不含管理字段；管理 DTO 可以读取下架状态。
+- Playwright：公开首页、搜索、板块和分享深链使用下架负向 fixture；管理端仍能查看并显式重新发布。
+
+### 7. Wrong vs Correct
+
+```sql
+-- Wrong：把公开隔离留给前端
+SELECT * FROM groups WHERE deleted_at IS NULL;
+
+-- Correct：在公开数据源边界完成过滤
+SELECT id, title, description, kind, status
+FROM groups
+WHERE status = 'published' AND deleted_at IS NULL;
+```
 
 ## 轮换窗口与分页
 

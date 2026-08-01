@@ -60,7 +60,7 @@ T04 交付四类可复用基础能力：
 
 ### 3.1 groups.last_published_at
 
-目标字段为可空时间文本，与现有 `created_at`/`updated_at` 的 UTC ISO 精度和格式一致。目标 mapper 将其映射到内部领域对象；公共 DTO 默认不增加该字段，管理员/审计 DTO 是否增加需要以调用方需求为准并经过字段暴露审查。
+目标字段为可空时间文本，与现有 `created_at`/`updated_at` 的 UTC ISO 精度和格式一致。目标 mapper 将其映射到内部领域对象；本任务不把它加入 public/admin API DTO。若后续审计或管理页面需要展示，另由对应任务提出受控 DTO 变更。
 
 概念 SQL（不是未经评审可直接执行的最终 migration）：
 
@@ -76,7 +76,7 @@ SQLite/D1 的现有表结构、默认值和历史数据必须先在 migration ru
 
 | 字段 | 存储/约束意图 | 业务说明 |
 | --- | --- | --- |
-| `id` | 非空主键，风格与项目 ID 一致 | 需要稳定种子 ID/碰撞策略 |
+| `id` | 非空主键，风格与项目 ID 一致 | 默认种子使用 migration 内固定 UUID；碰撞即阻断迁移 |
 | `title` | 非空文本 | 业务层用显示宽度校验 |
 | `is_enabled` | 非空布尔表示 | 默认启用，但允许后续禁用 |
 | `position` | 非空、`>= 0` 整数 | 不能直接施加无法批量交换的全局唯一约束 |
@@ -94,7 +94,7 @@ T04 只锁定字段语义，不实现 `hourly_random`。排序模式只是可存
 | 字段 | 约束 |
 | --- | --- |
 | `board_id` | 非空，FK `boards(id)`，board 删除时级联关系 |
-| `group_id` | 非空，FK `groups(id)`，策略需兼容 purge |
+| `group_id` | 非空，FK `groups(id)`，`ON DELETE CASCADE` 作为物理删除兜底 |
 | `position` | 非空整数且 `>= 0` |
 | `created_at` | UTC 时间文本 |
 
@@ -104,7 +104,7 @@ T04 只锁定字段语义，不实现 `hourly_random`。排序模式只是可存
 - `board_groups(board_id, position, group_id)`。
 - `board_groups(group_id)`。
 
-board 删除级联只删除关系行，绝不能删除 group。group 的 FK 行为不能与永久清理、软删除和 R2 资源状态相冲突；如果现有 purge 顺序不允许直接 FK cascade，则在 migration 设计中明确限制或补偿步骤，而不是改变 purge 状态机的含义。
+board 删除级联只删除关系行，绝不能删除 group。`group_id` 的 `ON DELETE CASCADE` 只作用于物理删除，不替代 T05 在软删除事务中的显式关联清理；现有 purge 仍先删除关联资源行，再删除 `groups`，并通过外键测试防止孤立关系。
 
 ## 4. Migration 方案
 
@@ -114,23 +114,21 @@ board 删除级联只删除关系行，绝不能删除 group。group 的 FK 行�
 
 1. 执行只读审计/部署前报告，确认时间、状态、文本宽度、非法关系等阻断项。
 2. 新 migration 增加 `groups.last_published_at`。
-3. 按已确认的可信历史优先级回填 published 记录，非 published 且无证明的记录保持 NULL。
+3. 当前未上线数据的 `last_published_at` 全部初始化为 `NULL`；不使用 `created_at`、迁移执行时间或其他推断时间。未来仅在真实发生非 published → published 的状态转换时写入服务端当前时间。
 4. 创建 `boards`、`board_groups`、CHECK、FK、索引。
 5. 幂等写入默认“自定板块”。
 6. 验证 schema、索引、种子行数量和关键数据不变量。
 
-实际是否拆成两个 migration，取决于 D1 事务时长、回填数据量和部署工具能力。若大数据量回填不能安全放在 schema migration 中，应拆成 schema migration + 可观测 backfill job，并确保新旧应用在过渡期间都能读写。
+本次固定使用一个新的 `0004_...sql` forward migration，一次完成 `last_published_at`、`boards`、`board_groups`、索引、约束和默认板块种子。由于现有数据的发布时间全部保持 `NULL`，没有大批量历史回填，也不拆分 schema/backfill deployment step。若未来出现真实上线历史数据，另立迁移决策，不修改本次方案。
 
 ### 4.2 历史发布时间回填
 
-回填函数应是可测试、可审计的纯决策：
+用户已确认网站暂未上线，因此当前迁移不做历史发布时间推断，回填函数的本次策略固定为：
 
 ```text
-published 且存在可信历史发布时间 -> 使用可信历史时间
-published 且有明确状态证据但无发布时间 -> 使用该证据对应时间
-published 且没有可信证据 -> 使用 created_at
-非 published 且没有证明曾发布 -> NULL
-非法/冲突/无法排序的数据 -> 按审计策略阻断或进入人工修复清单
+所有现有群组 -> NULL
+未来非 published→published 成功转换 -> 使用服务端可信时钟
+未来 published→published 或 published→delisted -> 保留当前值
 ```
 
 不允许：
@@ -138,19 +136,19 @@ published 且没有可信证据 -> 使用 created_at
 - 使用 migration 开始时间或执行时间填充所有行。
 - 把 `updated_at` 无条件当作发布时间，因为 published 记录可能被普通编辑过。
 - 把当前状态 published 自动解释为“刚刚发布”。
-- 在没有审计记录的情况下静默覆盖原字段。
+- 在没有用户重新批准的情况下为未上线历史数据引入 `created_at` 兜底。
 
-如果仓库暂时没有历史审核事件表或发布时刻字段，设计必须把“只能用 `created_at` 兜底”标为产品/数据质量折衷，并在最终报告中说明发现流排序的历史准确性边界。
+由于本次所有初始值均为 NULL，T07 的“发现新群”查询必须在设计中明确 NULL 排序行为；未来有真实发布转换后才会出现非 NULL 值。若网站上线后需要历史回填，必须新增决策和可审计 migration，不得在本任务中暗示已有历史准确性。
 
 ### 4.3 默认板块种子
 
-默认板块需要一个可重复识别的策略：
+默认板块采用 migration 内固定 UUID 作为唯一身份，不依赖标题或“当前表为空”判断：
 
-- 优先使用项目认可的固定 ID，并在 migration 前检查碰撞。
-- 如果项目不允许固定 ID，则使用受控的唯一业务条件，但必须避免用户把普通 board 重命名为“自定板块”后被误认成系统种子。
-- 重复执行必须保持一行；不能依赖“当前表为空”作为幂等条件。
+- migration 写入前检查该 UUID；已存在且内容属于该种子时保持幂等，已被其他记录占用时阻断迁移并报告碰撞。
+- 普通 board 可以重命名为“自定板块”，也不会被误认成系统种子；固定 UUID 才是身份来源。
+- 重复执行必须保持一行，且删除后的默认 board 不由运行时或无关 migration 自动重建。
 - 初始化时间应使用 migration 约定的确定性/数据库时间来源，但不能拿它回填 group 发布时间。
-- 删除默认板块后，运行时不能自动重建；是否允许 migration 重跑恢复它必须以 migration runner 的幂等语义和产品决策为准，不能出现“每次启动都重建”。
+- 删除默认板块后，运行时、页面加载、普通 API 和后续无关 migration 都不能自动重建；migration runner 只按已记录的 migration 执行一次，不能把重跑/修复流程变成恢复已删除种子的入口。
 
 ### 4.4 约束、索引与回滚
 
@@ -201,7 +199,7 @@ computePublicationTransition(previousStatus, nextStatus, now):
 | 审核/下架 | 可能在 route/service/内部 helper | `rg` 找齐所有 status setter，禁止遗漏 |
 | 公共投稿 | submission-service → repo create | 验证 pending 与共享 Contract |
 | soft delete | 只更新 deleted_at | 不更新发布时间 |
-| restore | 当前只恢复软删除与资源引用 | 不擅自改变状态；若需求要求 restore→published，形成决策门 |
+| restore | 当前只恢复软删除与资源引用 | 用户已确认保持语义；不改变 status、不更新 `last_published_at`，明确发布由独立操作完成 |
 | 批处理/内部任务 | 需由全仓库搜索确认 | 复用同一纯函数和原子更新 |
 | purge | 已有 R2/D1 多步状态机 | 不改变 purge_state、资产引用和永久删除顺序 |
 
@@ -212,11 +210,11 @@ T04 只提供字段、内部映射和可验证的索引方向。后续查询的�
 ```sql
 WHERE status = 'published'
   AND deleted_at IS NULL
-ORDER BY last_published_at DESC, id ASC
+ORDER BY last_published_at DESC, id DESC
 LIMIT 10
 ```
 
-是否把 NULL 放在末尾、是否增加 `created_at` 兜底、是否需要复合索引，应由后续发现流任务根据历史回填策略和 SQLite 查询计划最终确认。T04 不交付 public API。
+由于初始数据全部为 `NULL`，查询必须明确将 NULL 排在非 NULL 之后；当候选记录全部为 NULL 时，以 `id DESC` 稳定排序。T04 只交付字段、内部映射、索引方向和该数据边界说明，不交付 public API。
 
 ## 6. 显示宽度设计
 
@@ -224,7 +222,7 @@ LIMIT 10
 
 显示宽度分为三层，且只能有一个公开入口：
 
-1. **分段层**：按 grapheme cluster 分段；优先评估 `Intl.Segmenter`，提供经过测试的 Node/Workers fallback 或小型受控依赖。
+1. **分段层**：按 grapheme cluster 分段；确定性 fallback/受控实现是权威路径，`Intl.Segmenter` 只有在与 golden vectors 完全一致时才可作为运行时优化。
 2. **类别层**：识别 Emoji 序列、East Asian Width Wide/Fullwidth、半角/ASCII/Ambiguous、空白和控制类别。
 3. **计数层**：每个字素簇返回 0、1、2 或项目明确允许的 Tab/换行宽度；累加并在超过上限时可提前停止，但不能在截断点拆开字素簇。
 
@@ -254,7 +252,7 @@ LIMIT 10
 - 可选的 `validateDisplayWidth(value, max)` 或 `isWithinDisplayWidth`：共用测量，不复制算法。
 - 常量 `GROUP_TITLE_MAX_DISPLAY_WIDTH = 50`、`GROUP_DESCRIPTION_MAX_DISPLAY_WIDTH = 1000`：名称可按项目命名规范调整，但只允许一个来源。
 
-函数保持纯、无 DOM、无浏览器全局依赖，使 Workers 和 Node 直接复用。若 `Intl.Segmenter` 能力差异真实存在，必须通过 feature detection 和同一 fallback 确保结果一致，不能让生产端和测试端各自使用不同路径。
+函数保持纯、无 DOM、无浏览器全局依赖，使 Workers 和 Node 直接复用。确定性 fallback 必须在三类 runtime 产出一致结果；`Intl.Segmenter` 只能通过 feature detection 作为等价优化，任何向量差异都回退到权威实现，不能让生产端和测试端各自使用不同规则。
 
 ## 7. Contract 与前端集成
 
@@ -278,7 +276,7 @@ LIMIT 10
 ### 7.2 DTO 与 mapper
 
 - `GroupRow` 增加 nullable `last_published_at` 并由 typed mapper 显式转换。
-- public DTO 继续只包含允许公开的字段；admin DTO 是否加入发布时间要以审计/管理需求确认。
+- public/admin DTO 都不加入 `last_published_at`；本任务只维护数据库、领域对象和内部 mapper。
 - 不把 `boards` 或 `board_groups` 数据库行直接返回给 API。
 - Zod schema 负责外部输入，repository mapper 负责数据库行；两者不可通过 `as` 跳过校验。
 
@@ -292,19 +290,22 @@ LIMIT 10
 - server 仍是最终裁决；前端提示不构成安全边界。
 - 若当前表单没有计数器，交付最小错误显示即可，除非后续 UI 任务批准引入计数器。
 
-## 8. 历史超限和迁移兼容
+## 8. 旧内容与 seed 数据边界
 
-读取 mapper 只做字段类型转换，不因新长度规则拒绝数据库已有行。写入策略由产品/工程在实现前选定：
+用户已确认网站未上架，没有需要兼容的旧内容。因此 T04 不实现旧超限内容的兼容路径：
 
-- **A：先清理**：生成有审计的超限清单，修复后再强制所有相关更新。
-- **B：未修改字段保留**：无关字段更新时原样携带旧超限 title/description；被修改的字段必须满足新宽度。
+- migration 不截断、不改写文本，也不为旧值增加 B 类宽容分支。
+- mapper 只负责类型映射；新 Contract 对所有写入严格执行显示宽度。
+- `scripts/seed-local.mjs` 是本地测试数据的修正入口，生成的标题/简介必须通过共享宽度规则。
+- 对测试 fixture 的超限样本，应将其作为 schema rejection 边界输入，而不是作为可保存的历史实体。
+- 若未来发现真实旧内容，停止实施并另立数据兼容决策；不能以当前“未上架”决定覆盖新事实。
 
-两者都要测试“读旧值、改无关字段、改目标字段、状态发布、版本冲突”组合。禁止：
+禁止：
 
 - mapper 读取时切片。
 - migration 按 code point/UTF-16 直接截断。
 - 通过低层 SQL 绕过 Zod、版本或状态规则。
-- 让旧数据阻断所有读取而没有人工修复路径。
+- 为不存在的生产旧内容引入复杂兼容逻辑。
 
 ## 9. 测试设计
 
@@ -316,7 +317,7 @@ LIMIT 10
 | 0001-0003 代表性旧库 | 新 migration 可升级，历史数据不丢 |
 | 重复 runner/种子 | default board 不重复 |
 | 默认 board 后续删改 | 不因业务查询自动重建 |
-| 回填 published | 优先可信时间，最后才 created_at |
+| 回填 published | 当前未上线数据全部保持 `NULL`，不做 `created_at` 兜底 |
 | 回填 non-published | 无证据保持 NULL |
 | 非法数据审计 | 有明确报告/阻断，不静默修复 |
 | FK/CHECK | position、sort_mode、主键和级联行为符合设计 |
@@ -340,7 +341,7 @@ LIMIT 10
 
 每组向量至少在共享测试环境和 Workers 测试环境执行；如果浏览器 bundle 有独立编译产物，再通过前端测试验证同样结果。
 
-Schema 测试覆盖标题 49/50/51、简介 999/1000/1001、中文 500/501、trim 后为空、控制字符、已有 tags/join methods refinement、旧超限兼容和错误消息。
+Schema 测试覆盖标题 49/50/51、简介 999/1000/1001、中文 500/501、trim 后为空、控制字符、已有 tags/join methods refinement、seed 数据合法性和错误消息。
 
 ### 9.4 性能与安全
 
@@ -354,13 +355,11 @@ Schema 测试覆盖标题 49/50/51、简介 999/1000/1001、中文 500/501、tri
 
 实现前必须确认：
 
-1. 默认 board 的固定 ID 或唯一识别策略以及碰撞处理。
-2. 历史发布证据实际来自哪些字段/事件；没有证据时 `created_at` 兜底是否被产品接受。
-3. `Intl.Segmenter` fallback 或依赖的许可、bundle、Workers 支持和 golden vectors。
-4. restore 是否永远保持当前语义，还是另立“恢复并发布”的批准需求。
-5. 旧超限数据选择策略 A 或 B。
-6. `board_groups.group_id` 在现有永久删除流程中的 FK 处理顺序。
-7. 后续发现流是否需要 NULL 的排序兜底和复合索引。
+1. 当前未上线数据全部保持 `NULL` 已由用户确认；未来若网站上线后需要历史回填，另立产品/数据迁移决策。
+2. 确定性宽度 fallback 或依赖的许可、bundle、Workers 支持和 golden vectors；`Intl.Segmenter` 仅作为等价优化。
+3. 当前无旧内容；seed 脚本生成数据必须符合新宽度规则。
+4. `board_groups.group_id` 在现有永久删除流程中的 FK 处理顺序。
+5. 后续发现流的复合索引覆盖范围与实际查询计划；排序方向和 NULL 语义已冻结，不再作为产品决策门。
 
 未解决的任一项都只能保持 planning，不能用临时默认值进入 migration 或生产代码。
 

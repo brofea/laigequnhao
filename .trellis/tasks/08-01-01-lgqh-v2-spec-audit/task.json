@@ -2,8 +2,8 @@
   "id": "01-lgqh-v2-spec-audit",
   "name": "01-lgqh-v2-spec-audit",
   "title": "01 全量 Spec 与代码审计",
-  "description": "审计项目 Spec、历史任务、真实代码、数据库迁移与测试，识别 V2 PRD 冲突并形成 research.md、impact-map.md 和总 PRD 修订建议；只读业务代码，保持 planning。",
-  "status": "planning",
+  "description": "审核 T02–T10 方案并审计项目 Spec、历史任务、真实代码、数据库迁移与测试，识别 V2 PRD 冲突，修订项目 Spec、受影响子任务规划并形成 research.md、impact-map.md；只读业务代码。",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "codex",
   "assignee": "codex",
   "createdAt": "2026-08-01",
-  "completedAt": null,
+  "completedAt": "2026-08-01",
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
@@ -21,6 +21,6 @@
   "children": [],
   "parent": "08-01-lgqh-v2",
   "relatedFiles": [],
-  "notes": "",
+  "notes": "T01 已收口：完成 T02–T10 方案审核、项目 Spec/受影响规划修订、事实审计、影响图、文件所有权和阻塞清单；未修改业务代码、测试或正式 migration。T02–T10 仍须各自单独获准实施。",
   "meta": {}
 }

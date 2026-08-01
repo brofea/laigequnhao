@@ -1291,13 +1291,13 @@ PRIMARY KEY (board_id, group_id)
 
 ## 25.1 `last_published_at` 回填
 
-现有已发布群组：
+当前网站尚未上架，没有需要兼容的旧内容。迁移后现有群组的 `last_published_at` 全部保持 `NULL`：
 
-* 优先使用现有可识别的发布时间
-* 没有可靠发布时间时回填 `created_at`
-* 不得统一回填部署时间
+* 不使用 `created_at`、`updated_at`、当前 `status` 或迁移执行时间推断发布时间
+* 不执行历史发布时间回填
+* 未来只有真实的非 `published` → `published` 成功转换才由服务端时钟写入
 
-从未发布过的群组保持为空。
+如果未来网站已上线后需要补录历史发布时间，必须另立可审计的数据迁移决策，不能在本次 V2 迁移中静默引入兜底规则。
 
 ## 25.2 默认板块
 
@@ -1778,7 +1778,7 @@ lgqh-v2-schema-and-publishing
 * `board_groups`
 * 索引和约束
 * 默认“自定板块”
-* 旧数据回填
+* 现有数据 `last_published_at` 初始化为 `NULL`
 * 显示宽度函数
 * 标题和简介限制
 * 共享 Zod Contract

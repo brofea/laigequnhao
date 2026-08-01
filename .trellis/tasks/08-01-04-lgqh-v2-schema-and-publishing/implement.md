@@ -12,6 +12,8 @@
 - 所有状态、宽度和输入规则由共享模块提供，route/repository/form 不复制算法。
 - 先建测试向量和失败用例，再实现最小变更。
 - T04 仍只负责基础 schema/contract/domain 逻辑；板块业务、回收站清理和公共 API 留给后续任务。
+- 在共享 Contract 阶段先处理 T01 已登记的 `config.spec.ts` 旧平台对象断言；修复必须同时核对 `shared/domain/config.ts`、`site.config.ts`、Spec 和调用方，并在报告中记录是否仅更新测试还是需要兼容层。
+- 用户已确认网站暂未上线：新增 `last_published_at` 时所有现有群组保持 `NULL`，不得使用 `created_at` 或 migration 时间回填；未来真实非 published→published 转换才由服务端时钟写入。
 
 ## 2. 实施前置读取
 
@@ -59,7 +61,7 @@
 
 - [ ] 状态入口表覆盖 route、service、repository、batch/internal path。
 - [ ] 旧 schema、索引、FK、purge 状态和 mapper 证据已记录。
-- [ ] 数据审计结果区分可自动回填、可用 created_at 兜底、必须人工处理三类。
+- [ ] 数据审计确认当前未上线前提；现有 `last_published_at` 全部保持 `NULL`，不产生 `created_at` 兜底或人工回填值。
 - [ ] T01、T05 和后续发现流的接口冲突已列为决策门。
 
 ## 4. Phase B：评审并冻结方案
@@ -73,23 +75,23 @@
 - boards 的 ID、默认值、`sort_mode` CHECK、position/version 约束。
 - board_groups 的 FK 行为、删除顺序和 purge 兼容方案。
 - 三组索引的列顺序和查询计划。
-- 默认“自定板块”固定 ID/唯一识别和删除后行为。
-- 是否把 schema/backfill 拆成不同 deployment step。
+- 默认“自定板块”使用 migration 内固定 UUID；验证幂等、碰撞阻断及删除后不自动重建。
+- 使用单个新的 `0004_...sql` forward migration，一次完成字段、表、索引、约束和默认种子；不拆分 schema/backfill deployment step。
 
-### B2. 业务决策
+### B2. 已冻结业务决策
 
 确认：
 
-- restore 是否保持“只恢复软删除”，还是另立批准需求实现“恢复并发布”。T04 不从现有 PRD 推导新状态语义。
-- published 历史发布时间证据和 created_at fallback 的可接受性。
-- 旧超限数据采用清理策略 A 或未修改字段保留策略 B。
-- 后续公共发现查询对 NULL 的排序规则。
+- restore 语义已确认：只恢复软删除与资源引用，不改变 `status`，不更新 `last_published_at`；发布必须通过独立的显式操作完成。
+- 当前未上线数据的 `last_published_at` 全部为 `NULL`；历史发布时间回填不在本次范围，未来上线后的历史回填另立决策。
+- 用户已确认没有旧内容；不实现 A/B 兼容策略，修改 `scripts/seed-local.mjs` 使测试标题/简介符合新宽度。
+- 后续公共发现查询固定为 `published + deleted_at IS NULL + last_published_at DESC + id DESC + LIMIT 10`；NULL 排在非 NULL 之后，全部为 NULL 时按 `id DESC`。
 
 ### B3. 宽度实现决策
 
 做小型 spike，不接入生产路径：
 
-- 验证 Node、Workers 和浏览器构建对 `Intl.Segmenter` 的支持。
+- 验证 Node、Workers 和浏览器构建的确定性 fallback；同时检查 `Intl.Segmenter` 是否可作为等价优化，不能把它作为唯一正确性来源。
 - 对 grapheme、EAW、Emoji/ZWJ、空白、Tab、换行、CRLF、控制字符运行 golden vectors。
 - 比较受控 fallback/dependency 的体积、许可证、Workers 兼容和一致性。
 - 选择唯一算法和跨运行时测试方式。
@@ -98,7 +100,7 @@
 
 - [ ] 所有决策门有批准记录。
 - [ ] 不存在“实现时再决定”的 migration 约束或 restore 语义。
-- [ ] 宽度算法在至少三种 runtime 的向量结果一致。
+- [ ] 确定性 fallback 在至少三种 runtime 的向量结果一致；若启用 `Intl.Segmenter` 优化，其结果与 fallback 完全一致。
 - [ ] 设计评审确认不改公共 DTO、不实现 T05 业务越界。
 
 ## 5. Phase C：实现显示宽度底层能力
@@ -169,7 +171,7 @@
 - [ ] group create/update/submission 都覆盖新边界。
 - [ ] 既有 refinement 有回归测试。
 - [ ] public/admin DTO 没有意外暴露 `last_published_at`。
-- [ ] 历史超限策略 A/B 已写入测试。
+- [ ] `scripts/seed-local.mjs` 生成的标题/简介通过共享宽度边界；超限只作为拒绝输入 fixture。
 
 ## 7. Phase E：新增 migration 和回填
 
@@ -189,11 +191,10 @@
 
 实现/运行经批准的回填：
 
-- 可信历史发布时间优先。
-- 只有明确发布证据时才写 published 时间。
-- 没有证据的 published 使用 created_at 兜底并记审计。
-- non-published 无证明保持 NULL。
-- 非法/冲突时间进入阻断/人工清单，不能写 migration 执行时间。
+- 现有所有群组的 `last_published_at` 保持 `NULL`，并验证迁移后没有隐式回填。
+- 未来只有真实非 published→published 成功转换才写入服务端可信时间。
+- published→published、published→delisted、普通编辑和冲突重试保留原值。
+- 不执行 `created_at` fallback，不写入 migration 执行时间；若未来需要历史回填，先暂停并建立新决策。
 
 如果 backfill 放在应用层 job，必须保证新旧代码兼容、幂等、可重试且不会把普通编辑当发布；如果放在 SQL migration，必须验证大库事务时长和可观测性。
 
@@ -217,7 +218,7 @@
 
 - `GroupRow` 增加 nullable `last_published_at`。
 - typed mapper 负责时间文本到内部字段的显式转换。
-- admin DTO 按批准字段暴露；public DTO 默认不暴露。
+- public/admin DTO 都不暴露 `last_published_at`；领域对象和内部 mapper 保留该字段，后续若有展示需求另立受控 API 变更。
 - 所有 select/insert/update projection 都检查新增字段，避免 read-after-write 丢失。
 
 ### F3. Repository 入口
@@ -271,7 +272,7 @@
 
 - 所有标题/简介边界和错误消息。
 - tags/join methods 等原 refinement。
-- 历史超限读取、无关字段编辑、目标字段编辑。
+- seed 数据宽度合法性、超限输入拒绝和目标字段编辑。
 - 计数器和 IME 行为（如果修改了表单）。
 - Browser/Node/Workers golden vectors。
 
@@ -296,10 +297,10 @@ pnpm build
 
 - 发现历史 migration 被并发修改或无法安全应用新编号。
 - 无法确定 group purge 与 board_groups FK 的安全顺序。
-- 无可信历史发布时间且产品未批准 created_at 兜底。
-- `Intl.Segmenter` 与 fallback 在 runtime 产生不同结果且没有批准的统一方案。
+- 发现实际存在已上线历史数据，导致“全部 NULL”的前提不再成立。
+- 确定性 fallback 在 runtime 产生不同结果，或 `Intl.Segmenter` 优化与 fallback 产生差异且没有批准的处理方案。
 - restore 需求与当前实现冲突而没有业务决策。
-- 旧超限记录无法在不静默截断的情况下兼容。
+- 发现实际旧内容，与用户确认的“未上架、无旧内容”前提不一致。
 - 任一状态入口仍可绕过共享规则、version 或 mutation token。
 - migration/测试显示可能误删 group、资产、标签、join methods 或 R2 对象。
 
@@ -321,7 +322,7 @@ pnpm build
 - [ ] 发布时间只在非 published→published 成功原子转换时更新。
 - [ ] 字符宽度由单一共享算法计算，50/1000 边界与多 runtime 向量一致。
 - [ ] Zod Contract、mapper、DTO、form 和 route 接入点有覆盖。
-- [ ] 历史超限、不可信时间、版本冲突、purge/FK 边界有明确策略。
+- [ ] 无旧内容前提、seed 宽度规则、不可信时间、版本冲突、回收站显式清理与 `board_groups.group_id ON DELETE CASCADE` 的 purge/FK 边界有明确策略。
 - [ ] lint、format、typecheck、unit/worker test、build 和必要 E2E 结果已记录。
 
 ## 12. 实施完成后的报告格式
@@ -332,6 +333,6 @@ pnpm build
 2. 最终 migration 编号、空库/升级结果、回填数量和异常审计结果。
 3. 状态入口覆盖清单和 `last_published_at` 的转换测试结果。
 4. 宽度算法的 runtime 一致性、性能基线和边界向量摘要。
-5. Contract/DTO/表单兼容策略，尤其是旧超限记录。
+5. Contract/DTO/表单规则以及 `scripts/seed-local.mjs` 的合法测试数据策略。
 6. T05/发现流仍需消费的接口和未解决决策。
 7. 所有质量命令、失败项、修复项和剩余风险。

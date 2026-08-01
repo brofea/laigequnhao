@@ -214,7 +214,7 @@ Repository 负责参数化 D1 查询、批量写入、typed row mapper、稳定�
 
 ### R05-17 下架和恢复
 
-published→delisted 保留 board_groups；后续公开查询过滤。恢复后重新 published 时无需重新添加，公开查询自然恢复。此处不改变 T04 的 `last_published_at` 规则。
+published→delisted 保留 board_groups；后续公开查询过滤。管理员执行独立的显式重新发布后，无需重新添加关系，公开查询自然恢复。软删除 restore 本身不改变 status，也不自动恢复旧关系。此处不改变 T04 的 `last_published_at` 规则。
 
 ### R05-18 进入回收站
 

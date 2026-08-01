@@ -52,7 +52,7 @@ T07 依赖 T03 的顶栏/主题、T05 的公开板块 API 和 T06 的 GroupCard/
 
 ## 4. 前置条件与阻断
 
-实施前确认 T03/T05/T06 的规划和实际实现已通过；检查 T04 已回填发布时间、公开摘要和状态过滤。若 T05 API 返回管理字段、T06 的 `group` controller 不支持 query merge，或旧 cursor 与新的 page 状态不能兼容，必须停在 planning 并报告，不在 HomeView 里绕过。
+实施前确认 T03/T05/T06 的规划和实际实现已通过；检查 T04 已提供发布时间字段、初始全部 `NULL` 的数据边界、公开摘要和状态过滤。若 T05 API 返回管理字段、T06 的 `group` controller 不支持 query merge，或公开 cursor 与管理 page 状态发生串线，必须停在 planning 并报告，不在 HomeView 里绕过。
 
 ## 5. 页面结构与状态机
 
