@@ -203,3 +203,36 @@ T06 完成全量验收：Unit 82/Workers 103/E2E 68（补齐 PRD §29.3/§29.4 �
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: T06 系统加固与发布验收 + 人工核验前端调整
+
+**Date**: 2026-08-02
+**Task**: T06 系统加固与发布验收 + 人工核验前端调整
+**Branch**: `main`
+
+### Summary
+
+T06 完成全量验收：Unit 82 / Workers 104 / E2E 68（新增 public/admin/a11y flows，补齐 PRD §29.3/§29.4）；性能/安全/迁移六项演练/部署 runbook 全过。修复 Dialog 焦点锁定、回收站恢复/永久删除、点赞数显示跳变（seed like_count 与 likes 表不一致）。用户人工核验后完成 F1-F15 前端调整（删 sample-state-bar、加群方式固定排序与去重、二维码真实图+保存、提交限流 1 次/小时、提交表单私密联系方式、登录页排版、永久删除确认 Dialog、板块编辑后刷新、admin 顶栏去添加按钮等）。acceptance.md 结论：通过（剩余 A1 Turnstile 待决策、C1/C2 部署暂缓）。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4ab429a` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
