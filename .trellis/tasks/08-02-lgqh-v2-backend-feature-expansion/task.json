@@ -3,7 +3,7 @@
   "name": "lgqh-v2-backend-feature-expansion",
   "title": "04 后端能力扩展",
   "description": "依据总 PRD 完成 V2 所需数据库、API、服务端业务、权限、校验、文件存储和管理端接口；不修改前端表现层，保持 planning。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

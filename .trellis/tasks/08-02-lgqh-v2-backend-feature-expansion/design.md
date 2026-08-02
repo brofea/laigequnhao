@@ -143,6 +143,20 @@ trash --恢复并发布--> published + 写入新时间
 
 详情只接受有效公开 group id。不存在、下架、回收站和删除统一为非敏感的不可用结果，不返回私有加群信息、原始状态或内部删除原因。
 
+### 6.6 公开路由清单（已确认）
+
+公开首页采用分区独立接口，不提供聚合首页接口：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/v1/discover` | 发现新群，`last_published_at DESC, id DESC`，最多 10 |
+| `GET` | `/api/v1/tags` | 标签聚合，只统计 published，`count DESC, tag ASC` |
+| `GET` | `/api/v1/boards` | 启用板块 + 批量公开成员 |
+| `GET` | `/api/v1/groups` | 目录 cursor，**收紧为只返回 published**（修复现网 `status IN ('published','delisted')` 缺口） |
+| `GET` | `/api/v1/groups/:id` | 已发布详情深链 |
+
+`last_published_at` 不进入公开 DTO；发现接口内部排序即可。
+
 ## 7. 板块管理设计
 
 ### 7.1 CRUD
@@ -160,6 +174,28 @@ trash --恢复并发布--> published + 写入新时间
 ### 7.4 sort mode
 
 `manual_asc` 使用位置正序；`manual_desc` 在查询层返回位置倒序但不改变保存位置；`hourly_random` 使用站点时区的自然小时槽位和稳定种子计算，不更新位置。
+
+### 7.5 管理路由清单（已确认）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/v1/admin/boards` | 板块列表（含成员数量） |
+| `POST` | `/api/v1/admin/boards` | 创建板块 |
+| `PATCH` | `/api/v1/admin/boards/:id` | 编辑标题/启停/sort mode（version 校验） |
+| `DELETE` | `/api/v1/admin/boards/:id` | 删除板块（级联删关联） |
+| `POST` | `/api/v1/admin/boards/reorder` | 批量更新板块 position（原子） |
+| `POST` | `/api/v1/admin/boards/:id/members` | 添加成员（published/delisted，拒绝 trash，防重） |
+| `DELETE` | `/api/v1/admin/boards/:id/members/:groupId` | 移除成员关联，不删群组 |
+| `POST` | `/api/v1/admin/boards/:id/members/:groupId/move` | 上移/下移（相邻交换，原子） |
+
+板块添加群组选择器复用管理列表接口（`statuses=published,delisted` + `q`，排除 trash）。
+
+### 7.6 管理分页（已确认）
+
+- 参数沿用现有 `sortBy/sortDir`（不采用 RPD §21.3 示例 `sort/direction` 参数名），新增 `page`（≥1，默认 1）。
+- 每页固定 50，不提供 pageSize 切换。
+- 返回 `{ items, page, pageSize: 50, totalItems, totalPages }`；零条目时 `totalPages = 0`。
+- 所有排序追加稳定次排序字段 `id`。
 
 ## 8. 管理页码分页设计
 
@@ -276,3 +312,17 @@ Contract 设计必须区分：
 - [ ] Contract 可被 T05 adapter 消费。
 - [ ] Migration 可重复、可观察、可回滚。
 - [ ] 性能风险和 N+1 风险有检查方式。
+
+## 16. 已确认决策记录
+
+| 决策 | 依据 | 状态 |
+|---|---|---|
+| 公开首页分区独立接口 | 用户确认 | 已批准 |
+| 标签排序 `count DESC, tag ASC` | RPD §14.4 默认建议（唯一依据） | 采用默认 |
+| 管理列表参数沿用 `sortBy/sortDir` | api-guidelines `/api/v1` 稳定性 | 采用 |
+| `boards.timezone` 显式配置，默认 `Asia/Shanghai` | RPD §16.4 站点配置时区 | 采用 |
+| 公开 DTO 不暴露 `last_published_at` | RPD §13 无展示需求 | 采用 |
+| 公开详情不可用统一 `404 NOT_FOUND` 非敏感 | error-handling | 采用 |
+| 重复成员 → `STATE_CONFLICT` | error-handling 领域不变量 | 采用 |
+| 板块添加群组选择器复用管理列表接口 | RPD §23.5 | 采用 |
+| 公开列表过滤收紧为 `status='published'` | RPD §5.1 + api-guidelines | P0 修复项 |
