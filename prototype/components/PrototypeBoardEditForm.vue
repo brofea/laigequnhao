@@ -1,0 +1,72 @@
+<script setup lang="ts">
+import { reactive } from "vue";
+import type { DemoBoard } from "../data/fixtures";
+import PrototypeButton from "./PrototypeButton.vue";
+import PrototypeSelect from "./PrototypeSelect.vue";
+
+const props = withDefaults(defineProps<{ board: DemoBoard; createMode?: boolean }>(), {
+  createMode: false,
+});
+const emit = defineEmits<{
+  save: [board: DemoBoard];
+  cancel: [];
+}>();
+
+const draft = reactive({
+  title: props.board.title,
+  description: props.board.description,
+  enabled: props.board.enabled ? "enabled" : "disabled",
+});
+
+const enabledOptions = [
+  { value: "enabled", label: "启用" },
+  { value: "disabled", label: "未启用" },
+];
+
+function save() {
+  emit("save", {
+    ...props.board,
+    title: draft.title,
+    description: draft.description,
+    enabled: draft.enabled === "enabled",
+  });
+}
+</script>
+
+<template>
+  <form class="board-edit-form" @submit.prevent="save">
+    <div class="board-edit-form__intro">
+      <p class="eyebrow">Board details</p>
+      <p>
+        {{
+          props.createMode
+            ? "创建一个新的公开板块，之后可以在板块表格中添加群组并调整成员顺序。"
+            : "编辑板块的公开标题、说明和启用状态；成员顺序仍在板块表格中调整。"
+        }}
+      </p>
+    </div>
+    <label class="admin-edit-field">
+      <span>板块标题</span>
+      <span class="admin-edit-field__control">
+        <input v-model="draft.title" type="text" maxlength="60" required />
+      </span>
+    </label>
+    <label class="admin-edit-field">
+      <span>板块描述</span>
+      <span class="admin-edit-field__control admin-edit-field__control--textarea">
+        <textarea v-model="draft.description" rows="4" maxlength="200"></textarea>
+      </span>
+      <small>{{ draft.description.length }}/200</small>
+    </label>
+    <PrototypeSelect v-model="draft.enabled" label="状态" :options="enabledOptions" />
+    <div class="board-edit-form__summary">
+      <span>当前成员</span><strong>{{ props.board.members.length }} 个群组</strong>
+    </div>
+    <div class="admin-edit-form__footer">
+      <PrototypeButton variant="quiet" type="button" @click="emit('cancel')">取消</PrototypeButton>
+      <PrototypeButton variant="normal" type="submit" icon="check">
+        {{ props.createMode ? "创建板块" : "保存板块" }}
+      </PrototypeButton>
+    </div>
+  </form>
+</template>

@@ -16,6 +16,8 @@ export default tseslint.config(
       ".claude",
       ".agents",
       ".codegraph",
+      ".references",
+      "prototype/dist",
       "eslint.config.mjs",
       "postcss.config.js",
       "tests/workers",
@@ -82,6 +84,13 @@ export default tseslint.config(
       "vue/html-closing-bracket-newline": "off",
       // Core rule does not account for script-setup bindings consumed by Vue templates.
       "no-useless-assignment": "off",
+    },
+  },
+  {
+    files: ["prototype/**/*.vue"],
+    rules: {
+      "vue/multiline-html-element-content-newline": "off",
+      "vue/require-default-prop": "off",
     },
   },
 );
