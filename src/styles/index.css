@@ -568,37 +568,6 @@ h3 {
   flex: 0 0 auto;
   animation: app-spin 700ms linear infinite;
 }
-.sample-state-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-  margin: var(--space-6) 0 calc(var(--space-6) * -1);
-  padding: 10px 12px;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  font-size: 0.76rem;
-}
-.sample-state-bar__label {
-  margin-right: auto;
-  font-weight: 750;
-}
-.sample-state-bar button {
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  padding: 6px 10px;
-  color: var(--text-secondary);
-  background: transparent;
-  font-size: 0.75rem;
-}
-.sample-state-bar button:hover,
-.sample-state-bar button.is-selected {
-  border-color: var(--border-default);
-  color: var(--text-primary);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-raised);
-}
 
 .app-section,
 .token-section {
@@ -1316,6 +1285,9 @@ h3 {
 .table-link-button--danger {
   color: var(--danger);
 }
+.table-link-button--success {
+  color: var(--success);
+}
 .table-more-button {
   display: none;
   width: 32px;
@@ -1752,10 +1724,10 @@ h3 {
 }
 .qr-placeholder {
   display: grid;
-  min-height: 170px;
   place-items: center;
-  gap: 5px;
+  gap: 8px;
   margin-top: 14px;
+  padding: 14px;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
   color: var(--text-muted);
@@ -1767,10 +1739,20 @@ h3 {
     transparent 16px
   );
 }
+.qr-placeholder__image {
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
 .qr-placeholder span {
   color: var(--text-primary);
   font-size: 4rem;
   line-height: 1;
+}
+.qr-placeholder__hint {
+  color: var(--text-muted) !important;
+  font-size: 0.72rem;
 }
 .qr-placeholder small {
   font-size: 0.72rem;
@@ -2967,12 +2949,6 @@ h3 {
   .tag-card__hash {
     font-size: 1.25rem;
   }
-  .sample-state-bar {
-    align-items: start;
-  }
-  .sample-state-bar__label {
-    flex-basis: 100%;
-  }
   .admin-hero {
     align-items: start;
     flex-direction: column;
@@ -3006,6 +2982,10 @@ h3 {
   }
   .admin-table__actions .table-link-button {
     display: none;
+  }
+  /* 回收站模式：恢复/永久删除是核心操作，窄屏也必须可用 */
+  .admin-table--recycle-bin .admin-table__actions .table-link-button {
+    display: inline-flex;
   }
   .admin-table__actions .table-more-button {
     display: inline-flex;
@@ -3151,4 +3131,49 @@ h3 {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ─── 管理登录页 ───────────────────────────────────────── */
+.login-page {
+  display: flex;
+  justify-content: center;
+  padding: 48px 16px 80px;
+}
+.login-card {
+  width: min(100%, 420px);
+  padding: 28px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised);
+}
+.login-card h1 {
+  margin: 4px 0 22px;
+  font-size: 1.15rem;
+  letter-spacing: 0.01em;
+}
+.login-card .admin-edit-field {
+  width: 100%;
+}
+.login-card__submit {
+  width: 100%;
+  margin-top: 18px;
+}
+
+/* ─── 永久删除确认 ─────────────────────────────────────── */
+.purge-confirm {
+  display: grid;
+  gap: 10px;
+}
+.purge-confirm p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.purge-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
 }

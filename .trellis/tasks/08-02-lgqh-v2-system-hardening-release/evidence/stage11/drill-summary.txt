@@ -1,0 +1,8 @@
+T06 迁移演练汇总（2026-08-02）
+- 演练一 空库全量：4 migrations ✅，boards=1 默认板块固定 UUID
+- 演练二 现有库(0001-0003+旧数据)：旧群组保留，last_published_at NULL，默认板块 1
+- 演练三 重复执行：--file 报 duplicate column（无版本保护），失败无副作用，数据完整
+- 演练四 中断恢复：补跑剩余语句成功，结构完整
+- 演练五 回滚闭环：备份→破坏→恢复成功（WAL 需完整备份；生产用 D1 官方备份）
+- 演练六 新代码旧库：/boards 返回 INTERNAL_ERROR（干净失败）
+- 正式路径 wrangler migrations apply 幂等（d1_migrations 版本表）

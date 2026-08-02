@@ -33,7 +33,6 @@ import { useTheme, type ThemePreference } from "@/features/theme/useTheme";
 
 type ViewName = "home" | "admin";
 type AdminTab = "groups" | "boards" | "stats";
-type PreviewState = "ready" | "loading" | "empty" | "error";
 type AdminSortField = "title" | "status" | "tags" | "kind" | "likes" | "platform";
 type AdminSortDirection = "asc" | "desc" | null;
 
@@ -60,7 +59,6 @@ const groupDetail = useGroupDetail();
 const adminTab = ref<AdminTab>("groups");
 const searchQuery = ref("");
 const activeTag = ref("");
-const previewState = ref<PreviewState>("ready");
 const selectedGroupId = ref<string | null>(null);
 const selectedAdminGroupId = ref<string | null>(null);
 const selectedAdminGroupContext = ref<{ boardId: string; groupId: string } | null>(null);
@@ -210,7 +208,6 @@ function closeToast(id: number) {
 function setSearch(value: string) {
   searchQuery.value = value;
   activeTag.value = "";
-  previewState.value = "ready";
   publicDirectory.search(value);
 }
 
@@ -227,7 +224,6 @@ function toggleRecycleBin() {
 function useTag(tag: string) {
   activeTag.value = activeTag.value === tag ? "" : tag;
   searchQuery.value = activeTag.value;
-  previewState.value = "ready";
   publicDirectory.searchImmediate(activeTag.value);
 }
 
@@ -242,7 +238,7 @@ async function toggleLike(group: DemoGroup) {
     ...localLikeState.value,
     [group.id]: { liked: nextLiked, likes: nextCount },
   };
-  showToast(nextLiked ? "已点赞，不会打开详情" : "已取消点赞", "info");
+  showToast(nextLiked ? "已点赞" : "已取消点赞", "info");
 }
 
 function openGroup(group: DemoGroup) {
@@ -304,6 +300,7 @@ function openPublicSubmitDialog() {
     status: "published",
     inRecycleBin: false,
     joinMethods: [],
+    contact: "",
   };
 }
 
@@ -335,6 +332,7 @@ async function submitPublicGroup(next: DemoGroup) {
     url: url || undefined,
     tags: next.tags.length ? next.tags : undefined,
     description: next.description || undefined,
+    contact: next.contact?.trim() || undefined,
     turnstileToken: "placeholder",
   });
   if (!result.ok) {
@@ -386,14 +384,32 @@ function copyJoinMethod(method: DemoGroup["joinMethods"][number]) {
   }
 }
 
+/** 是否为 iOS（iOS Safari 不支持直接下载到相册，需引导长按保存） */
+function isIOSDevice() {
+  const ua = navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
+}
+
+function saveQrCode(method: DemoGroup["joinMethods"][number]) {
+  if (method.type !== "qr" || !method.value) return;
+  if (isIOSDevice()) {
+    // iOS：系统弹窗由长按图片触发（存储图像→选择保存位置/相册）
+    showToast("长按二维码图片即可保存到相册", "info");
+    return;
+  }
+  // 网页端：触发图片下载
+  const link = document.createElement("a");
+  link.href = method.value;
+  link.download = "group-qr-code.webp";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showToast("二维码已保存", "success");
+}
+
 async function shareGroup() {
   if (!selectedGroup.value) return;
   await copyText(`${window.location.origin}/?group=${selectedGroup.value.id}`, "分享链接已复制");
-}
-
-function setPreviewState(state: PreviewState) {
-  previewState.value = state;
-  if (state !== "ready") searchQuery.value = "";
 }
 
 /** 板块顺序批量更新（服务端原子写入；失败时重新拉取服务端顺序） */
@@ -451,6 +467,27 @@ watch(adminFilter, (label) => {
 function removeAdminGroup(group: DemoGroup) {
   void adminDirectory.softDelete(group.id).then((ok) => {
     showToast(ok ? `已删除“${group.title}”` : "删除失败，请稍后重试", ok ? "success" : "warning");
+  });
+}
+
+function restoreAdminGroup(group: DemoGroup) {
+  void adminDirectory.restore(group.id).then((ok) => {
+    showToast(ok ? `已恢复“${group.title}”` : "恢复失败，请稍后重试", ok ? "success" : "warning");
+  });
+}
+
+const purgeConfirmGroup = ref<DemoGroup | null>(null);
+
+function purgeAdminGroup(group: DemoGroup) {
+  purgeConfirmGroup.value = group;
+}
+
+function confirmPurgeGroup() {
+  const group = purgeConfirmGroup.value;
+  if (!group) return;
+  purgeConfirmGroup.value = null;
+  void adminDirectory.purge(group.id).then((ok) => {
+    showToast(ok ? `已永久删除“${group.title}”` : "永久删除失败，请稍后重试", ok ? "success" : "warning");
   });
 }
 
@@ -514,6 +551,9 @@ async function saveAdminGroup(next: DemoGroup) {
   }
   closeAdminGroupEdit();
   showToast("群组修改已保存");
+  // 板块成员表标题来自服务端快照，保存后刷新以同步标题/状态
+  void adminBoards.load();
+  void loadAdminGroupPool();
 }
 
 function deleteAdminGroup(group: DemoGroup) {
@@ -682,10 +722,11 @@ function removeScrollListener() {
           <Icon name="github" size="17" /><span>{{ siteConfig.header.githubLabel }}</span>
         </a>
         <Button
+          v-if="view === 'home'"
           variant="normal"
           size="sm"
           icon="plus"
-          @click="view === 'admin' ? openAdminCreateDialog() : openPublicSubmitDialog()"
+          @click="openPublicSubmitDialog()"
           ><span class="add-group-label">{{ siteConfig.header.addGroup.label }}</span></Button
         >
       </div>
@@ -708,37 +749,16 @@ function removeScrollListener() {
             placeholder="试试“设计”、城市或兴趣关键词"
             clearable
             :status="
-              previewState === 'loading'
+              publicDirectory.loading.value
                 ? 'loading'
-                : previewState === 'error'
+                : publicDirectory.error.value
                   ? 'error'
                   : 'default'
             "
-            :help-text="previewState === 'error' ? '样例正在演示搜索失败状态。' : ''"
+            :help-text="publicDirectory.error.value ?? ''"
             @update:model-value="setSearch"
             @clear="setSearch('')"
           />
-        </section>
-
-        <section class="sample-state-bar" aria-label="样例状态切换">
-          <span class="sample-state-bar__label">查看状态样例</span>
-          <button
-            v-for="state in ['ready', 'loading', 'empty', 'error'] as PreviewState[]"
-            :key="state"
-            type="button"
-            :class="{ 'is-selected': previewState === state }"
-            @click="setPreviewState(state)"
-          >
-            {{
-              state === "ready"
-                ? "默认"
-                : state === "loading"
-                  ? "加载"
-                  : state === "empty"
-                    ? "空状态"
-                    : "错误"
-            }}
-          </button>
         </section>
 
         <template v-if="!isSearchMode">
@@ -810,23 +830,20 @@ function removeScrollListener() {
             </div>
             <span class="section-heading__hint">{{ filteredGroups.length }} 个结果</span>
           </div>
-          <div v-if="previewState === 'loading'" class="skeleton-grid" aria-label="群组加载中">
+          <div
+            v-if="publicDirectory.loading.value && filteredGroups.length === 0"
+            class="skeleton-grid"
+            aria-label="群组加载中"
+          >
             <span v-for="index in 4" :key="index" class="app-skeleton-card"></span>
           </div>
-          <div
-            v-else-if="previewState === 'error'"
-            class="app-alert app-alert--danger"
-            role="alert"
-          >
+          <div v-else-if="publicDirectory.error.value" class="app-alert app-alert--danger" role="alert">
             <Icon name="warning" size="19" /><span
-              ><strong>样例搜索暂时不可用</strong
-              ><small>这条错误只用于查看反馈层级，不会发出 API 请求。</small></span
-            ><Button variant="quiet" size="sm" @click="setPreviewState('ready')">重试样例</Button>
+              ><strong>加载失败</strong
+              ><small>{{ publicDirectory.error.value }}</small></span
+            ><Button variant="quiet" size="sm" @click="publicDirectory.retry()">重试</Button>
           </div>
-          <div
-            v-else-if="previewState === 'empty' || filteredGroups.length === 0"
-            class="app-empty"
-          >
+          <div v-else-if="filteredGroups.length === 0" class="app-empty">
             <span class="app-empty__icon">⌁</span><strong>还没有匹配的群组</strong
             ><span>换一个关键词，或浏览上面的标签。</span
             ><Button variant="normal" size="sm" @click="setSearch('')">清除筛选</Button>
@@ -925,8 +942,11 @@ function removeScrollListener() {
                 :groups="filteredAdminGroups"
                 :sort-field="adminSortField"
                 :sort-direction="adminSortDirection"
+                :recycle-bin="showRecycleBin"
                 @open="openAdminGroupEdit"
                 @remove="removeAdminGroup"
+                @restore="restoreAdminGroup"
+                @purge="purgeAdminGroup"
                 @sort="cycleSort"
               />
               <div class="pagination">
@@ -1018,9 +1038,18 @@ function removeScrollListener() {
             }}</span
             ><span
               ><strong>{{ method.label }}</strong
-              ><small>{{ method.type === "qr" ? "模拟二维码区域" : method.value }}</small></span
+              ><small>{{
+                method.type === "qr" ? "扫描下方二维码" : method.value
+              }}</small></span
             ><Button
-              v-if="method.type !== 'qr'"
+              v-if="method.type === 'qr'"
+              variant="quiet"
+              size="sm"
+              icon="download"
+              @click="saveQrCode(method)"
+              >保存</Button
+            ><Button
+              v-else
               variant="quiet"
               size="sm"
               :icon="method.type === 'link' ? 'external' : 'copy'"
@@ -1033,7 +1062,12 @@ function removeScrollListener() {
           v-if="selectedGroup.joinMethods.some((method) => method.type === 'qr')"
           class="qr-placeholder"
         >
-          <span>⌗</span><small>二维码占位 · 不对应真实群组</small>
+          <img
+            v-if="selectedGroup.joinMethods.find((m) => m.type === 'qr')?.value"
+            :src="selectedGroup.joinMethods.find((m) => m.type === 'qr')?.value"
+            alt="群组二维码"
+            class="qr-placeholder__image"
+          /><span class="qr-placeholder__hint">扫码或长按图片保存</span>
         </div>
       </div>
       <template #footer
@@ -1145,6 +1179,26 @@ function removeScrollListener() {
         @add="addGroupToBoard"
         @cancel="selectedBoardAddGroupId = null"
       />
+    </Dialog>
+
+    <Dialog
+      v-if="purgeConfirmGroup"
+      :title="`永久删除「${purgeConfirmGroup.title}」？`"
+      labelled-by="purge-confirm-dialog-title"
+      size="form"
+      test-id="purge-confirm-dialog"
+      @close="purgeConfirmGroup = null"
+    >
+      <div class="purge-confirm">
+        <p>该操作将删除群组及其全部关联数据（板块成员、标签、加群方式、点赞），不可恢复。</p>
+        <p>删除 R2 中的头像与二维码资源（若存在引用）。</p>
+        <div class="purge-confirm__actions">
+          <Button variant="quiet" @click="purgeConfirmGroup = null">取消</Button>
+          <Button variant="normal" tone="danger" icon="trash" @click="confirmPurgeGroup">
+            确认永久删除
+          </Button>
+        </div>
+      </div>
     </Dialog>
 
     <Toast :items="toastItems" @close="closeToast" />

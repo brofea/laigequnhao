@@ -11,8 +11,8 @@ export function createSubmissionService(
       input: SubmissionRequest,
       clientKey: string,
     ): Promise<{ id: string; title: string }> {
-      // 频率限制（默认每小时 5 次）
-      const limited = await rateLimitRepo.checkLimit(`submission:${clientKey}`, 5, 60 * 60 * 1000);
+      // 频率限制（PRD：单个 IP/设备每小时最多成功提交新群组 1 次）
+      const limited = await rateLimitRepo.checkLimit(`submission:${clientKey}`, 1, 60 * 60 * 1000);
       if (!limited) {
         throw new RateLimitError();
       }

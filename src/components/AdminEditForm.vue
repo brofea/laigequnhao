@@ -48,7 +48,7 @@ const draft = reactive({
   status: props.group.status,
   tags: [...props.group.tags],
   joinMethods: cloneJoinMethods(props.group.joinMethods),
-  contact: "提交者仅在私密审核区可见",
+  contact: props.publicMode ? (props.group.contact ?? "") : "提交者仅在私密审核区可见",
   auditNotes: "已完成基础内容审核，等待下一次公开复核。",
 });
 const newTag = ref("");
@@ -107,6 +107,8 @@ function removeTag(tag: string) {
 }
 
 function addJoinMethod(type: JoinMethod["type"] = newJoinMethodType.value) {
+  // 每种加群方式最多一个：已存在同类型则忽略
+  if (draft.joinMethods.some((method) => method.type === type)) return;
   const config = joinMethodConfig[type];
   draft.joinMethods.push({
     id: `method-${String(draft.joinMethods.length + 1)}`,
@@ -204,6 +206,7 @@ function save() {
     tags: [...draft.tags],
     joinMethods: cloneJoinMethods(draft.joinMethods),
     logoR2Key: logoR2Key.value,
+    contact: props.publicMode ? draft.contact : props.group.contact,
   };
   emit("save", next);
 }
@@ -224,7 +227,6 @@ function save() {
           <p class="eyebrow">Identity</p>
           <h3>头像与基本信息</h3>
         </div>
-        <span class="table-muted">字段与 v1 抽屉一致</span>
       </div>
       <div class="admin-edit-avatar-row">
         <span
@@ -368,7 +370,7 @@ function save() {
                 <Icon name="upload" size="16" />
                 <span class="app-button__label">上传图片</span>
               </label>
-              <small>支持图片预览；单个 IP/设备每小时最多成功上传 1 次。</small>
+              <small>最大上传 5MB 图片，支持多种格式。</small>
             </div>
           </template>
           <div v-else class="admin-edit-join-inputs">
@@ -414,6 +416,22 @@ function save() {
         <span>审核备注</span>
         <span class="admin-edit-field__control admin-edit-field__control--textarea">
           <textarea v-model="draft.auditNotes" rows="3"></textarea>
+        </span>
+      </label>
+    </section>
+
+    <section v-if="props.publicMode" class="admin-edit-section">
+      <div class="admin-edit-section__heading">
+        <div>
+          <p class="eyebrow">Private contact</p>
+          <h3>私密联系方式</h3>
+        </div>
+        <span class="table-muted">仅管理员可见，不会公开展示</span>
+      </div>
+      <label class="admin-edit-field">
+        <span>提交者联系方式</span>
+        <span class="admin-edit-field__control">
+          <input v-model="draft.contact" type="text" placeholder="邮箱、QQ 或微信号" />
         </span>
       </label>
     </section>

@@ -1,0 +1,164 @@
+{
+  "app": {
+    "name": "app-home",
+    "url": "http://localhost:5173/",
+    "headings": [],
+    "sections": [],
+    "regions": [],
+    "brand": null,
+    "hero": null,
+    "hasHorizScroll": false,
+    "theme": null,
+    "cards": 0,
+    "slides": 0,
+    "tagCards": 0
+  },
+  "proto": {
+    "name": "proto-home",
+    "url": "http://127.0.0.1:4174/",
+    "headings": [
+      "找一个值得加入的群",
+      "发现新群",
+      "所有标签",
+      "创意与设计",
+      "城市生活",
+      "待整理板块",
+      "所有群组"
+    ],
+    "sections": [
+      {
+        "labelledby": null,
+        "cls": "hero-section",
+        "h": 250
+      },
+      {
+        "labelledby": null,
+        "cls": "sample-state-bar",
+        "h": 53
+      },
+      {
+        "labelledby": "discover-title",
+        "cls": "proto-section proto-section--carousel",
+        "h": 306
+      },
+      {
+        "labelledby": "tag-title",
+        "cls": "proto-section",
+        "h": 120
+      },
+      {
+        "labelledby": "board-creative",
+        "cls": "proto-section proto-section--carousel",
+        "h": 306
+      },
+      {
+        "labelledby": "board-city-life",
+        "cls": "proto-section proto-section--carousel",
+        "h": 306
+      },
+      {
+        "labelledby": "board-empty-board",
+        "cls": "proto-section proto-section--carousel proto-section--empty-board",
+        "h": 242
+      },
+      {
+        "labelledby": "groups-title",
+        "cls": "proto-section",
+        "h": 666
+      }
+    ],
+    "regions": [
+      {
+        "cls": "hero-section",
+        "x": 24,
+        "y": 112,
+        "w": 1232,
+        "h": 250
+      },
+      {
+        "cls": "carousel-shell",
+        "x": 24,
+        "y": 517,
+        "w": 1232,
+        "h": 240
+      },
+      {
+        "cls": "tag-grid",
+        "x": 24,
+        "y": 859,
+        "w": 1232,
+        "h": 54
+      },
+      {
+        "cls": "tag-card",
+        "x": 24,
+        "y": 859,
+        "w": 166,
+        "h": 54
+      },
+      {
+        "cls": "group-grid",
+        "x": 24,
+        "y": 1978,
+        "w": 1232,
+        "h": 600
+      },
+      {
+        "cls": "group-card",
+        "x": 24,
+        "y": 537,
+        "w": 237,
+        "h": 192
+      },
+      {
+        "cls": "board-carousel",
+        "x": 24,
+        "y": 1015,
+        "w": 1232,
+        "h": 240
+      },
+      {
+        "cls": "carousel-track",
+        "x": 24,
+        "y": 517,
+        "w": 1232,
+        "h": 240
+      },
+      {
+        "cls": "carousel-slide",
+        "x": 24,
+        "y": 537,
+        "w": 237,
+        "h": 192
+      },
+      {
+        "cls": "theme-control",
+        "x": 980,
+        "y": 19,
+        "w": 70,
+        "h": 38
+      },
+      {
+        "cls": "sample-state-bar",
+        "x": 24,
+        "y": 386,
+        "w": 1232,
+        "h": 53
+      },
+      {
+        "cls": "carousel-controls",
+        "x": 1182,
+        "y": 463,
+        "w": 74,
+        "h": 34
+      }
+    ],
+    "brand": "找一个值得加入的群",
+    "hero": "找一个值得加入的群",
+    "hasHorizScroll": false,
+    "theme": null,
+    "cards": 25,
+    "slides": 13,
+    "tagCards": 7
+  }
+}

@@ -15,7 +15,47 @@ const props = withDefaults(
 
 const emit = defineEmits<{ close: [] }>();
 const closeButton = ref<HTMLButtonElement | null>(null);
+const dialogElement = ref<HTMLElement | null>(null);
 let previousActiveElement: HTMLElement | null = null;
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function focusableElements(): HTMLElement[] {
+  const root = dialogElement.value;
+  if (!root) return [];
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (el) => !el.hasAttribute("hidden") && el.getClientRects().length > 0,
+  );
+}
+
+/** 焦点锁定：Tab/Shift+Tab 在弹窗内循环，不逃逸到背景页面 */
+function trapFocus(event: KeyboardEvent) {
+  if (event.key !== "Tab") return;
+  const focusable = focusableElements();
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (!first || !last) return;
+  const active = document.activeElement;
+  const root = dialogElement.value;
+  const activeInDialog = active instanceof HTMLElement && Boolean(root?.contains(active));
+
+  if (!activeInDialog) {
+    // 焦点在弹窗外（遮罩/背景）：拉回弹窗内
+    event.preventDefault();
+    const target = event.shiftKey ? last : first;
+    target.focus();
+    return;
+  }
+  if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
 
 function closeOnEscape(event: KeyboardEvent) {
   if (event.key === "Escape") emit("close");
@@ -26,12 +66,14 @@ onMounted(() => {
     document.activeElement instanceof HTMLElement ? document.activeElement : null;
   document.body.style.overflow = "hidden";
   document.addEventListener("keydown", closeOnEscape);
+  document.addEventListener("keydown", trapFocus);
   void nextTick(() => closeButton.value?.focus());
 });
 
 onBeforeUnmount(() => {
   document.body.style.overflow = "";
   document.removeEventListener("keydown", closeOnEscape);
+  document.removeEventListener("keydown", trapFocus);
   previousActiveElement?.focus();
 });
 </script>
@@ -45,6 +87,7 @@ onBeforeUnmount(() => {
       @click="emit('close')"
     ></button>
     <section
+      ref="dialogElement"
       class="app-dialog"
       :class="`app-dialog--${props.size ?? 'detail'}`"
       :data-dialog="props.testId"

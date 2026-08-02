@@ -16,11 +16,28 @@ export type LikeStateSource = {
   isLiked(groupId: string): boolean;
 };
 
+/** 加群方式展示顺序：群号 → 邀请链接 → 二维码（RPD 补充要求，展示与存储解耦） */
+const JOIN_METHOD_ORDER: Record<string, number> = { number: 0, link: 1, qr: 2 };
+
 export function toDemoGroup(
   group: PublicGroupDto | AdminGroupDto,
   likeState: LikeStateSource,
 ): DemoGroup {
   const local = likeState.get(group.id);
+  const joinMethods: DemoGroup["joinMethods"] = group.joinMethods
+    .map<DemoGroup["joinMethods"][number]>((method, index) => ({
+      id: `${group.id}-method-${String(index)}`,
+      type: method.type === "group_number" ? "number" : method.type === "url" ? "link" : "qr",
+      label:
+        method.type === "group_number" ? "群号" : method.type === "url" ? "邀请链接" : "二维码",
+      value:
+        method.type === "qr_code"
+          ? "assetId" in method
+            ? (method.assetId ?? method.qrCodeUrl ?? "")
+            : (method.qrCodeUrl ?? "")
+          : (method.value ?? method.url ?? ""),
+    }))
+    .sort((a, b) => (JOIN_METHOD_ORDER[a.type] ?? 9) - (JOIN_METHOD_ORDER[b.type] ?? 9));
   return {
     id: group.id,
     title: group.title,
@@ -33,18 +50,7 @@ export function toDemoGroup(
     avatarState: group.logoUrl ? "ready" : "missing",
     status: group.status,
     inRecycleBin: "deletedAt" in group ? group.deletedAt !== null : false,
-    joinMethods: group.joinMethods.map((method, index) => ({
-      id: `${group.id}-method-${String(index)}`,
-      type: method.type === "group_number" ? "number" : method.type === "url" ? "link" : "qr",
-      label:
-        method.type === "group_number" ? "群号" : method.type === "url" ? "邀请链接" : "二维码",
-      value:
-        method.type === "qr_code"
-          ? "assetId" in method
-            ? (method.assetId ?? method.qrCodeUrl ?? "")
-            : (method.qrCodeUrl ?? "")
-          : (method.value ?? method.url ?? ""),
-    })),
+    joinMethods,
   };
 }
 

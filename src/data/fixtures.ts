@@ -41,6 +41,8 @@ export interface DemoGroup {
   joinMethods: JoinMethod[];
   /** Logo 资源标识（管理员编辑保存时提交） */
   logoR2Key?: string | null;
+  /** 提交者联系方式（仅提交/管理私密区，不公开展示） */
+  contact?: string | null;
 }
 
 export interface DemoBoard {

@@ -1,0 +1,19 @@
+{
+  "capturedAt": "2026-08-02T10:47:14.712Z",
+  "timezone": "Asia/Shanghai",
+  "baseline": "prototype v2 (4174) 与正式项目 (5173) 同视口/主题对照",
+  "files": [
+    "app-home-desktop-light",
+    "app-home-desktop-dark",
+    "app-home-mobile-light",
+    "app-home-mobile-dark",
+    "app-detail-dialog",
+    "app-admin-groups",
+    "app-admin-boards-tab",
+    "app-admin-drawer-edit",
+    "proto-home-desktop-light",
+    "proto-home-desktop-dark",
+    "proto-home-mobile-light",
+    "proto-home-mobile-dark"
+  ]
+}

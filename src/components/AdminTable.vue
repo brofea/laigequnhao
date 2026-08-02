@@ -10,10 +10,14 @@ const props = defineProps<{
   groups: DemoGroup[];
   sortField: AdminSortField | null;
   sortDirection: AdminSortDirection;
+  /** 回收站模式：操作列显示"恢复/永久删除"而非"编辑/删除" */
+  recycleBin?: boolean;
 }>();
 const emit = defineEmits<{
   open: [group: DemoGroup];
   remove: [group: DemoGroup];
+  restore: [group: DemoGroup];
+  purge: [group: DemoGroup];
   sort: [field: AdminSortField];
 }>();
 
@@ -34,9 +38,9 @@ function ariaSort(field: AdminSortField) {
 
 <template>
   <div class="admin-table-wrap">
-    <table class="admin-table">
+    <table class="admin-table" :class="{ 'admin-table--recycle-bin': props.recycleBin }">
       <caption class="app-sr-only">
-        固定模拟数据的群组管理列表
+        群组管理列表
       </caption>
       <thead>
         <tr>
@@ -93,24 +97,50 @@ function ariaSort(field: AdminSortField) {
           <td class="admin-table__likes">{{ group.likes }}</td>
           <td class="admin-table__platform">{{ group.platform }}</td>
           <td class="admin-table__actions">
-            <button class="table-link-button" type="button" @click="emit('open', group)">
-              <Icon name="edit" size="14" />编辑
-            </button>
-            <button
-              class="table-link-button table-link-button--danger"
-              type="button"
-              @click="emit('remove', group)"
-            >
-              <Icon name="trash" size="14" />删除
-            </button>
-            <button
-              class="table-more-button"
-              type="button"
-              aria-label="更多操作"
-              @click="emit('open', group)"
-            >
-              <Icon name="more" size="17" />
-            </button>
+            <template v-if="props.recycleBin">
+              <button
+                class="table-link-button table-link-button--success"
+                type="button"
+                @click="emit('restore', group)"
+              >
+                <Icon name="check" size="14" />恢复
+              </button>
+              <button
+                class="table-link-button table-link-button--danger"
+                type="button"
+                @click="emit('purge', group)"
+              >
+                <Icon name="trash" size="14" />永久删除
+              </button>
+              <button
+                class="table-more-button"
+                type="button"
+                aria-label="更多操作"
+                @click="emit('open', group)"
+              >
+                <Icon name="more" size="17" />
+              </button>
+            </template>
+            <template v-else>
+              <button class="table-link-button" type="button" @click="emit('open', group)">
+                <Icon name="edit" size="14" />编辑
+              </button>
+              <button
+                class="table-link-button table-link-button--danger"
+                type="button"
+                @click="emit('remove', group)"
+              >
+                <Icon name="trash" size="14" />删除
+              </button>
+              <button
+                class="table-more-button"
+                type="button"
+                aria-label="更多操作"
+                @click="emit('open', group)"
+              >
+                <Icon name="more" size="17" />
+              </button>
+            </template>
           </td>
         </tr>
       </tbody>

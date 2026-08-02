@@ -23,7 +23,8 @@ export type IconName =
   | "edit"
   | "more"
   | "warning"
-  | "upload";
+  | "upload"
+  | "download";
 
 const props = withDefaults(
   defineProps<{
@@ -86,6 +87,7 @@ const props = withDefaults(
       stroke-width="3"
     />
     <path v-else-if="props.name === 'upload'" d="M12 15V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" />
+    <path v-else-if="props.name === 'download'" d="M12 4v11m0 0-4-4m4 4 4-4M5 15v5h14v-5" />
     <path v-else-if="props.name === 'trash'" d="M5 7h14M10 11v5M14 11v5M9 7V4h6v3l-1 13h-4L9 7Z" />
     <path
       v-else-if="props.name === 'edit'"

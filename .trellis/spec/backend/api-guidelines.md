@@ -226,7 +226,7 @@ emit("update:assetId", clientKey, result.id, result.publicUrl);
 - 登录请求必须检查同源 `Origin`。登录成功后，服务端从会话 nonce 派生 CSRF token；`POST /admin/session` 和 `GET /admin/session` 在响应数据中返回该 token。
 - 除登录外，不安全的管理员方法必须同时检查同源 `Origin` 和 `X-CSRF-Token`。该 header 必须与当前会话以常量时间比较校验；退出登录也适用。CSRF token 不得持久化到本地存储。
 - 登录失败使用通用响应；默认按保护隐私的客户端分桶，每 15 分钟最多尝试 5 次。
-- 公开提交必须通过 Turnstile；默认按客户端分桶，每小时最多接受 5 次。
+- 公开提交必须通过 Turnstile；按客户端分桶，每小时最多成功提交 1 次。
 - 点赞使用幂等语义、投票者唯一约束，并默认按客户端分桶限制为每 10 分钟最多 30 次变更。
 - 限制必须在服务端执行，且返回 `Retry-After`。
 

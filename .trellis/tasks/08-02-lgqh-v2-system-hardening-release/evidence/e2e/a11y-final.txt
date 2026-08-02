@@ -1,0 +1,32 @@
+[WebServer] $ vite dev --host 127.0.0.1
+
+
+Running 16 tests using 1 worker
+
+[1/16] [chromium-desktop] › tests/e2e/a11y-flows.spec.ts:53:1 › 键盘 Tab 完成核心公开流程：卡片聚焦 + Enter 打开详情 + Escape 关闭并恢复焦点
+[2/16] [chromium-desktop] › tests/e2e/a11y-flows.spec.ts:98:1 › Dialog 关闭按钮可键盘操作，点赞按钮独立可聚焦
+[3/16] [chromium-desktop] › tests/e2e/a11y-flows.spec.ts:122:1 › 图标按钮具备可访问名称
+[4/16] [chromium-desktop] › tests/e2e/a11y-flows.spec.ts:134:1 › Toast 错误提示可被辅助技术感知（aria-live）
+[5/16] [chromium-desktop] › tests/e2e/a11y-flows.spec.ts:146:1 › 表格语义：表头 scope 与单元格结构正确
+[6/16] [chromium-desktop] › tests/e2e/a11y-flows.spec.ts:162:1 › 主题三态按钮具备 aria-pressed 状态语义（颜色不是唯一状态）
+[7/16] [chromium-desktop] › tests/e2e/a11y-flows.spec.ts:178:1 › reduced motion 偏好下核心动画关闭
+[8/16] [chromium-desktop] › tests/e2e/a11y-flows.spec.ts:190:1 › 对比度抽查：浅色/深色主题主要文字组合
+[chromium-desktop] › tests/e2e/a11y-flows.spec.ts:190:1 › 对比度抽查：浅色/深色主题主要文字组合
+[a11y] light 主题对比度: primary=13.74 secondary=5.66 muted=3.34 link=4.98 accent=4.47
+
+[a11y] dark 主题对比度: primary=16.12 secondary=9.45 muted=5.48 link=9.11 accent=8.25
+
+[9/16] [chromium-mobile] › tests/e2e/a11y-flows.spec.ts:53:1 › 键盘 Tab 完成核心公开流程：卡片聚焦 + Enter 打开详情 + Escape 关闭并恢复焦点
+[10/16] [chromium-mobile] › tests/e2e/a11y-flows.spec.ts:98:1 › Dialog 关闭按钮可键盘操作，点赞按钮独立可聚焦
+[11/16] [chromium-mobile] › tests/e2e/a11y-flows.spec.ts:122:1 › 图标按钮具备可访问名称
+[12/16] [chromium-mobile] › tests/e2e/a11y-flows.spec.ts:134:1 › Toast 错误提示可被辅助技术感知（aria-live）
+[13/16] [chromium-mobile] › tests/e2e/a11y-flows.spec.ts:146:1 › 表格语义：表头 scope 与单元格结构正确
+[14/16] [chromium-mobile] › tests/e2e/a11y-flows.spec.ts:162:1 › 主题三态按钮具备 aria-pressed 状态语义（颜色不是唯一状态）
+[15/16] [chromium-mobile] › tests/e2e/a11y-flows.spec.ts:178:1 › reduced motion 偏好下核心动画关闭
+[16/16] [chromium-mobile] › tests/e2e/a11y-flows.spec.ts:190:1 › 对比度抽查：浅色/深色主题主要文字组合
+[chromium-mobile] › tests/e2e/a11y-flows.spec.ts:190:1 › 对比度抽查：浅色/深色主题主要文字组合
+[a11y] light 主题对比度: primary=13.74 secondary=5.66 muted=3.34 link=4.98 accent=4.47
+
+[a11y] dark 主题对比度: primary=16.12 secondary=9.45 muted=5.48 link=9.11 accent=8.25
+
+  16 passed (14.4s)

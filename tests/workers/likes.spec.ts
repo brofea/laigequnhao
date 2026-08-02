@@ -113,4 +113,50 @@ describe("PUT/DELETE /api/v1/groups/:id/like", () => {
     });
     expect(response.status).toBe(400);
   });
+
+  it("keeps groups.like_count consistent with the likes table (regression: seed 曾导致显示跳变)", async () => {
+    const db = env.DB;
+    // 制造不一致存量数据：like_count 写死为大值，likes 表仅 1 行
+    const deviceId = crypto.randomUUID();
+    await db
+      .prepare("INSERT INTO likes (group_id, voter_hash) VALUES (?, ?)")
+      .bind(groupId, "deadbeefdeadbeef")
+      .run();
+    await db
+      .prepare("UPDATE groups SET like_count = 67 WHERE id = ?")
+      .bind(groupId)
+      .run();
+
+    // 点赞接口必须把 like_count 校正为 likes 实际行数（COUNT），而非沿用旧值
+    const response = await apiFetch("PUT", `/api/v1/groups/${groupId}/like`, {
+      "X-Device-Id": deviceId,
+    });
+    const json = (await response.json()) as {
+      ok: boolean;
+      data: { liked: boolean; likeCount: number };
+    };
+    expect(json.ok).toBe(true);
+    expect(json.data.likeCount).toBe(2); // 1 存量 + 1 新增
+
+    const row = await db
+      .prepare("SELECT like_count FROM groups WHERE id = ?")
+      .bind(groupId)
+      .first<{ like_count: number }>();
+    expect(row?.like_count).toBe(2);
+
+    // 取消后同样校正
+    const delResp = await apiFetch("DELETE", `/api/v1/groups/${groupId}/like`, {
+      "X-Device-Id": deviceId,
+    });
+    const delJson = (await delResp.json()) as {
+      ok: boolean;
+      data: { liked: boolean; likeCount: number };
+    };
+    expect(delJson.data.likeCount).toBe(1);
+    const rowAfter = await db
+      .prepare("SELECT like_count FROM groups WHERE id = ?")
+      .bind(groupId)
+      .first<{ like_count: number }>();
+    expect(rowAfter?.like_count).toBe(1);
+  });
 });

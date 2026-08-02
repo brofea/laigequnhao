@@ -434,6 +434,8 @@ function generateSQL(groups, { logos, qrCodes }) {
     title = title.replace("{标签}", tags.length > 0 ? pick(tags) : "综合");
 
     const likeCount = g.status === "published" ? rInt(0, 200) : 0;
+    // 与 likes 表行数保持一致（点赞接口用 COUNT(*) 覆盖 like_count，seed 必须可复现）
+    const likerCount = likeCount > 0 ? rInt(1, likeCount) : 0;
     const delAt = g.isDeleted ? `'${daysAgo(rInt(1, 14))}'` : "NULL";
 
     // Logo: 所有群都有
@@ -453,7 +455,7 @@ function generateSQL(groups, { logos, qrCodes }) {
     }
 
     lines.push(
-      `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, like_count, version, logo_r2_key, logo_url, logo_width, logo_height, logo_byte_length, deleted_at, created_at, updated_at) VALUES ('${id}', '${esc(title)}', '${esc(pick(DESCRIPTIONS))}', '${kind}', '${platform}', '${g.status}', '${rotKey}', ${likeCount}, 1, ${logoR2Key}, ${logoUrl}, ${logoW}, ${logoH}, ${logoB}, ${delAt}, '${daysAgo(rInt(1, 60))}', '${now()}');`,
+      `INSERT INTO groups (id, title, description, kind, platform, status, rotation_key, like_count, version, logo_r2_key, logo_url, logo_width, logo_height, logo_byte_length, deleted_at, created_at, updated_at) VALUES ('${id}', '${esc(title)}', '${esc(pick(DESCRIPTIONS))}', '${kind}', '${platform}', '${g.status}', '${rotKey}', ${likerCount}, 1, ${logoR2Key}, ${logoUrl}, ${logoW}, ${logoH}, ${logoB}, ${delAt}, '${daysAgo(rInt(1, 60))}', '${now()}');`,
     );
 
     // 加群方式
@@ -497,13 +499,11 @@ function generateSQL(groups, { logos, qrCodes }) {
       );
     }
 
-    // Likes（仅已发布群）
-    if (likeCount > 0) {
-      for (let v = 0; v < Math.min(likeCount, rInt(1, 30)); v++) {
-        lines.push(
-          `INSERT INTO likes (group_id, voter_hash) VALUES ('${id}', '${uuid().replace(/-/g, "").slice(0, 16)}');`,
-        );
-      }
+    // Likes（仅已发布群；行数 = like_count，保持计数可复现）
+    for (let v = 0; v < likerCount; v++) {
+      lines.push(
+        `INSERT INTO likes (group_id, voter_hash) VALUES ('${id}', '${uuid().replace(/-/g, "").slice(0, 16)}');`,
+      );
     }
     lines.push("");
   }
@@ -515,6 +515,10 @@ function generateSQL(groups, { logos, qrCodes }) {
   lines.push("COMMIT;");
   lines.push(
     `-- ${GROUP_COUNT} groups, ${logos.filter(Boolean).length} logos, ${qrCodes.filter(Boolean).length} QRs`,
+  );
+  // 一致性自检：like_count 必须等于 likes 实际行数（否则点赞接口会用 COUNT 覆盖，造成显示跳变）
+  lines.push(
+    "SELECT 'like_count_mismatch' AS check_name, COUNT(*) AS bad_count FROM (SELECT g.id FROM groups g LEFT JOIN likes l ON l.group_id = g.id GROUP BY g.id HAVING g.like_count != COUNT(l.voter_hash));",
   );
   return lines.join("\n");
 }

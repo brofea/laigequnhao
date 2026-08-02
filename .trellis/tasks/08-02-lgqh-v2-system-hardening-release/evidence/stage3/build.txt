@@ -1,0 +1,21 @@
+=== TYPECHECK+BUILD @ 10:18Z ===
+$ vue-tsc --build --force && tsc -p functions/tsconfig.json --noEmit
+$ vue-tsc --build --force && vite build
+vite v6.4.3 building for production...
+transforming...
+✓ 120 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                            0.52 kB │ gzip:  0.33 kB
+dist/assets/index-D6h6znm2.css                                            54.76 kB │ gzip: 10.49 kB
+dist/assets/HomeView-BTAyxLD1.js                                           0.28 kB │ gzip:  0.23 kB
+dist/assets/AdminView-CzLFlirI.js                                          0.70 kB │ gzip:  0.51 kB
+dist/assets/useAdminAuth-DB84IoNF.js                                       0.71 kB │ gzip:  0.40 kB
+dist/assets/LoginView-Y_cHZWum.js                                          2.87 kB │ gzip:  1.56 kB
+dist/assets/useTheme-C0bKKZCP.js                                          18.78 kB │ gzip:  6.63 kB
+dist/assets/VisualShell.vue_vue_type_script_setup_true_lang-CwxaYn-F.js   75.09 kB │ gzip: 23.86 kB
+dist/assets/index-jtdhBLYh.js                                            153.58 kB │ gzip: 51.04 kB
+✓ built in 981ms
+  0 errors and 35 warnings potentially fixable with the `--fix` option.
+
+✓ built in 1.00s

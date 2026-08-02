@@ -170,3 +170,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: T06 系统加固与发布验收 + 人工核验前端调整
+
+**Date**: 2026-08-02
+**Task**: T06 系统加固与发布验收 + 人工核验前端调整
+**Branch**: `main`
+
+### Summary
+
+T06 完成全量验收：Unit 82/Workers 103/E2E 68（补齐 PRD §29.3/§29.4 与无障碍）；性能/安全/迁移六项演练/部署 runbook 全过；修复 Dialog 焦点锁定、回收站恢复/永久删除 UI。用户人工核验后完成第二轮 15 项前端调整（删 sample-state-bar、修复 seed 点赞数不一致 bug、加群方式固定排序、二维码真实图+保存、提交限流改 1 次/小时、提交表单私密联系方式、登录页排版、永久删除确认 Dialog、板块编辑后刷新、admin 顶栏去添加按钮等）。acceptance.md 结论：通过（剩余 A1 Turnstile 待用户决策、C1/C2 部署暂缓）。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cb5db91` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
