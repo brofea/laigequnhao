@@ -108,6 +108,15 @@
 
 ## 3. 允许改动范围
 
+### 3.0 本地优先执行决策（已确认 2026-08-02）
+
+- 本任务按本地优先执行：本地环境跑通公开端与管理端全流程为验收前提。
+- **Turnstile 不在本任务集成**：不接入 Turnstile widget、不配置 Cloudflare site key、不修改投稿 Dialog。
+- 本地环境通过 `SKIP_TURNSTILE=true` 旁路；`placeholder` token 仅作为本地开发旁路，**不代表生产 Turnstile 已完成**，不得带入生产验收；该缺口记录进 T06 移交。
+- 不改变前端表现层：不修改 Vue 表现组件、CSS、布局、Dialog、动画或用户交互流程；演示占位元素（sample-state-bar、"仅视觉样例"徽章、演示分页器等）属于 T03 冻结基线，保留。
+- **组件内最小接线（已批准 2026-08-02）**：`BoardManagement.vue`（删除板块、成员上移/下移、成员移除）与 `AdminEditForm.vue`（图片/QR 上传）内加 emit 并替换 demo 处理器接入真实 API；按钮视觉、文案、布局、交互顺序零变化，改动仅限数据流向。
+- **冻结 UI 缺能力（记录缺口，不新增 UI，移交 T06）**：`BoardEditForm` 无 sortMode 控件（排序模式无法在管理 UI 修改）；QR 加群方式无法在管理 UI 真实配置；`BoardAddGroupForm` 仅客户端搜索（管理端群组池取前 50 条）；AdminEditForm 的图片上传只支持单图。
+
 ### 3.1 允许改动
 
 - `src/shared/api` 下的请求封装。
