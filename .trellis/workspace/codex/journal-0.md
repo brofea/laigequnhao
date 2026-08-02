@@ -136,3 +136,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: T05 全栈真实数据接线与 Mock 清理
+
+**Date**: 2026-08-02
+**Task**: T05 全栈真实数据接线与 Mock 清理
+**Branch**: `main`
+
+### Summary
+
+完成 T05 本地优先全流程：API client 归一化地基、公开端 discover/tags/boards/深链/分享真实接线、管理端页码 50 + URL 状态重写、板块管理全套真实接线（含批准的最小 emit 接线与图片/QR 上传）、修复公开首页误发管理请求等缺陷。单元 82 + Workers 103 + E2E 20 全绿；生产 bundle 无 demo 数据；Turnstile 以本地旁路移交 T06。归档 T05。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `97837e7` | (see git log) |
+| `88c67bd` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
