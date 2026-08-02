@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-0.md`
-- **Total Sessions**: 1
-- **Last Active**: 2026-08-01
+- **Total Sessions**: 2
+- **Last Active**: 2026-08-02
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-0.md` | ~38 | Active |
+| `journal-0.md` | ~71 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-08-02 | 完成 T02 V2 设计语言视觉样例 | `6e3431e` | `main` |
 | 1 | 2026-08-01 | T01 V2 方案审核与 Spec 修订 | `3faff04` | `main` |
 <!-- @@@/auto:session-history -->
 
