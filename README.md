@@ -1,8 +1,27 @@
-# 来个群号
+<div align="center">
+    <!--icon 待添加-->
+    <h1>来个群号</h1>
+    <p>为高校或大型企业等团体提供群聊发现导航网站。</p>
+    <p>一个群号，连接彼此。</p>
+    <p>
+        <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">
+            <img src="https://img.shields.io/badge/license-GPL--3.0-green" />
+        </a>
+        <a href="https://github.com/brofea">
+            <img src="https://img.shields.io/badge/brofea-brofea?label=GitHub&logo=github&color=purple" alt="GitHub Profile">
+        </a>
+    </p>
+</div>
 
-为高校或大型企业等团体提供群聊发现导航网站
+<div align="center">
+    <img width="2800" alt="image" src="https://github.com/user-attachments/assets/e8594c6e-aa86-4ca3-94ec-396a4011856f" />
+</div>
 
-**一个群号，连接彼此。**
+在大学、企业和社区中，新成员想要快速找到适合自己的群组资源，老成员希望发掘更多有价值的社群并分享给更多人。
+
+但现实中的群聊入口往往分散在聊天记录、朋友圈、公告栏或私下传播中，缺少统一的发现渠道。
+
+本项目希望建立一个公开、易维护、易部署的群组导航页面，让用户能够方便地浏览、搜索和加入感兴趣的群组，同时帮助组织者更高效地管理和运营社区资源。
 
 ## 技术栈
 
@@ -243,7 +262,7 @@ const siteConfig: SiteConfig = {
 
 ## 项目规范
 
-本项目使用 Trellis 管理开发流程。规范文档位于 `.trellis/spec/`：
+本项目使用 [Trellis](https://github.com/mindfold-ai/Trellis/) 管理开发流程。规范文档位于 `.trellis/spec/`：
 
 - `.trellis/spec/backend/` — 后端开发规范
 - `.trellis/spec/frontend/` — 前端开发规范
