@@ -1,5 +1,7 @@
 # T09 实施规划：管理端群组分页与响应式表格
 
+> 范围修订（2026-08-02）：执行前先验收 T03 已迁移的表格、分页器和抽屉；不得重做视觉层，后续步骤以真实 page/50/total API、URL、筛选、排序、删除退页、认证/CSRF、资源抽屉和测试为主。
+
 > 执行前置规则：进入执行或最终批准前，必须完整读取 `docs/PRD/v2/子任务09.md` 原文并逐条核对三份规划；先检查代码、测试、配置、Spec 和任务历史，再与用户按 Trellis Brainstorm 逐轮讨论，每次只问一个最高价值问题。每次用户回答后更新规划；即使无疑问也必须提交最终规划摘要并等待明确批准，未完成前不得实施或修改业务代码。
 
 > 当前阶段：planning。以下步骤在后续批准后执行；本轮不运行 `task.py start`，不改业务源码。
@@ -699,3 +701,30 @@ Rollback additive client/API first; keep old keyset method until public consumer
 - [ ] Confirm the handoff does not mark implementation complete before testing。
 - [ ] Confirm T10 can reproduce page, filter, sort, drawer, and deletion scenarios。
 - [ ] Confirm the task remains in planning until implementation is explicitly started。
+
+## T03 接入检查
+
+- [ ] 管理 page/50/total、筛选/排序、URL、编辑/删除和抽屉真实消费 T03 Token/响应式/无障碍基础。
+- [ ] 管理分页/共享壳层消费配置化标题“来个群号”、GitHub URL/文案和添加新群入口，配置回归不改变分页 query。
+- [ ] 认证/CSRF、版本冲突、资源生命周期和公开 cursor 保护有回归证据，未用 prototype Mock 替代。
+- [ ] 与 T03/T08/AdminView 的共享文件 owner、接入顺序和 T10 handoff 已记录。
+
+## 16. T03 迁移基线后的执行顺序（有效计划）
+
+1. 读取 T03 visual migration 的正式管理列表、分页器、列配置、抽屉和 owner 交接。
+2. 确认正式页面没有 prototype fixture、假 total、模拟分页状态或原型 storage 依赖。
+3. 审计 T04 群组 Contract、现有管理 endpoint、repository/service、认证/CSRF、资源和 T08 壳层。
+4. 先为 page/50/total、COUNT/items 条件、稳定排序、非法页和超页策略建立 Workers 测试。
+5. 接入 URL/query adapter、筛选/排序 reset、history、request cancel/race 和错误状态。
+6. 将真实 items/total 接入已迁移表格和分页器，不改变其视觉列优先级。
+7. 接入编辑/删除/恢复/状态变化后的刷新与退页，复用真实资源抽屉和冲突处理。
+8. 验证 360/390/768/1024/1280/1440、键盘、焦点、主题、软键盘和低高度行为。
+9. 回归公开 cursor、T08 board/analytics、认证/CSRF、资源生命周期和现有群组 CRUD。
+10. 将 page API、URL 矩阵、共享文件 owner 和 T10 证据交接。
+
+### 16.1 停止条件
+
+- T03 迁移表格/分页器/抽屉尚未可消费，或需要重新设计 UI。
+- COUNT/items 无法共享过滤条件，或 page API 需要变更未批准的业务语义。
+- 真实 mutation 需要绕过认证、CSRF、版本或资源生命周期。
+- 管理 page 逻辑开始修改公开 cursor、T08 board 或 Analytics owner。

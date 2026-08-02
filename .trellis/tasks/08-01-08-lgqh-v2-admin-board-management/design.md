@@ -1,5 +1,7 @@
 # T08 技术设计：管理端板块管理与三页面导航整合
 
+> 范围修订（2026-08-02）：本设计把 T03 迁移后的 AdminLayout、导航、表格、抽屉和板块视觉作为既有基线；T08 只设计真实板块数据流、权限、并发、成员操作、错误状态和与 T09 的共享边界。
+
 > 执行前置规则：进入执行或最终批准前，必须完整读取 `docs/PRD/v2/子任务08.md` 原文并逐条核对三份规划；先检查代码、测试、配置、Spec 和任务历史，再与用户按 Trellis Brainstorm 逐轮讨论，每次只问一个最高价值问题。每次用户回答后更新规划；即使无疑问也必须提交最终规划摘要并等待明确批准，未完成前不得实施或修改业务代码。
 
 > 设计草案。T08 依赖 T03/T05，必须在实际管理端审计、视觉输入和 API Contract 核对后冻结文件路径与路由。
@@ -247,3 +249,32 @@ candidate paging/debounce/status/exclude; add published/delisted/duplicate/trash
 - R08-05–06 → member table/actions/shared group drawer/trash sync。
 - R08-07 → auth/CSRF/version/error/a11y/theme/responsive。
 - T09 boundary → explicit owned files and no pagination/column rewrite。
+
+## T03 接入提示
+
+管理板块设计以 T03 正式 Token/主题/无障碍基础为消费契约；真实数据流为 AdminView/板块组件 → typed API → T05 route/service → 认证/CSRF/version → D1。原型仅可作为视觉参考，不可作为生产状态源；与 T09 共享的壳层改动必须有 owner 和回归边界。
+
+管理壳层的标题、品牌、GitHub 外链和添加新群入口沿用 T03/T04 站点配置；T08 只消费，不在 AdminView 或板块组件中硬编码。
+
+## 17. 迁移后设计修订：业务数据流优先
+
+T03 visual migration 是管理壳层和视觉组件迁移 owner。T08 的正式设计采用以下边界：
+
+- AdminLayout/Navigation/PageHeader/Table/Drawer/Dialog/Token：由 T03 提供，T08 只接入和回归。
+- Board API/Contract/版本/错误：由 T05 提供，T08 负责 client、页面状态和用户操作。
+- Group drawer：复用 T03 迁移后的正式组件，T08 负责从板块成员上下文打开、保存、移除/移动和焦点返回。
+- Admin groups pagination：由 T09 负责；T08 只提供稳定的壳层和插槽/路由边界。
+- Analytics：保留现有真实数据流，T08 不用 prototype 统计 fixture 替换。
+
+### 17.1 真实数据流
+
+```text
+T03 Admin shell
+  → T08 board state/client
+  → T05 typed board API
+  → auth + CSRF + version/mutation token
+  → D1 board/board_group data
+  → board/member/error/conflict UI
+```
+
+设计评审重点由“视觉是否做出来”改为“正式迁移组件是否接到正确 API、权限、并发和焦点生命周期”。

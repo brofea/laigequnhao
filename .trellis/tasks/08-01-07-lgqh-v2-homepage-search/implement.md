@@ -1,5 +1,7 @@
 # T07 实施规划：首页信息架构与搜索重构
 
+> 范围修订（2026-08-02）：执行前先验收 T03 已迁移的首页视觉骨架；后续步骤不得再次搭建首页、SearchHero、Card、Carousel 或 Dialog 外观，改为绑定真实 API、公开 DTO、搜索状态、URL、cursor、区域 loading/error/empty/retry 和回归测试。
+
 > 执行前置规则：进入执行或最终批准前，必须完整读取 `docs/PRD/v2/子任务07.md` 原文并逐条核对三份规划；先检查代码、测试、配置、Spec 和任务历史，再与用户按 Trellis Brainstorm 逐轮讨论，每次只问一个最高价值问题。每次用户回答后更新规划；即使无疑问也必须提交最终规划摘要并等待明确批准，未完成前不得实施或修改业务代码。
 
 > 当前阶段：planning。实施步骤在后续批准后执行；本轮不运行 `task.py start`，不创建子任务。
@@ -623,3 +625,30 @@ pnpm test:e2e
 - [ ] responsive/screenshot output。
 - [ ] slow network/offline/manual output。
 - [ ] T10 cross-feature integration list。
+
+## T03 接入检查
+
+- [ ] 首页/搜索真实消费 T03 顶栏、Token、主题和状态样式，未引入原型 fixture、主题 key 或模拟路由。
+- [ ] 首页/顶栏消费配置化标题“来个群号”、GitHub URL/文案和添加新群入口，配置变更可通过 schema/组件回归验证。
+- [ ] 真实公开 API/cursor、URL query、区域错误/加载/重试、T06 detail/like 交接均有回归证据。
+- [ ] 主题切换不改变 `q`/`group` 等查询参数，公开 cursor 未被管理分页改造污染。
+
+## 19. T03 迁移基线后的执行顺序（有效计划）
+
+1. 读取 T03 visual migration 的正式首页/壳层交接，确认页面骨架、组件引用和站点配置消费路径。
+2. 验证正式首页没有 prototype fixture、模拟搜索状态、原型路由或第二套主题状态。
+3. 盘点 T04/T05/T06 的真实字段、公开 API、Card/Dialog/URL Contract 和现有 cursor。
+4. 在真实 API client 上先建立 Discover、Tags、Boards、All Groups、Search 的 response/错误/取消测试。
+5. 将区域状态机接入已迁移的 HomeView，保留既有视觉区域和 loading/empty/error 结构。
+6. 接入 q、debounce、IME、history、q+group merge、清空和滚动/缓存恢复。
+7. 接入真实板块顺序/过滤、发现新群 limit、标签聚合、全部群组 cursor 和搜索 cursor。
+8. 接入 T06 正式 Card/Carousel/Dialog 与点赞同步，不改组件底层视觉。
+9. 执行 race/abort/duplicate/last-page/公开过滤/慢网和区域级 retry 回归。
+10. 把真实数据流、URL 矩阵、错误矩阵和视觉迁移差异交给 T10。
+
+### 19.1 停止条件
+
+- T03 正式 HomeView 尚未可消费，或只能通过复制 prototype 页面继续。
+- API/DTO 缺口需要修改 T05/T04 负责的业务语义而未完成交接。
+- 页面排版或 Dialog/Carousel 外观需要重新设计，而非数据接入修复。
+- q/group、公开 cursor 或管理 page 状态出现多个竞争来源。

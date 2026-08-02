@@ -1,12 +1,14 @@
 # 09 管理端群组分页与响应式表格
 
+> 范围修订（2026-08-02）：T02 `prototype/` 已完成管理表格、分页器、响应式列和抽屉视觉基线，T03 `t03-visual-migration` 负责迁移正式 `src/`；T09 不再重复实现表格外观，改为接入真实 page/50/total API、URL、筛选排序、删除退页、认证和回归测试。
+
 > 执行前置规则：本任务虽已有 PRD 与三份规划，进入执行或最终批准前，仍必须完整读取 `docs/PRD/v2/子任务09.md` 原文，逐条对照 `prd.md`、`design.md`、`implement.md`，记录并修正遗漏。必须先按 `trellis-brainstorm` 规则检查代码、测试、配置、Spec 和任务历史，再与用户进行 brainstorm；每次只提出一个最高价值问题，说明决策影响、推荐方案和取舍。每次用户回答后更新规划并重新检查需求收敛；即使没有剩余疑问，也必须展示最终规划摘要并等待用户明确批准。在原文复核和用户批准完成前，不得运行 `task.py start`、进入实施或修改业务代码；源 PRD 与用户最新决定优先于规划文件。
 
 > 状态：planning。T09 专注管理端群组列表页码分页、响应式列和窄屏抽屉；不改公开 cursor、不改板块/统计业务、不进入实施。
 
 ## 1. 任务定位与联合 Review
 
-T09 依赖 T03 的管理 Token/表格/抽屉基础和 T04 的群组 Contract/真实状态字段；若 T08 已完成，复用 AdminLayout、三页面导航和群组页面壳层，只改群组内容。产品、Staff Engineer、QA Review 冻结：
+T09 依赖 `t03-visual-migration` 的正式管理 Token/表格/抽屉基础和 T04 的群组 Contract/真实状态字段；若 T08 已完成，复用其稳定的 AdminLayout、三页面导航和群组页面壳层，只接入群组数据。产品、Staff Engineer、QA 联合 Review 冻结：
 
 1. 管理端群组列表从 keyset 改为传统页码分页，服务端固定 `pageSize = 50`，客户端不能选择 25/100 等其他大小。
 2. 响应必须含 `items/page/pageSize/totalItems/totalPages`；COUNT 与 items 使用完全相同筛选条件，搜索/标签 join 不重复计数。
@@ -92,3 +94,46 @@ URL 可恢复 page、q、status、trash、sort、direction；默认值规范一�
 ## 7. 交付状态
 
 本轮仅创建三份规划文件，T09 保持 `planning`，不运行 `task.py start`，不创建子任务。最终实施报告必须列出 API/COUNT/OFFSET、URL/分页器、稳定排序、删除退页、列阈值、抽屉、公开 cursor 保护和测试结果。
+
+## T03 正式视觉基础接入提示
+
+- T09 必须消费 T03 的 Token、主题、表格状态、响应式、焦点和窄屏抽屉基础；不得复制 T02 prototype 表格或主题状态。
+- 管理分页页面及其共享壳层必须消费配置化标题/品牌、GitHub URL/文案和添加新群入口，默认网站标题为“来个群号”，不得硬编码。
+- 管理分页/筛选/排序/编辑必须接入真实 page/50/total API、认证/CSRF、版本冲突和现有资源抽屉；公开 cursor、公开 API、T08 板块和 T03 主题契约不得被改写。
+- 交付需记录 AdminView/T08/T03 的共享接入点、真实 query/response、回归命令和未解决的跨任务阻塞。
+
+## 8. T03 迁移后的有效职责（覆盖前文 UI 实现归属）
+
+### 8.1 已确认基线
+
+- T02 prototype 已完成管理群组表格、分页器、响应式列、编辑/新建抽屉和状态样例。
+- T03 visual migration 负责把这些视觉基础迁移到正式 `src/`；T09 不再重做表格、分页器或抽屉外观。
+- T09 仍然负责后端 page API 与正式管理列表的数据状态，因此不是纯 QA 任务。
+
+### 8.2 T09 实际负责
+
+- 建立并接入固定 `pageSize=50`、page、totalItems、totalPages、COUNT/items 条件一致的真实 API。
+- 接入 q/status/trash/sort/direction URL、历史、筛选重置、非法页和超页规范化。
+- 接入稳定排序、跨页无重复/遗漏、删除/恢复/状态变化后的退页和重取。
+- 将真实认证、CSRF、版本冲突、资源抽屉和既有群组 CRUD 接入已迁移表格。
+- 验证 T03 的响应式列、分页器、抽屉、焦点、主题和无障碍没有被真实数据状态破坏。
+- 保护公开 cursor、T08 板块和 Analytics 不被管理 page 逻辑污染。
+
+### 8.3 不再由 T09 负责
+
+- 不重新设计/搭建表格、分页器、列隐藏、抽屉、Token 或管理视觉样例。
+- 不复制 prototype fixture、假 total、假页码或本地成功 CRUD。
+- 不修改 T08 AdminLayout/导航和 T05/T04 业务 Contract 的所有权。
+
+### 8.4 新前置条件和交接
+
+- 硬前置：T03 visual migration 已交付正式表格、分页器、抽屉和 responsive owner。
+- 硬前置：T04 群组 Contract/真实状态、既有管理 API 及 T08 壳层边界可审计。
+- T09 交给 T10：真实 page/50/total、URL、排序、退页、认证、抽屉和公开 cursor 保护证据。
+
+### 8.5 修订后的完成定义
+
+- [ ] 视觉页面复用 T03 迁移基线，T09 只做真实数据和状态接入。
+- [ ] page/50/total、COUNT、排序、筛选、URL、退页和错误状态有真实 API 证据。
+- [ ] 既有群组编辑/资源/认证能力和公开 cursor 无回归。
+- [ ] T08/T10 可以按交接契约消费群组列表，不需要重新实现视觉。

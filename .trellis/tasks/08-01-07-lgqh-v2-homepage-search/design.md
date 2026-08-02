@@ -1,5 +1,7 @@
 # T07 技术设计：首页信息架构与搜索重构
 
+> 范围修订（2026-08-02）：本设计把 T02/T03 的页面骨架视为既有输入；T07 负责真实首页数据编排、搜索/URL/cursor/竞态/区域状态和 API Contract 消费，只有发现正式迁移缺陷时才做最小接入修复。
+
 > 执行前置规则：进入执行或最终批准前，必须完整读取 `docs/PRD/v2/子任务07.md` 原文并逐条核对三份规划；先检查代码、测试、配置、Spec 和任务历史，再与用户按 Trellis Brainstorm 逐轮讨论，每次只问一个最高价值问题。每次用户回答后更新规划；即使无疑问也必须提交最终规划摘要并等待明确批准，未完成前不得实施或修改业务代码。
 
 > 设计草案。T07 只编排公开首页和搜索，不复制 T06 组件逻辑或 T05 板块逻辑；实际文件、接口字段和 cursor 以实现前审计为准。
@@ -252,3 +254,25 @@ Default order/region failure; discover; tags; boards/empty/zero/random; all grou
 - R07-07–11 → public API client/region data/cursor。
 - error/performance/security → independent state, abort, typed projection, tests。
 - AC-07-04 → complete Playwright/Workers/Vitest and T10 handoff。
+
+## T03 接入提示
+
+HomeView 是 T03 顶栏接入与 T07 页面编排的共享边界：T07 负责把真实公开查询、搜索 URL、板块/发现区域挂到 T03 的视觉壳层，不重新定义主题或顶栏。必须用真实 API/Contract 验证，不以 prototype 页面通过替代数据流证据，并记录与 T06 组件的消费顺序。
+
+HomeView 的品牌、浏览器标题、GitHub 外链和添加新群入口均从 T03/T04 的站点配置读取；“来个群号”只是默认值，不是散落在模板中的固定文案。
+
+## 17. 迁移后设计修订：数据编排优先
+
+T03 已拥有正式页面骨架的迁移责任，因此 T07 的设计从“组件/页面创建”调整为“真实数据编排层接入”：
+
+- T03 HomeView/壳层是承载页面；T07 不替换其 Token、顶栏、布局或 Dialog。
+- T05 PublicBoardsResponse、Discover、Tags、All Groups 和 Search 是真实数据输入；T07 只负责组合、状态和请求生命周期。
+- T06 GroupCard/Carousel/Dialog 是既有正式组件；T07 只传入公开 summary、区域状态和 route controller 所需参数。
+- `q`、`group`、cursor、滚动位置和缓存恢复必须只有一个正式状态源，不能从 prototype 或页面副本派生。
+- 区域 API 失败、旧响应、取消和重试必须在真实 client/contract 层测试，不能用 fixture 通过。
+
+### 17.1 设计交接
+
+- 输入：T03 正式 HomeView/Token/主题、T05 公共板块 Contract、T06 Card/Dialog/URL Contract、T04 状态与发布时间。
+- 输出：真实首页 API 编排、搜索状态机、区域状态模型、cursor/scroll/cache 规则和 T10 回归矩阵。
+- 不允许：新增页面、独立详情页、改变相关性算法、改变公开排序、把管理分页模型带到公开端。

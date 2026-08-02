@@ -1,5 +1,7 @@
 # T10 系统回归、无障碍与发布验收：设计规划
 
+> 范围修订（2026-08-02）：视觉基线比较对象是 T02 prototype 与 T03 迁移后的正式 `src/`；验收设计重点转为真实前端→API→认证/Contract→数据链路、迁移后行为和跨任务回归，不重复设计页面。
+
 > 执行前置规则：进入执行或最终批准前，必须完整读取 `docs/PRD/v2/子任务10.md` 原文并逐条核对三份规划；先检查代码、测试、配置、Spec 和任务历史，再与用户按 Trellis Brainstorm 逐轮讨论，每次只问一个最高价值问题。每次用户回答后更新规划；即使无疑问也必须提交最终规划摘要并等待明确批准，未完成前不得实施或修改业务代码。
 
 ## 1. 设计结论
@@ -297,3 +299,26 @@ T10 采用“冻结候选版本 → 建立隔离数据 → 自动化分层回归
 - 隐藏数据泄露：直接检查公开响应字段、缓存和深链接，不只检查页面文本。
 - 修复范围膨胀：每个修复绑定一个问题 ID 和原任务边界，超出即退回。
 - “全部通过”被过早填写：`acceptance.md` 只能在实际命令和人工检查完成后更新。
+
+## T03 接入提示
+
+T10 的证据链必须包含：正式 Vue 页面 → typed API client → 真实 API/认证/Contract → 数据库/R2（适用时）→ 用户可见状态。主题切换不得丢失 URL、Dialog、抽屉或表单状态；prototype 只作为视觉参考，不能作为真实接入证据。
+
+配置回归还要覆盖 `siteConfig` 的标题/品牌、GitHub URL/文案和添加新群文案/入口：默认标题为“来个群号”，默认 GitHub 为 `https://github.com/brofea/laigequnhao`，默认添加入口为现有提交弹窗；配置变化不得改写业务 API、认证或路由契约。
+
+## 15. 迁移后验收设计
+
+T10 的证据拓扑增加一层正式视觉迁移检查：
+
+```text
+T02 prototype visual baseline
+  → T03 visual migration formal src baseline
+  → T06/T07/T08/T09 real API + auth + Contract integration
+  → T10 cross-feature release gate
+```
+
+- prototype 截图用于确认视觉意图和迁移差异，不代表生产通过。
+- formal `src` 截图用于确认迁移没有丢失页面、Dialog、响应式、焦点和主题行为。
+- integrated screenshots/traces/API evidence 用于确认真实数据、错误、权限、分页、公开过滤和 URL 行为。
+- 差异分类必须包含：视觉迁移缺陷、真实接入缺陷、原有基线缺陷、浏览器差异和测试环境问题。
+- T10 不拥有 T06–T09 的 UI 重做；发现纯视觉迁移问题回到 T03，发现业务接入问题回到对应 owner。

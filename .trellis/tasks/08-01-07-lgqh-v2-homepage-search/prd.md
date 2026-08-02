@@ -1,12 +1,14 @@
 # 07 首页信息架构与搜索重构
 
+> 范围修订（2026-08-02）：T02 `prototype/` 已完成首页、搜索、标签、板块、Grid/Carousel、Dialog 等视觉页面，T03 `t03-visual-migration` 负责迁移正式壳层；T07 不再重复实现页面排版和组件视觉，改为接入真实公开 API、搜索状态、cursor、URL、区域容错和数据流测试。
+
 > 执行前置规则：本任务虽已有 PRD 与三份规划，进入执行或最终批准前，仍必须完整读取 `docs/PRD/v2/子任务07.md` 原文，逐条对照 `prd.md`、`design.md`、`implement.md`，记录并修正遗漏。必须先按 `trellis-brainstorm` 规则检查代码、测试、配置、Spec 和任务历史，再与用户进行 brainstorm；每次只提出一个最高价值问题，说明决策影响、推荐方案和取舍。每次用户回答后更新规划并重新检查需求收敛；即使没有剩余疑问，也必须展示最终规划摘要并等待用户明确批准。在原文复核和用户批准完成前，不得运行 `task.py start`、进入实施或修改业务代码；源 PRD 与用户最新决定优先于规划文件。
 
 > 状态：planning。T07 负责公开首页编排和搜索状态，不重新实现 T06 的卡片/Carousel/Dialog，也不进入实施。
 
 ## 1. 任务定位与联合 Review
 
-T07 依赖 T03 的顶栏/主题、T05 的公开板块 API 和 T06 的 GroupCard/HorizontalCarousel/GroupDetailsDialog/`group` URL 控制器；间接依赖 T04 的 `last_published_at`、公开 Contract 和状态过滤。交付新的默认首页、搜索模式、发现新群、所有标签、动态板块、所有群组 Grid 和搜索结果 Grid。
+T07 依赖 `t03-visual-migration` 的正式顶栏/主题/页面骨架、T05 的公开板块 API 和 T06 的真实 GroupCard/HorizontalCarousel/GroupDetailsDialog/`group` URL 接口；间接依赖 T04 的 `last_published_at`、公开 Contract 和状态过滤。交付真实数据驱动的默认首页、搜索模式、发现新群、所有标签、动态板块、所有群组 Grid 和搜索结果 Grid。
 
 产品、Staff Engineer、QA 联合 Review 后冻结：
 
@@ -147,3 +149,47 @@ T07 依赖 T03 的顶栏/主题、T05 的公开板块 API 和 T06 的 GroupCard/
 ## 10. 交付状态
 
 本轮只创建三份规划文件并保持 T07 `planning`，不运行 `task.py start`，不创建子任务。最终实施报告必须列出页面结构、搜索/URL、四类数据区域、cursor/竞态/缓存、容错、响应式、测试和 T10 系统回归接口。
+
+## T03 正式视觉基础接入提示
+
+- T07 必须消费 T03 正式顶栏、页面容器、Token、主题和公共状态；不得复制 T02 prototype 的数据层或视觉运行时。
+- HomeView 必须从站点配置消费标题/品牌、GitHub URL/文案和添加新群文案/入口，默认网站标题为“来个群号”，不得在首页组件中硬编码。
+- 首页/搜索必须接入真实公开 API、cursor、URL query 和区域错误/加载状态，保持搜索、点赞、详情和公开 published-only 数据契约；不得把管理分页语义带入公开端。
+- T07 交付需列出 T03 视觉基础的消费路径、真实 API/共享 DTO 变化（如无则明确复用）和 T10 回归入口。
+
+## 11. T03 迁移后的有效职责（覆盖前文 UI 实现归属）
+
+### 11.1 已确认基线
+
+- T02 prototype 已提供完整首页视觉、SearchHero、区域容器、标签、Carousel/Grid、Card/Dialog 和移动端排版基线。
+- T03 visual migration 负责将这些已确认的纯视觉页面骨架迁移到正式 `src/`，并提供主题、顶栏、公共状态和响应式接入点。
+- T07 的原“页面重构”表述现在解释为“正式页面的数据和状态接入”，而不是重做页面布局。
+
+### 11.2 T07 实际负责
+
+- 将真实 Discover、Tags、Boards、All Groups 和 Search API 接到 T03 迁移后的正式页面骨架。
+- 实现 `q` trim/debounce/IME、URL/history、`q + group` 共存和搜索模式状态。
+- 接入 T05 公开板块顺序/过滤/空板块语义，禁止前端重算随机或用管理字段重筛。
+- 保持 All Groups 和 Search 的 opaque cursor、旋转规则、去重、无限滚动、取消、竞态和缓存恢复。
+- 实现区域级 loading/empty/error/retry，不让一块失败破坏其他真实区域。
+- 复用 T06 正式 GroupCard/Carousel/Dialog，不重做组件视觉或业务逻辑。
+- 通过 Workers/Vitest/Playwright 验证真实 API、公开过滤、响应式交互和路由状态。
+
+### 11.3 不再由 T07 负责
+
+- 不重新搭建首页排版、SearchHero、卡片、Carousel、Dialog、主题或顶栏。
+- 不复制 prototype fixture、模拟搜索、假分页或本地业务状态进入正式路径。
+- 不修改 T05 后端排序/过滤、T06 组件底层或 T03 迁移基础。
+
+### 11.4 新前置条件
+
+- 硬前置：T03 visual migration 已交付正式 HomeView/壳层路径和消费说明。
+- 硬前置：T05 公开板块 API/Contract 和 T06 正式 Card/Dialog/URL 接口可消费。
+- T07 完成交付后将真实首页数据流、搜索状态和区域错误矩阵交给 T10。
+
+### 11.5 修订后的完成定义
+
+- [ ] 正式首页视觉来自 T03 迁移基线，T07 没有重复 UI 实现。
+- [ ] 首页所有区域均由真实 API/DTO 驱动，状态和竞态可测试。
+- [ ] q/group、cursor、公开过滤、点赞/Dialog 联动和区域容错完整。
+- [ ] T10 可以直接运行生产前端与测试 API 的跨功能回归。

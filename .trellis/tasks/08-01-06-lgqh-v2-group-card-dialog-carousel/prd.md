@@ -1,12 +1,14 @@
 # 06 群组卡片、Carousel 与详情弹窗
 
+> 范围修订（2026-08-02）：T02 的 `prototype/` 已完成公开页面、卡片、Carousel、Dialog 和管理端视觉基线；`08-02-t03-visual-migration` 负责将其迁移到正式 `src/`。T06 不再从零开发这些 UI，而是在 T03 迁移基线完成后负责真实详情/点赞/分享/URL/API、安全边界和回归测试接入。
+
 > 执行前置规则：本任务虽已有 PRD 与三份规划，进入执行或最终批准前，仍必须完整读取 `docs/PRD/v2/子任务06.md` 原文，逐条对照 `prd.md`、`design.md`、`implement.md`，记录并修正遗漏。必须先按 `trellis-brainstorm` 规则检查代码、测试、配置、Spec 和任务历史，再与用户进行 brainstorm；每次只提出一个最高价值问题，说明决策影响、推荐方案和取舍。每次用户回答后更新规划并重新检查需求收敛；即使没有剩余疑问，也必须展示最终规划摘要并等待用户明确批准。在原文复核和用户批准完成前，不得运行 `task.py start`、进入实施或修改业务代码；源 PRD 与用户最新决定优先于规划文件。
 
 > 状态：planning。T06 是公开端可复用组件任务，不完成首页整体重构；本轮只写规划，不进入实施。
 
 ## 1. 任务定位与联合 Review
 
-T06 依赖 T02 的视觉规范、T03 的主题/Token/顶栏基础和 T04 的群组 Contract/显示宽度规则，为 T07 首页与搜索提供统一 `GroupCard`、业务无关 `HorizontalCarousel`、群组详情 Dialog、`?group=` URL 控制器和分享能力。
+T06 依赖 T02 已确认的 prototype 视觉基线、`t03-visual-migration` 的正式 `src/` 组件迁移和 T04 的群组 Contract/显示宽度规则，为 T07 首页与搜索提供真实数据驱动的 `GroupCard`、`HorizontalCarousel`、群组详情 Dialog、`?group=` URL 控制器和分享能力。
 
 本 PRD 已从产品、Staff Engineer、QA 三个角度复核并冻结：
 
@@ -175,3 +177,48 @@ Dialog 接收当前 group ID、摘要占位、详情、点赞和请求状态；R
 ## 10. 交付状态
 
 本轮创建 `prd.md`、`design.md`、`implement.md` 后保持 T06 `planning`，不执行 `task.py start`，不创建子任务。最终实施汇报必须列出组件 API、Carousel 阈值/Wheel/键盘、Dialog/Router/分享、公开详情安全、测试结果和交给 T07/T10 的集成边界。
+
+## T03 正式视觉基础接入提示
+
+- T06 必须消费 T03 正式 Token、Button/Card/Input/Dialog 的状态、焦点、reduced-motion 和响应式基础；不得从 `prototype/` 直接复制组件或 Mock 数据层。
+- T06 的详情/弹窗与公共壳层不得硬编码标题、品牌、GitHub 或添加新群文案/入口；这些值从 T03/T04 的站点配置读取，默认标题为“来个群号”。
+- 卡片、详情、点赞、分享和 `group` 路由状态必须接入真实 API/共享 DTO；公开详情仍须遵守 published-only、认证边界和现有查询参数，不因视觉迁移改变业务契约。
+- 需要新增或调整真实公开详情 API 时，只按 T06 原规划的最小范围执行，并在交付中明确 T07/T10 的消费和回归接口。
+
+## 11. T03 迁移后的有效职责（覆盖前文 UI 实现归属）
+
+### 11.1 已确认基线
+
+- T02 的 `prototype/` 已完成公开首页所需的 GroupCard、Carousel、详情 Dialog、分享/QR 表现、焦点/滚动和响应式视觉基线。
+- `08-02-t03-visual-migration` 负责把 T02 的纯视觉结构、Token、组件状态和交互迁移到正式 `src/`，并接入已有真实数据流的公共基础。
+- 因此 T06 的原 UI 交付清单保留为“行为和回归目标”，不再表示 T06 要从零搭建这些视觉组件。
+
+### 11.2 T06 实际负责
+
+- 审计并复用 T03 迁移后的正式 GroupCard、Carousel、Dialog 结构，不复制 prototype 运行时、fixture、Mock 状态或原型路由。
+- 将正式卡片与详情 Dialog 接入真实公开群组摘要/详情 DTO、加载/错误/重试状态和 published-only 投影。
+- 将点赞接入现有匿名设备、localStorage、pepper、API、乐观更新和失败回滚，禁止创建第二套身份或点赞算法。
+- 将 `group` query、push/replace、q 共存、浏览器历史、深链接和关闭行为接入正式 Router。
+- 将 QR、复制、canonical 分享 URL、协议校验和安全错误接入真实能力。
+- 只在现有 API 无法提供最小公开详情时，补充 T06 原范围允许的最小只读接口；不得扩展板块、搜索或管理 API。
+- 修复迁移后导致的卡片/Dialog 接入回归，并补充 Vitest、Workers/接口和 Playwright 证据。
+
+### 11.3 不再由 T06 负责
+
+- 不重新设计卡片、Carousel、Dialog 的排版、颜色、Token、断点或动效。
+- 不重写首页区域编排、搜索结果 Grid、管理端页面或 T03 公共壳层。
+- 不把 prototype 组件直接 import 到正式生产路径。
+
+### 11.4 新前置条件和交接
+
+- 硬前置：T03 visual migration 已完成并提供正式组件路径、props/events/slots、主题/焦点基础和迁移差异清单。
+- 硬前置：T04 的群组公开 Contract、显示宽度和状态过滤边界已冻结。
+- T06 交给 T07：正式 GroupCard/Carousel/Dialog 的消费接口、`group` controller、真实 DTO 和错误模型。
+- T06 交给 T10：真实公开数据、非公开过滤、点赞/分享/深链接和移动端回归证据。
+
+### 11.5 修订后的完成定义
+
+- [ ] 正式 `src/` 组件没有 prototype runtime/fixture/Mock 依赖。
+- [ ] 视觉快照只用于证明 T03 迁移没有回归，不把重新制作 UI 作为 T06 产出。
+- [ ] 真实详情、点赞、分享、URL、权限/公开过滤、加载错误和测试全部完成。
+- [ ] T07/T10 可以直接消费正式组件和真实数据流，不需要再次重做组件外观。

@@ -1,5 +1,7 @@
 # T06 技术设计：群组卡片、Carousel 与详情弹窗
 
+> 范围修订（2026-08-02）：视觉结构和交互样例由 T02 `prototype/` 提供，正式迁移由 `08-02-t03-visual-migration` 负责；本设计只规划迁移后正式组件的真实数据、路由、安全、状态和测试接入，不重复设计页面布局。
+
 > 执行前置规则：进入执行或最终批准前，必须完整读取 `docs/PRD/v2/子任务06.md` 原文并逐条核对三份规划；先检查代码、测试、配置、Spec 和任务历史，再与用户按 Trellis Brainstorm 逐轮讨论，每次只问一个最高价值问题。每次用户回答后更新规划；即使无疑问也必须提交最终规划摘要并等待明确批准，未完成前不得实施或修改业务代码。
 
 > 设计草案，依据 T02/T03/T04 规划和 T06 源 PRD；实现前必须用仓库现状冻结文件路径、组件 API 和视觉参数。
@@ -295,3 +297,33 @@ Only if new detail endpoint is required: published success, all non-public state
 - R06-07–09 → Dialog, Router, focus and scroll lock。
 - security section → public detail route/DTO and state filtering。
 - AC-06-05 → Workers/API evidence, full Vitest/Playwright and T10 handoff。
+
+## T03 接入提示
+
+组件设计以 T03 的语义 Token、状态属性、可见焦点和主题根节点为唯一正式视觉来源；真实详情/点赞/分享数据通过现有或批准的 typed API 边界进入组件，不允许原型 fixture 进入生产。记录 T06 与 T03 的文件所有权，避免覆盖公共样式和顶栏。
+
+组件若渲染公共标题、品牌或操作入口，必须消费 T03/T04 的站点配置（标题默认“来个群号”、GitHub URL/文案、添加新群目标），不得复制常量或 prototype 文案。
+
+## 12. 迁移后设计修订：从 UI 构建转为真实数据接入
+
+T02 prototype 是视觉和交互参考，T03 visual migration 是正式 `src/` 的迁移 owner。T06 的设计边界调整为：
+
+- `prototype/` → T03 迁移后的正式组件：只做路径、props、事件、状态和视觉差异审计。
+- 正式组件 → typed API client：接入公开摘要、公开详情、点赞和错误 Envelope。
+- Router → Dialog controller：接入 `q`/`group` 合并、历史、深链接和关闭。
+- API response → public projection：在 server/Contract 层过滤非公开字段，前端不承担唯一安全过滤。
+- 现有点赞/复制/QR 工具 → 详情交互：复用身份、协议、安全和 Toast，禁止复制 prototype 本地逻辑。
+
+### 12.1 设计决策门
+
+- 如果 T03 迁移组件的 DOM/事件 API 与 prototype 不同，以正式组件 API 为准，保留 T02 的可观察行为。
+- 如果公开详情 API 已存在，优先复用并补安全/错误测试；只有缺少最小详情读取时才提出最小 API 变更。
+- 如果后端字段缺失、状态投影不安全或需要数据库变更，记录 owner 为 T04/T05/总任务，不在 T06 越界扩展。
+- 如果 Router controller 已由 T03 或现有代码提供，T06 只接入，不建立第二套 query 状态源。
+
+### 12.2 设计验收重点
+
+- 对比 T02 视觉基线与正式 `src/` 迁移结果，确认卡片、Carousel、Dialog 的行为未丢失。
+- 以真实响应覆盖 loading、empty、error、not-public、retry、like rollback 和 share failure。
+- 以真实路由覆盖卡片打开、直接深链接、q 共存、返回/前进和关闭。
+- 以公开字段快照和 Workers 测试证明安全投影，而不是只检查浏览器文字。

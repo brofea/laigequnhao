@@ -1,5 +1,7 @@
 # T09 技术设计：管理端群组分页与响应式表格
 
+> 范围修订（2026-08-02）：本设计把 T03 迁移后的管理表格、分页器、响应式列和抽屉视为既有视觉基线；T09 只设计 page/50/total 数据契约、查询状态、稳定排序、mutation 同步和接入回归。
+
 > 执行前置规则：进入执行或最终批准前，必须完整读取 `docs/PRD/v2/子任务09.md` 原文并逐条核对三份规划；先检查代码、测试、配置、Spec 和任务历史，再与用户按 Trellis Brainstorm 逐轮讨论，每次只问一个最高价值问题。每次用户回答后更新规划；即使无疑问也必须提交最终规划摘要并等待明确批准，未完成前不得实施或修改业务代码。
 
 > 设计草案。T09 先审计当前 keyset/抽屉/表格和 T08 所有权，再冻结 page API、URL、断点和 responsive drawer。
@@ -214,3 +216,26 @@ page navigation/URL/refresh/back-forward/overflow; search/filter/sort reset; del
 - R09-04–05 → URL/pager/table responsive/keyboard。
 - R09-06–07 → drawer/operations/errors/regression。
 - public cursor protection → shared helper audit and regression suite。
+
+## T03 接入提示
+
+管理分页是 T03 视觉基础的真实后端消费方：T09 只负责管理 page/50/total 的 API/UI 接入，使用 T03 提供的 Token、ARIA、响应式列和 drawer 规则；不得把管理分页 Contract、状态或 query 反向传播到公开 cursor，也不得使用 prototype fixture 代替真实认证 API。
+
+T09 的页面壳层继续读取 T03/T04 的站点配置；标题、品牌、GitHub 和添加新群入口的变更不应散落在分页模板或管理 query 状态中。
+
+## 14. 迁移后设计修订：分页数据层接入
+
+T03 visual migration 提供正式列表/分页器/抽屉的视觉和交互基础；T09 的设计只拥有以下数据和状态链：
+
+```text
+T03 migrated AdminList UI
+  → T09 URL/query adapter
+  → typed page API (page=1, pageSize=50, totalItems, totalPages)
+  → repository/service shared conditions + stable order
+  → existing auth/CSRF/version/resource lifecycle
+```
+
+- 组件样式、列优先级、抽屉动态视口和焦点规则作为输入进行回归，不在 T09 重定义。
+- API 设计、COUNT/items 条件、stable tie-break、page normalization 和 mutation refresh 是 T09 的核心设计产物。
+- T08 负责壳层稳定性，T09 负责群组列表内容；若共享文件冲突，先冻结 owner 再实施。
+- 任何需要新的数据库索引或改变公开 cursor 的提议必须退回 T04/总任务，不在分页任务内假设解决。

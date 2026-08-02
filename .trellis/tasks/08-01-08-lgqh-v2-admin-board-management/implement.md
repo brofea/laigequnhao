@@ -1,5 +1,7 @@
 # T08 实施规划：管理端板块管理与三页面导航整合
 
+> 范围修订（2026-08-02）：开始实施时先复核 T03 已迁移的管理 UI，不重复创建 AdminLayout、导航、Dialog、表格或抽屉；实施重点改为 T05 API、认证/CSRF、version/mutation token、CRUD、成员操作、冲突回滚和真实数据测试。
+
 > 执行前置规则：进入执行或最终批准前，必须完整读取 `docs/PRD/v2/子任务08.md` 原文并逐条核对三份规划；先检查代码、测试、配置、Spec 和任务历史，再与用户按 Trellis Brainstorm 逐轮讨论，每次只问一个最高价值问题。每次用户回答后更新规划；即使无疑问也必须提交最终规划摘要并等待明确批准，未完成前不得实施或修改业务代码。
 
 > 当前阶段：planning。以下步骤只在后续明确批准后执行；本轮不运行 `task.py start`，不改正式源码。
@@ -658,3 +660,30 @@ pnpm test:e2e
 - [ ] Confirm desktop and mobile screenshots are captured for each board state。
 - [ ] Confirm all unresolved failures are classified as blocker, follow-up, or out of scope。
 - [ ] Confirm only blockers remain open before the handoff to T10。
+
+## T03 接入检查
+
+- [ ] 板块页面真实消费 T03 Admin shell/Token/主题/无障碍基础和 T05 API，未复制 prototype 数据或主题逻辑。
+- [ ] 管理壳层消费配置化标题“来个群号”、GitHub URL/文案和添加新群入口，未出现第二套常量。
+- [ ] 认证、CSRF、version/mutation token、错误/冲突、成员状态和回收站数据流有集成测试或交接证据。
+- [ ] AdminView/T09 共享文件的修改 owner、顺序和回归命令已记录。
+
+## 19. T03 迁移基线后的执行顺序（有效计划）
+
+1. 读取 T03 visual migration 的管理壳层交接，冻结 AdminLayout、导航、抽屉、表格、Dialog 和共享文件 owner。
+2. 确认正式管理页面没有 prototype fixture、模拟会话、模拟 CRUD 或原型 storage 依赖。
+3. 盘点 T05 board API、Contract、认证/CSRF、version/mutation token、错误 Envelope 和回收站语义。
+4. 先建立真实 board list/detail/create/edit/delete/reorder 的 Workers/客户端状态测试。
+5. 将零板块、空板块、禁用板块、加载、错误和 retry 接入既有迁移 UI。
+6. 接入板块 CRUD、重排、成员搜索/添加/编辑/移动/上移/下移/移除和服务器版本同步。
+7. 将真实群组编辑 Dialog/抽屉接入板块上下文，验证脏状态、焦点、回滚和回收站联动。
+8. 与 T09 固化 AdminLayout/群组页内容 owner，不在 T08 实现 page/50/total。
+9. 执行认证、CSRF、冲突、公开过滤、资源和移动端操作回归。
+10. 把真实板块数据流、共享文件、问题 owner 和 T10 证据交接。
+
+### 19.1 停止条件
+
+- T03 尚未交付正式 AdminLayout/组件路径，或需要重新设计管理视觉。
+- T05 API 无法表达版本、token、成员操作或原子清理。
+- 需要 T08 修改数据库、公开 API 或 T09 的分页语义。
+- 任何本地“成功”状态无法与真实服务器响应和回滚对应。

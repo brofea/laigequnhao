@@ -1,5 +1,7 @@
 # T10 系统回归、无障碍与发布验收：实施规划
 
+> 范围修订（2026-08-02）：执行阶段先确认 T03 迁移结果与 T02 prototype 的视觉基线一致，再验证正式 `src/` 与 T04–T09 真实 API/认证/Contract/路由/数据完整性；不得把 prototype 通过冒充生产接入，也不重新实现 UI。
+
 > 执行前置规则：进入执行或最终批准前，必须完整读取 `docs/PRD/v2/子任务10.md` 原文并逐条核对三份规划；先检查代码、测试、配置、Spec 和任务历史，再与用户按 Trellis Brainstorm 逐轮讨论，每次只问一个最高价值问题。每次用户回答后更新规划；即使无疑问也必须提交最终规划摘要并等待明确批准，未完成前不得实施或修改业务代码。
 
 ## 0. 执行前声明
@@ -521,3 +523,28 @@
 - [ ] Confirm the final status is not changed to completed while any required evidence is missing。
 - [ ] Confirm the user receives the exact planning directories and line-count summary。
 - [ ] Confirm no implementation branch or code change is implied by this planning handoff。
+
+## T03 接入检查
+
+- [ ] 真实 API server + 前端 server 已验证主题/顶栏与公开、提交、点赞、登录/会话/CSRF、管理 CRUD/资源、T05/T07/T08/T09 数据流。
+- [ ] 已验证配置化标题/品牌、GitHub URL/文案和添加新群入口的默认值、变更、外链与提交弹窗路径，且未出现页面硬编码。
+- [ ] 主题三态、首屏、Token、响应式、键盘/焦点/Dialog、路由 query 和错误/加载状态均有真实链路证据。
+- [ ] prototype 隔离、后端契约不改、跨任务问题 owner 和回归结果已记录；未用 Mock 通过冒充生产接入。
+
+## 16. T03 迁移基线后的有效执行顺序
+
+1. 收集 T02 prototype 完成记录和 T03 visual migration 的正式 `src/` 交接、差异、owner、测试和回滚点。
+2. 先验证正式构建/路由不可见 prototype 入口，运行时不 import prototype，不使用 Mock 数据层或原型 storage。
+3. 对比 prototype 与正式 src 的页面、Dialog、主题、响应式、焦点、滚动和 reduced-motion 基线。
+4. 等待 T04–T09 真实数据接入完成，分别建立 T06/T07/T08/T09 的跨层回归矩阵。
+5. 执行真实前端→typed client→API→认证/CSRF/Contract→D1/R2→用户状态链路。
+6. 区分并归档视觉迁移缺陷、API/状态缺陷、权限/数据完整性缺陷和测试环境缺陷。
+7. 只允许 T10 修复跨任务集成阻塞；页面 UI 重做、领域模型变化和业务规则变化必须退回 owner。
+8. 重跑受影响套件、关键 Playwright、视觉对比、migration 和发布冒烟，最终填写 acceptance.md。
+
+### 16.1 新停止条件
+
+- T03 visual migration 未完成或正式 src baseline 尚未得到用户/任务交接确认。
+- T06–T09 仍以 prototype Mock 作为通过依据。
+- 真实后端接入导致页面需要重新设计，而不是最小 Contract/状态修复。
+- 任一任务把 T03 迁移 owner、T04/T05 后端 owner 或 T10 回归 owner 混在同一份无边界修复中。
