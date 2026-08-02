@@ -2,7 +2,7 @@
   "id": "lgqh-v2",
   "name": "lgqh-v2",
   "title": "网站 V2 大版本升级总任务",
-  "description": "依据 docs/PRD/v2/RPD.md 建立网站 V2 大版本升级总任务，负责总体规划、依赖协调、跨任务集成与最终验收；T01 已完成 Spec、代码、测试和子任务 PRD 审计，T02–T10 尚未进入业务实施。",
+  "description": "依据 docs/PRD/v2/RPD.md（用户指定的 PRD.md 在仓库中实际命名为 RPD.md）负责网站 V2 总体规划、T04-T06 依赖协调、跨任务集成与最终验收；T01-T03 视为已完成，T04-T10 旧任务已废弃并归档。",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -22,16 +22,12 @@
     "08-01-01-lgqh-v2-spec-audit",
     "08-01-02-lgqh-v2-ui-design-language",
     "08-01-03-lgqh-v2-theme-header-foundation",
-    "08-01-04-lgqh-v2-schema-and-publishing",
-    "08-01-05-lgqh-v2-board-backend",
-    "08-01-06-lgqh-v2-group-card-dialog-carousel",
-    "08-01-07-lgqh-v2-homepage-search",
-    "08-01-08-lgqh-v2-admin-board-management",
-    "08-01-09-lgqh-v2-admin-group-pagination",
-    "08-01-10-lgqh-v2-system-regression"
+    "08-02-lgqh-v2-backend-feature-expansion",
+    "08-02-lgqh-v2-fullstack-integration",
+    "08-02-lgqh-v2-system-hardening-release"
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "T01 已完成并收口，T02–T10 保持 planning；父任务 status 保持 in_progress，未启动业务实施。用户已确认既有 5 个单测失败、1 个 lint 错误和 22 个格式失败由对应子任务修复：共享 platforms/config Contract 归 T04，资源生命周期、图片处理器、lint 与格式门禁归 T10。",
+  "notes": "任务体系已重规划：T01-T03 是不可推翻的已完成前置；旧 T04-T10 已移入 .trellis/tasks/archive/2026-08/，仅作历史参考；新 T04 后端能力扩展 → 新 T05 全栈业务适配 → 新 T06 系统加固与发布验收，全部创建为 planning。T03 另有一个独立视觉迁移任务记录，当前状态仍需在实施前与用户声明的已完成状态对齐。",
   "meta": {}
 }
