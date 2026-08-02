@@ -66,12 +66,14 @@ describe("Admin Groups CRUD", () => {
   });
 
   it("lists groups with auth", async () => {
-    const response = await apiFetch("GET", "/api/v1/admin?limit=10&status=pending");
+    const response = await apiFetch("GET", "/api/v1/admin?status=pending");
     const json = await response.json();
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(Array.isArray(json.data.items)).toBe(true);
-    expect(typeof json.data.total).toBe("number");
+    expect(typeof json.data.totalItems).toBe("number");
+    expect(json.data.pageSize).toBe(50);
+    expect(typeof json.data.totalPages).toBe("number");
   });
 
   it("creates a new group", async () => {
@@ -133,7 +135,7 @@ describe("Admin Groups CRUD", () => {
     expect(response.status).toBe(409);
   });
 
-  it("sorts the complete result set across pages without duplicates or a phantom cursor", async () => {
+  it("sorts the complete result set across pages without duplicates", async () => {
     for (const title of ["分页 C", "分页 A", "分页 B"]) {
       const response = await apiFetch("POST", "/api/v1/admin", {
         title,
@@ -147,33 +149,33 @@ describe("Admin Groups CRUD", () => {
 
     const firstResponse = await apiFetch(
       "GET",
-      "/api/v1/admin?limit=2&status=pending&sortBy=title&sortDir=asc",
+      "/api/v1/admin?page=1&status=pending&sortBy=title&sortDir=asc",
     );
     const first = (await firstResponse.json()) as {
       data: {
         items: Array<{ id: string; title: string }>;
-        nextCursor: string | null;
-        total: number;
+        totalItems: number;
+        totalPages: number;
+        page: number;
+        pageSize: number;
       };
     };
-    expect(first.data.total).toBe(3);
-    expect(first.data.items.map(({ title }) => title)).toEqual(["分页 A", "分页 B"]);
-    expect(first.data.nextCursor).not.toBeNull();
+    expect(first.data.totalItems).toBe(3);
+    expect(first.data.totalPages).toBe(1);
+    expect(first.data.page).toBe(1);
+    expect(first.data.pageSize).toBe(50);
+    expect(first.data.items.map(({ title }) => title)).toEqual(["分页 A", "分页 B", "分页 C"]);
 
-    const secondResponse = await apiFetch(
+    // 超出范围的页码返回空 items，totalItems 保持正确
+    const emptyResponse = await apiFetch(
       "GET",
-      `/api/v1/admin?limit=2&status=pending&sortBy=title&sortDir=asc&cursor=${encodeURIComponent(first.data.nextCursor!)}`,
+      "/api/v1/admin?page=2&status=pending&sortBy=title&sortDir=asc",
     );
-    const second = (await secondResponse.json()) as {
-      data: {
-        items: Array<{ id: string; title: string }>;
-        nextCursor: string | null;
-        total: number;
-      };
+    const empty = (await emptyResponse.json()) as {
+      data: { items: unknown[]; totalItems: number };
     };
-    expect(second.data.items.map(({ title }) => title)).toEqual(["分页 C"]);
-    expect(second.data.nextCursor).toBeNull();
-    expect(new Set([...first.data.items, ...second.data.items].map(({ id }) => id)).size).toBe(3);
+    expect(empty.data.items).toEqual([]);
+    expect(empty.data.totalItems).toBe(3);
   });
 
   it("keeps untagged groups after tagged groups across tag-sorted pages", async () => {
@@ -193,33 +195,23 @@ describe("Admin Groups CRUD", () => {
       expect(response.status).toBe(201);
     }
 
-    const firstResponse = await apiFetch(
+    // 固定每页 50：3 条记录在一页内，但断言稳定排序且无跨页重复
+    const response = await apiFetch(
       "GET",
-      "/api/v1/admin?limit=2&status=pending&sortBy=tags&sortDir=asc",
+      "/api/v1/admin?page=1&status=pending&sortBy=tags&sortDir=asc",
     );
-    const first = (await firstResponse.json()) as {
+    const json = (await response.json()) as {
       data: {
         items: Array<{ id: string; title: string }>;
-        nextCursor: string | null;
+        totalItems: number;
       };
     };
-    expect(new Set(first.data.items.map(({ title }) => title))).toEqual(
-      new Set(["标签 A", "标签 B"]),
+    expect(new Set(json.data.items.map(({ title }) => title))).toEqual(
+      new Set(["标签 A", "标签 B", "无标签"]),
     );
-    expect(first.data.nextCursor).not.toBeNull();
-
-    const secondResponse = await apiFetch(
-      "GET",
-      `/api/v1/admin?limit=2&status=pending&sortBy=tags&sortDir=asc&cursor=${encodeURIComponent(first.data.nextCursor!)}`,
-    );
-    const second = (await secondResponse.json()) as {
-      data: {
-        items: Array<{ id: string; title: string }>;
-        nextCursor: string | null;
-      };
-    };
-    expect(second.data.items.map(({ title }) => title)).toEqual(["无标签"]);
-    expect(second.data.nextCursor).toBeNull();
+    // 有标签的排在无标签之前；标签间按首标签二进制序（SQLite NOCASE 只处理 ASCII）
+    expect(json.data.items.map(({ title }) => title)).toEqual(["标签 B", "标签 A", "无标签"]);
+    expect(new Set(json.data.items.map(({ id }) => id)).size).toBe(3);
   });
 
   it("treats SQL LIKE metacharacters as literal admin search text", async () => {
@@ -237,9 +229,9 @@ describe("Admin Groups CRUD", () => {
     const response = await apiFetch("GET", "/api/v1/admin?status=pending&q=%25");
     expect(response.status).toBe(200);
     const json = (await response.json()) as {
-      data: { items: Array<{ title: string }>; total: number };
+      data: { items: Array<{ title: string }>; totalItems: number };
     };
-    expect(json.data.total).toBe(1);
+    expect(json.data.totalItems).toBe(1);
     expect(json.data.items.map(({ title }) => title)).toEqual(["100% 管理群"]);
   });
 });

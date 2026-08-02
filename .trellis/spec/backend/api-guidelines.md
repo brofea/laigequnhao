@@ -130,23 +130,44 @@ WHERE status = 'published' AND deleted_at IS NULL;
 
 ## 管理员路由
 
+实际注册路径以 `/api/v1/admin` 为前缀（admin-groups 直接挂在 `/api/v1/admin`，未使用 `/admin/groups` 二级路径）：
+
 | 方法 | 路径 | 契约 |
 |---|---|---|
 | `POST` | `/admin/session` | 校验共享密码、设置 Cookie，并返回会话绑定的 CSRF token |
 | `GET` | `/admin/session` | 返回当前会话状态和会话绑定的 CSRF token |
 | `DELETE` | `/admin/session` | 使当前会话失效 |
-| `GET` | `/admin/groups` | 经过筛选的游标列表，包含私有字段 |
-| `POST` | `/admin/groups` | 新建群聊 |
-| `PATCH` | `/admin/groups/:id` | 使用版本检查编辑内容/状态 |
-| `DELETE` | `/admin/groups/:id` | 软删除 |
-| `POST` | `/admin/groups/:id/restore` | 恢复软删除群聊 |
+| `GET` | `/admin` | 经过筛选的**页码分页**列表，每页固定 50 条，返回 `{ items, page, pageSize: 50, totalItems, totalPages }`，排序恒追加稳定次排序 `id` |
+| `POST` | `/admin` | 新建群聊 |
+| `PATCH` | `/admin/:id` | 使用版本检查编辑内容/状态 |
+| `DELETE` | `/admin/:id` | 软删除（与板块关联清理在单 D1 batch 原子完成） |
+| `POST` | `/admin/:id/restore` | 恢复软删除群聊（不自动重建板块关联、不更新发布时间） |
 | `DELETE` | `/admin/trash/groups/:id` | 确认后永久删除 |
+| `GET` | `/admin/boards` | 板块列表（含成员数量） |
+| `POST` | `/admin/boards` | 创建板块 |
+| `PATCH` | `/admin/boards/:id` | 编辑标题/启停/排序模式（版本检查） |
+| `DELETE` | `/admin/boards/:id` | 删除板块（级联清理成员关联） |
+| `POST` | `/admin/boards/reorder` | 全量批量更新板块顺序（列表不一致返回冲突） |
+| `GET` | `/admin/boards/:id/members` | 板块成员列表 |
+| `POST` | `/admin/boards/:id/members` | 添加成员（published/delisted 可加，trash 拒绝，重复成员拒绝） |
+| `DELETE` | `/admin/boards/:id/members/:groupId` | 移除成员关联（不删除群组） |
+| `POST` | `/admin/boards/:id/members/:groupId/move` | 上移/下移（相邻位置交换，原子） |
 | `POST` | `/admin/assets` | 上传最终 WebP 及用途元数据 |
 | `DELETE` | `/admin/assets/:id` | 删除未被引用的资源 |
 | `GET` | `/admin/dashboard` | D1 业务指标和相互独立的 Analytics 组件 |
 | `GET` | `/admin/health` | API、D1、R2、版本和部署健康状态 |
 
-管理员列表查询必须明确区分业务 `status` 和 `deleted`。变更请求带上最后观察到的整数 `version`；编辑已过期时返回 `VERSION_CONFLICT`，禁止静默覆盖另一个标签页中的改动。
+管理端列表查询必须明确区分业务 `status` 和 `deleted`。变更请求带上最后观察到的整数 `version`；编辑已过期时返回 `VERSION_CONFLICT`，禁止静默覆盖另一个标签页中的改动。
+
+## 公开板块路由
+
+| 方法 | 路径 | 契约 |
+|---|---|---|
+| `GET` | `/api/v1/boards` | 启用板块及已发布成员，支持 `manual_asc`、`manual_desc`、`hourly_random` 三种排序；空板块返回空 `groups` |
+| `GET` | `/api/v1/discover` | 发现新群：`last_published_at DESC, id DESC`，最多 10 条 |
+| `GET` | `/api/v1/tags` | 标签聚合：只统计 published，`count DESC, tag ASC`，单次聚合查询 |
+
+`last_published_at` 不进入公开 DTO；`hourly_random` 的小时槽位使用 `site.config.boards.timezone`，不写数据库位置。
 
 资源上传使用 `multipart/form-data`，但只接受一个最终 WebP。用途为 `logo` 或 `qr_code`；硬上限分别为 100 KB 和 300 KB。写入 R2 前，服务端必须验证 RIFF/WEBP 签名、可解析尺寸、用途和实际字节长度。
 

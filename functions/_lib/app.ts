@@ -3,10 +3,14 @@ import { cors } from "hono/cors";
 import { requestId } from "./middleware/request-id";
 import { errorHandler } from "./middleware/error-handler";
 import { groupsRoute } from "./routes/groups";
+import { discoverRoute } from "./routes/discover";
+import { tagsRoute } from "./routes/tags";
+import { boardsRoute } from "./routes/boards";
 import { submissionsRoute } from "./routes/submissions";
 import { likesRoute } from "./routes/likes";
 import { adminSessionRoute } from "./routes/admin-session";
 import { adminGroupsRoute } from "./routes/admin-groups";
+import { adminBoardsRoute } from "./routes/admin-boards";
 import { adminAssetsRoute } from "./routes/admin-assets";
 import { adminHealthRoute } from "./routes/admin-health";
 import { adminDashboardRoute } from "./routes/admin-dashboard";
@@ -58,10 +62,14 @@ app.get("/api/v1/assets/:key{.+}", async (c) => {
 
 // API routes
 app.route("/api/v1/groups", groupsRoute);
+app.route("/api/v1/discover", discoverRoute);
+app.route("/api/v1/tags", tagsRoute);
+app.route("/api/v1/boards", boardsRoute);
 app.route("/api/v1/submissions", submissionsRoute);
 app.route("/api/v1/groups", likesRoute);
 app.route("/api/v1/admin", adminSessionRoute);
 app.route("/api/v1/admin", adminGroupsRoute);
+app.route("/api/v1/admin", adminBoardsRoute);
 app.route("/api/v1/admin", adminAssetsRoute);
 app.route("/api/v1/admin", adminHealthRoute);
 app.route("/api/v1/admin", adminDashboardRoute);

@@ -1,5 +1,4 @@
 import type { AdminGroupDto } from "@shared/contracts/group";
-import { decodeCursor, encodeCursor } from "@shared/contracts/pagination";
 import type { GroupStatus } from "@shared/domain";
 import { normalizeSearchQuery } from "@shared/domain";
 
@@ -25,6 +24,7 @@ interface GroupRow {
   purge_started_at: string | null;
   created_at: string;
   updated_at: string;
+  last_published_at: string | null;
 }
 
 interface TagRow {
@@ -112,7 +112,107 @@ function mapToAdminDto(
     deleteProgress: group.purge_state as AdminGroupDto["deleteProgress"],
     logoR2Key: group.logo_r2_key,
     version: group.version,
+    lastPublishedAt: group.last_published_at,
   };
+}
+
+// ─── 关联数据批量加载 ────────────────────────────────────
+// 标签、加群方式、提交详情、asset 元数据一次性批量读取，避免 N+1。
+
+async function loadRelated(
+  db: D1Database,
+  groupIds: string[],
+): Promise<{
+  tagsByGroup: Map<string, TagRow[]>;
+  methodsByGroup: Map<string, JoinMethodRow[]>;
+  detailsByGroup: Map<string, SubmissionDetailRow>;
+  assetLookup: Map<string, AssetJoinRow>;
+}> {
+  const tagsByGroup = new Map<string, TagRow[]>();
+  const methodsByGroup = new Map<string, JoinMethodRow[]>();
+  const detailsByGroup = new Map<string, SubmissionDetailRow>();
+  const assetLookup = new Map<string, AssetJoinRow>();
+
+  if (groupIds.length === 0) {
+    return { tagsByGroup, methodsByGroup, detailsByGroup, assetLookup };
+  }
+
+  const [tagsResult, methodsResult, detailsResult] = await Promise.all([
+    db
+      .prepare(
+        `SELECT group_id, tag, sort_order FROM group_tags WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
+      )
+      .bind(...groupIds)
+      .all<{ group_id: string } & TagRow>(),
+    db
+      .prepare(
+        `SELECT group_id, type, value, sort_order, asset_id FROM join_methods WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
+      )
+      .bind(...groupIds)
+      .all<{ group_id: string } & JoinMethodRow>(),
+    db
+      .prepare(
+        `SELECT group_id, contact, notes FROM submission_details WHERE group_id IN (${groupIds.map(() => "?").join(",")})`,
+      )
+      .bind(...groupIds)
+      .all<{ group_id: string } & SubmissionDetailRow>(),
+  ]);
+
+  for (const r of tagsResult.results) {
+    if (!tagsByGroup.has(r.group_id)) tagsByGroup.set(r.group_id, []);
+    tagsByGroup.get(r.group_id)!.push({ tag: r.tag, sort_order: r.sort_order });
+  }
+
+  const allAssetIds = new Set<string>();
+  for (const r of methodsResult.results) {
+    if (!methodsByGroup.has(r.group_id)) methodsByGroup.set(r.group_id, []);
+    methodsByGroup.get(r.group_id)!.push({
+      type: r.type,
+      value: r.value,
+      sort_order: r.sort_order,
+      asset_id: r.asset_id,
+    });
+    if (r.asset_id) allAssetIds.add(r.asset_id);
+  }
+
+  for (const r of detailsResult.results) {
+    detailsByGroup.set(r.group_id, { contact: r.contact, notes: r.notes });
+  }
+
+  if (allAssetIds.size > 0) {
+    const assetRows = await db
+      .prepare(
+        `SELECT id as asset_id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count
+         FROM assets WHERE id IN (${[...allAssetIds].map(() => "?").join(",")})`,
+      )
+      .bind(...allAssetIds)
+      .all<AssetJoinRow>();
+    for (const a of assetRows.results) {
+      assetLookup.set(a.asset_id, a);
+    }
+  }
+
+  return { tagsByGroup, methodsByGroup, detailsByGroup, assetLookup };
+}
+
+function mapRelatedToDtos(
+  rows: GroupRow[],
+  related: {
+    tagsByGroup: Map<string, TagRow[]>;
+    methodsByGroup: Map<string, JoinMethodRow[]>;
+    detailsByGroup: Map<string, SubmissionDetailRow>;
+    assetLookup: Map<string, AssetJoinRow>;
+  },
+): AdminGroupDto[] {
+  return rows.map((g) =>
+    mapToAdminDto(
+      g,
+      related.tagsByGroup.get(g.id) ?? [],
+      related.methodsByGroup.get(g.id) ?? [],
+      related.detailsByGroup.get(g.id) ?? null,
+      related.assetLookup,
+    ),
+  );
 }
 
 // ─── 共享 WHERE 子句构建器 ───────────────────────────────
@@ -157,11 +257,37 @@ function toSubstringLikePattern(value: string): string {
   return `%${value.replace(/[\\%_]/g, "\\$&")}%`;
 }
 
+/** 管理列表 ORDER BY：允许列表 + 固定稳定次排序 id（RPD §21.6） */
+function buildAdminOrderBy(
+  sortBy: "title" | "kind" | "status" | "platform" | "tags" | "likeCount" | undefined,
+  sortDir: "asc" | "desc",
+): string {
+  const hasTagSql = "EXISTS (SELECT 1 FROM group_tags gt WHERE gt.group_id = g.id)";
+  const firstTagSql =
+    "COALESCE((SELECT gt.tag FROM group_tags gt WHERE gt.group_id = g.id ORDER BY gt.sort_order ASC LIMIT 1), '') COLLATE NOCASE";
+  switch (sortBy) {
+    case "title":
+      return `g.title COLLATE NOCASE ${sortDir}, g.id ${sortDir}`;
+    case "kind":
+      return `CASE g.kind WHEN 'official' THEN 0 ELSE 1 END ${sortDir}, g.id ${sortDir}`;
+    case "status":
+      return `CASE g.status WHEN 'pending' THEN 0 WHEN 'published' THEN 1 WHEN 'rejected' THEN 2 WHEN 'delisted' THEN 3 END ${sortDir}, g.id ${sortDir}`;
+    case "platform":
+      return `g.platform COLLATE NOCASE ${sortDir}, g.id ${sortDir}`;
+    case "tags":
+      return `CASE WHEN ${hasTagSql} THEN 0 ELSE 1 END ASC, ${firstTagSql} ${sortDir}, g.id ${sortDir}`;
+    case "likeCount":
+      return `g.like_count ${sortDir}, g.id ${sortDir}`;
+    default:
+      return "g.created_at DESC, g.id DESC";
+  }
+}
+
 // ─── 查询 ────────────────────────────────────────────────
 
 export function createGroupRepository(db: D1Database) {
   return {
-    /** 分页列出已发布/已下架的群聊 */
+    /** 分页列出已发布的群聊（公开边界：只返回 published，不返回 delisted） */
     async listPublished(params: {
       q?: string;
       cursor?: string | null;
@@ -171,7 +297,7 @@ export function createGroupRepository(db: D1Database) {
     }): Promise<{ items: AdminGroupDto[]; total: number }> {
       const { q, limit, rotationOrdinal, skip = 0 } = params;
 
-      let whereClause = `g.status IN ('published', 'delisted') AND g.deleted_at IS NULL`;
+      let whereClause = `g.status = 'published' AND g.deleted_at IS NULL`;
       const bindings: unknown[] = [];
 
       if (q) {
@@ -228,78 +354,57 @@ export function createGroupRepository(db: D1Database) {
       const groupIds = sliced.map((r) => r.id);
       if (groupIds.length === 0) return { items: [], total };
 
-      const [tagsResult, methodsResult, detailsResult] = await Promise.all([
-        db
-          .prepare(
-            `SELECT group_id, tag, sort_order FROM group_tags WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
-          )
-          .bind(...groupIds)
-          .all<{ group_id: string } & TagRow>(),
-        db
-          .prepare(
-            `SELECT group_id, type, value, sort_order, asset_id FROM join_methods WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
-          )
-          .bind(...groupIds)
-          .all<{ group_id: string } & JoinMethodRow>(),
-        db
-          .prepare(
-            `SELECT group_id, contact, notes FROM submission_details WHERE group_id IN (${groupIds.map(() => "?").join(",")})`,
-          )
-          .bind(...groupIds)
-          .all<{ group_id: string } & SubmissionDetailRow>(),
-      ]);
-
-      // 按 group_id 分组
-      const tagsByGroup = new Map<string, TagRow[]>();
-      for (const r of tagsResult.results) {
-        if (!tagsByGroup.has(r.group_id)) tagsByGroup.set(r.group_id, []);
-        tagsByGroup.get(r.group_id)!.push({ tag: r.tag, sort_order: r.sort_order });
-      }
-
-      const methodsByGroup = new Map<string, JoinMethodRow[]>();
-      const allAssetIds = new Set<string>();
-      for (const r of methodsResult.results) {
-        if (!methodsByGroup.has(r.group_id)) methodsByGroup.set(r.group_id, []);
-        methodsByGroup.get(r.group_id)!.push({
-          type: r.type,
-          value: r.value,
-          sort_order: r.sort_order,
-          asset_id: r.asset_id,
-        });
-        if (r.asset_id) allAssetIds.add(r.asset_id);
-      }
-
-      const detailsByGroup = new Map<string, SubmissionDetailRow>();
-      for (const r of detailsResult.results) {
-        detailsByGroup.set(r.group_id, { contact: r.contact, notes: r.notes });
-      }
-
-      // 批量加载 asset 数据
-      const assetLookup = new Map<string, AssetJoinRow>();
-      if (allAssetIds.size > 0) {
-        const assetRows = await db
-          .prepare(
-            `SELECT id as asset_id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count
-             FROM assets WHERE id IN (${[...allAssetIds].map(() => "?").join(",")})`,
-          )
-          .bind(...allAssetIds)
-          .all<AssetJoinRow>();
-        for (const a of assetRows.results) {
-          assetLookup.set(a.asset_id, a);
-        }
-      }
-
-      const items = sliced.map((g) =>
-        mapToAdminDto(
-          g,
-          tagsByGroup.get(g.id) ?? [],
-          methodsByGroup.get(g.id) ?? [],
-          detailsByGroup.get(g.id) ?? null,
-          assetLookup,
-        ),
-      );
+      const related = await loadRelated(db, groupIds);
+      const items = mapRelatedToDtos(sliced, related);
 
       return { items, total };
+    },
+
+    /** 发现新群：最近进入 published 的群聊，稳定排序，最多 limit 条 */
+    async listRecentPublished(limit = 10): Promise<AdminGroupDto[]> {
+      const rows = await db
+        .prepare(
+          `SELECT g.* FROM groups g
+           WHERE g.status = 'published' AND g.deleted_at IS NULL
+           ORDER BY g.last_published_at DESC, g.id DESC
+           LIMIT ?`,
+        )
+        .bind(limit)
+        .all<GroupRow>();
+      const groupIds = rows.results.map((r) => r.id);
+      const related = await loadRelated(db, groupIds);
+      return mapRelatedToDtos(rows.results, related);
+    },
+
+    /** 批量按 ID 取已发布群聊（板块公开成员使用；只返回 published） */
+    async listPublishedByIds(ids: string[]): Promise<AdminGroupDto[]> {
+      if (ids.length === 0) return [];
+      const rows = await db
+        .prepare(
+          `SELECT g.* FROM groups g
+           WHERE g.id IN (${ids.map(() => "?").join(",")})
+             AND g.status = 'published' AND g.deleted_at IS NULL`,
+        )
+        .bind(...ids)
+        .all<GroupRow>();
+      const related = await loadRelated(
+        db,
+        rows.results.map((r) => r.id),
+      );
+      return mapRelatedToDtos(rows.results, related);
+    },
+
+    /** 公开详情深链：只返回已发布且未删除的群聊 */
+    async getPublishedById(id: string): Promise<AdminGroupDto | null> {
+      const group = await db
+        .prepare(
+          "SELECT * FROM groups WHERE id = ? AND status = 'published' AND deleted_at IS NULL",
+        )
+        .bind(id)
+        .first<GroupRow>();
+      if (!group) return null;
+      const related = await loadRelated(db, [id]);
+      return mapRelatedToDtos([group], related)[0] ?? null;
     },
 
     /** 按 ID 查询单个群聊 */
@@ -311,48 +416,8 @@ export function createGroupRepository(db: D1Database) {
 
       if (!group) return null;
 
-      const [tagsResult, methodsResult, detail] = await Promise.all([
-        db
-          .prepare(
-            "SELECT tag, sort_order FROM group_tags WHERE group_id = ? ORDER BY sort_order ASC",
-          )
-          .bind(id)
-          .all<TagRow>(),
-        db
-          .prepare(
-            "SELECT type, value, sort_order, asset_id FROM join_methods WHERE group_id = ? ORDER BY sort_order ASC",
-          )
-          .bind(id)
-          .all<JoinMethodRow>(),
-        db
-          .prepare("SELECT contact, notes FROM submission_details WHERE group_id = ?")
-          .bind(id)
-          .first<SubmissionDetailRow>(),
-      ]);
-
-      // 加载 asset 数据
-      const assetLookup = new Map<string, AssetJoinRow>();
-      const assetIds = methodsResult.results.filter((m) => m.asset_id).map((m) => m.asset_id!);
-      if (assetIds.length > 0) {
-        const assetRows = await db
-          .prepare(
-            `SELECT id as asset_id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count
-             FROM assets WHERE id IN (${assetIds.map(() => "?").join(",")})`,
-          )
-          .bind(...assetIds)
-          .all<AssetJoinRow>();
-        for (const a of assetRows.results) {
-          assetLookup.set(a.asset_id, a);
-        }
-      }
-
-      return mapToAdminDto(
-        group,
-        tagsResult.results,
-        methodsResult.results,
-        detail ?? null,
-        assetLookup,
-      );
+      const related = await loadRelated(db, [id]);
+      return mapRelatedToDtos([group], related)[0] ?? null;
     },
 
     /** 创建群聊 + 关联数据（在 D1 batch 中原子写入，含 asset adoption） */
@@ -378,6 +443,8 @@ export function createGroupRepository(db: D1Database) {
       const rotationKey = crypto.randomUUID();
       const now = new Date().toISOString();
       const status = input.status ?? "pending";
+      // 新建后直接发布：写入服务端时间；其余状态保持 NULL
+      const lastPublishedAt = status === "published" ? now : null;
 
       const batch: D1PreparedStatement[] = [
         db
@@ -385,9 +452,9 @@ export function createGroupRepository(db: D1Database) {
             `INSERT INTO groups (
                id, title, description, kind, platform, status, rotation_key,
                logo_r2_key, logo_url, logo_width, logo_height, logo_byte_length,
-               created_at, updated_at
+               created_at, updated_at, last_published_at
              )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             id,
@@ -404,6 +471,7 @@ export function createGroupRepository(db: D1Database) {
             input.logoMeta?.byteLength ?? null,
             now,
             now,
+            lastPublishedAt,
           ),
       ];
 
@@ -493,17 +561,17 @@ export function createGroupRepository(db: D1Database) {
 
     // ─── 管理员方法 ────────────────────────────────────────
 
-    /** 管理员全量列表（多状态筛选 + 全文搜索 + 多列排序 + keyset 游标分页） */
-    async listAll(params: {
+    /** 管理员页码分页列表（RPD §21：固定每页 50，排序恒加稳定次排序 id） */
+    async listPage(params: {
       statuses: GroupStatus[];
       deleted: boolean;
       q?: string;
       sortBy?: "title" | "kind" | "status" | "platform" | "tags" | "likeCount";
       sortDir: "asc" | "desc";
-      cursor?: string | null;
-      limit: number;
-    }): Promise<{ items: AdminGroupDto[]; total: number; nextCursor: string | null }> {
-      const { statuses, deleted, q, sortBy, sortDir, cursor, limit } = params;
+      page: number;
+    }): Promise<{ items: AdminGroupDto[]; totalItems: number; totalPages: number }> {
+      const pageSize = 50;
+      const { statuses, deleted, q, sortBy, sortDir, page } = params;
 
       // ── 共享 WHERE 子句（COUNT 与 items 查询共用） ──
       const { sql: whereSql, bindings: whereBindings } = buildWhereClause({
@@ -512,231 +580,34 @@ export function createGroupRepository(db: D1Database) {
         q,
       });
 
-      // COUNT
+      // 总数与总页数（与 items 使用同一过滤条件）
       const countResult = await db
         .prepare(`SELECT COUNT(*) as total FROM groups g ${whereSql}`)
         .bind(...whereBindings)
         .first<{ total: number }>();
-      const total = countResult?.total ?? 0;
-
-      if (total === 0) return { items: [], total: 0, nextCursor: null };
-
-      // ── ORDER BY ──
-      const firstTagSql =
-        "COALESCE((SELECT gt.tag FROM group_tags gt WHERE gt.group_id = g.id ORDER BY gt.sort_order ASC LIMIT 1), '') COLLATE NOCASE";
-      const hasTagSql = "EXISTS (SELECT 1 FROM group_tags gt WHERE gt.group_id = g.id)";
-      let orderBy: string;
-      switch (sortBy) {
-        case "title":
-          orderBy = `g.title COLLATE NOCASE ${sortDir}, g.id ${sortDir}`;
-          break;
-        case "kind":
-          orderBy = `CASE g.kind WHEN 'official' THEN 0 ELSE 1 END ${sortDir}, g.id ${sortDir}`;
-          break;
-        case "status":
-          orderBy = `CASE g.status WHEN 'pending' THEN 0 WHEN 'published' THEN 1 WHEN 'rejected' THEN 2 WHEN 'delisted' THEN 3 END ${sortDir}, g.id ${sortDir}`;
-          break;
-        case "platform":
-          orderBy = `g.platform COLLATE NOCASE ${sortDir}, g.id ${sortDir}`;
-          break;
-        case "tags":
-          orderBy = `CASE WHEN ${hasTagSql} THEN 0 ELSE 1 END ASC, ${firstTagSql} ${sortDir}, g.id ${sortDir}`;
-          break;
-        case "likeCount":
-          orderBy = `g.like_count ${sortDir}, g.id ${sortDir}`;
-          break;
-        default:
-          orderBy = "g.created_at DESC, g.id DESC";
+      const totalItems = countResult?.total ?? 0;
+      if (totalItems === 0) {
+        return { items: [], totalItems: 0, totalPages: 0 };
       }
+      const totalPages = Math.ceil(totalItems / pageSize);
 
-      // ── keyset 游标 ──
-      const cursorBindings: unknown[] = [];
-      let cursorSql = "";
-
-      if (cursor) {
-        try {
-          const decoded = decodeCursor(cursor) as {
-            k: string; // last row id (tiebreaker)
-            v?: unknown; // primary sort value
-            sb?: string; // sortBy from original query
-            sd?: string; // sortDir from original query
-          };
-
-          // 游标与当前查询不一致 → 忽略
-          if (decoded.sb !== (sortBy ?? "") || decoded.sd !== sortDir || !decoded.k) {
-            // invalid cursor, ignore
-          } else if (!sortBy) {
-            // 默认排序 (created_at DESC)：需要游标行的 created_at
-            const cursorItem = await db
-              .prepare("SELECT created_at FROM groups WHERE id = ?")
-              .bind(decoded.k)
-              .first<{ created_at: string }>();
-            if (cursorItem) {
-              cursorSql = " AND (g.created_at < ? OR (g.created_at = ? AND g.id < ?))";
-              cursorBindings.push(cursorItem.created_at, cursorItem.created_at, decoded.k);
-            }
-          } else {
-            // 自定义排序：根据 sortBy + sortDir 构建 keyset 条件
-            const dirOp = sortDir === "asc" ? ">" : "<";
-            const dirEqOp = "=";
-            const v = decoded.v;
-
-            // 不同类型的主排序值构建不同的比较
-            if (sortBy === "tags" && v === null) {
-              cursorSql = ` AND NOT ${hasTagSql} AND g.id ${dirOp} ?`;
-              cursorBindings.push(decoded.k);
-            } else if (sortBy === "tags" && v !== undefined) {
-              cursorSql = ` AND ((${hasTagSql} AND (${firstTagSql} ${dirOp} ? OR (${firstTagSql} ${dirEqOp} ? AND g.id ${dirOp} ?))) OR NOT ${hasTagSql})`;
-              cursorBindings.push(String(v), String(v), decoded.k);
-            } else if (v !== undefined && v !== null) {
-              switch (sortBy) {
-                case "title":
-                case "platform":
-                  cursorSql = ` AND (g.${sortBy} COLLATE NOCASE ${dirOp} ? OR (g.${sortBy} COLLATE NOCASE ${dirEqOp} ? AND g.id ${dirOp} ?))`;
-                  cursorBindings.push(String(v), String(v), decoded.k);
-                  break;
-                case "kind":
-                  cursorSql = ` AND (CASE g.kind WHEN 'official' THEN 0 ELSE 1 END ${dirOp} ? OR (CASE g.kind WHEN 'official' THEN 0 ELSE 1 END ${dirEqOp} ? AND g.id ${dirOp} ?))`;
-                  cursorBindings.push(Number(v), Number(v), decoded.k);
-                  break;
-                case "status":
-                  cursorSql = ` AND (CASE g.status WHEN 'pending' THEN 0 WHEN 'published' THEN 1 WHEN 'rejected' THEN 2 WHEN 'delisted' THEN 3 END ${dirOp} ? OR (CASE g.status WHEN 'pending' THEN 0 WHEN 'published' THEN 1 WHEN 'rejected' THEN 2 WHEN 'delisted' THEN 3 END ${dirEqOp} ? AND g.id ${dirOp} ?))`;
-                  cursorBindings.push(Number(v), Number(v), decoded.k);
-                  break;
-                case "likeCount":
-                  cursorSql = ` AND (g.like_count ${dirOp} ? OR (g.like_count ${dirEqOp} ? AND g.id ${dirOp} ?))`;
-                  cursorBindings.push(Number(v), Number(v), decoded.k);
-                  break;
-              }
-            } else {
-              // v 为空（如无标签），简单按 ID 游标
-              cursorSql = ` AND g.id ${dirOp} ?`;
-              cursorBindings.push(decoded.k);
-            }
-          }
-        } catch {
-          /* 无效游标，忽略 */
-        }
-      }
-
-      // ── items 查询 ──
-      const allBindings = [...whereBindings, ...cursorBindings, limit + 1];
+      // ── 稳定排序 + 页码偏移 ──
+      const orderBy = buildAdminOrderBy(sortBy, sortDir);
+      const offset = (page - 1) * pageSize;
       const rows = await db
-        .prepare(`SELECT g.* FROM groups g ${whereSql}${cursorSql} ORDER BY ${orderBy} LIMIT ?`)
-        .bind(...allBindings)
+        .prepare(`SELECT g.* FROM groups g ${whereSql} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
+        .bind(...whereBindings, pageSize, offset)
         .all<GroupRow>();
 
-      const hasMore = rows.results.length > limit;
-      const pageRows = rows.results.slice(0, limit);
-      const groupIds = pageRows.map((r) => r.id);
-      if (groupIds.length === 0) return { items: [], total, nextCursor: null };
-
-      const [tagsResult, methodsResult, detailsResult] = await Promise.all([
-        db
-          .prepare(
-            `SELECT group_id, tag, sort_order FROM group_tags WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
-          )
-          .bind(...groupIds)
-          .all<{ group_id: string } & TagRow>(),
-        db
-          .prepare(
-            `SELECT group_id, type, value, sort_order, asset_id FROM join_methods WHERE group_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY sort_order ASC`,
-          )
-          .bind(...groupIds)
-          .all<{ group_id: string } & JoinMethodRow>(),
-        db
-          .prepare(
-            `SELECT group_id, contact, notes FROM submission_details WHERE group_id IN (${groupIds.map(() => "?").join(",")})`,
-          )
-          .bind(...groupIds)
-          .all<{ group_id: string } & SubmissionDetailRow>(),
-      ]);
-
-      const tagsByGroup = new Map<string, TagRow[]>();
-      for (const r of tagsResult.results) {
-        if (!tagsByGroup.has(r.group_id)) tagsByGroup.set(r.group_id, []);
-        tagsByGroup.get(r.group_id)!.push({ tag: r.tag, sort_order: r.sort_order });
-      }
-      const methodsByGroup = new Map<string, JoinMethodRow[]>();
-      const allAssetIds = new Set<string>();
-      for (const r of methodsResult.results) {
-        if (!methodsByGroup.has(r.group_id)) methodsByGroup.set(r.group_id, []);
-        methodsByGroup.get(r.group_id)!.push({
-          type: r.type,
-          value: r.value,
-          sort_order: r.sort_order,
-          asset_id: r.asset_id,
-        });
-        if (r.asset_id) allAssetIds.add(r.asset_id);
-      }
-      const detailsByGroup = new Map<string, SubmissionDetailRow>();
-      for (const r of detailsResult.results) {
-        detailsByGroup.set(r.group_id, { contact: r.contact, notes: r.notes });
-      }
-
-      // 批量加载 asset 数据
-      const assetLookup = new Map<string, AssetJoinRow>();
-      if (allAssetIds.size > 0) {
-        const assetRows = await db
-          .prepare(
-            `SELECT id as asset_id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count
-             FROM assets WHERE id IN (${[...allAssetIds].map(() => "?").join(",")})`,
-          )
-          .bind(...allAssetIds)
-          .all<AssetJoinRow>();
-        for (const a of assetRows.results) {
-          assetLookup.set(a.asset_id, a);
-        }
-      }
-
-      const items = pageRows.map((g) =>
-        mapToAdminDto(
-          g,
-          tagsByGroup.get(g.id) ?? [],
-          methodsByGroup.get(g.id) ?? [],
-          detailsByGroup.get(g.id) ?? null,
-          assetLookup,
-        ),
+      const related = await loadRelated(
+        db,
+        rows.results.map((r) => r.id),
       );
-
-      // nextCursor — 编码最后一行 ID、主排序值、排序类型
-      const lastItem = items[items.length - 1];
-      let nextCursor: string | null = null;
-      if (hasMore && lastItem) {
-        const cursorPayload: { k: string; v?: unknown; sb: string; sd: string } = {
-          k: lastItem.id,
-          sb: sortBy ?? "",
-          sd: sortDir,
-        };
-        // 提取主排序值
-        if (sortBy) {
-          switch (sortBy) {
-            case "title":
-              cursorPayload.v = lastItem.title;
-              break;
-            case "kind":
-              cursorPayload.v = lastItem.kind === "official" ? 0 : 1;
-              break;
-            case "status": {
-              const order = { pending: 0, published: 1, rejected: 2, delisted: 3 } as const;
-              cursorPayload.v = order[lastItem.status as keyof typeof order] ?? 0;
-              break;
-            }
-            case "platform":
-              cursorPayload.v = lastItem.platform;
-              break;
-            case "tags":
-              cursorPayload.v = lastItem.tags[0] ?? null;
-              break;
-            case "likeCount":
-              cursorPayload.v = lastItem.likeCount;
-              break;
-          }
-        }
-        nextCursor = encodeCursor(cursorPayload);
-      }
-
-      return { items, total, nextCursor };
+      return {
+        items: mapRelatedToDtos(rows.results, related),
+        totalItems,
+        totalPages,
+      };
     },
 
     /** 原子更新（UUID mutation token + 单 D1 batch） */
@@ -801,6 +672,16 @@ export function createGroupRepository(db: D1Database) {
         existingDetailId = detail?.id ?? null;
       }
 
+      // 发布时间语义：只有"非 published → published"的成功转换才写入服务端时间
+      let publishTransition = false;
+      if (input.status !== undefined && input.status === "published") {
+        const current = await db
+          .prepare("SELECT status FROM groups WHERE id = ?")
+          .bind(id)
+          .first<{ status: string }>();
+        publishTransition = current !== null && current.status !== "published";
+      }
+
       // Mutation token 守卫：仅当 groups 行持有本次 token 时关联操作生效
       const guardSql = ` AND EXISTS (SELECT 1 FROM groups WHERE id = ? AND mutation_token = ?)`;
       const guard = [id, mutationToken];
@@ -814,6 +695,10 @@ export function createGroupRepository(db: D1Database) {
       // 1. 主表 UPDATE（版本条件 + mutation_token）
       const setters: string[] = ["updated_at = ?", "version = version + 1", "mutation_token = ?"];
       const ub: unknown[] = [now, mutationToken];
+      if (publishTransition) {
+        setters.push("last_published_at = ?");
+        ub.push(now);
+      }
       for (const key of ["title", "description", "kind", "platform", "status"] as const) {
         if (input[key] !== undefined) {
           setters.push(`${key} = ?`);
@@ -979,15 +864,17 @@ export function createGroupRepository(db: D1Database) {
       return { dto, versionConflict: false };
     },
 
-    /** 软删除 */
+    /** 软删除（移入回收站）：状态变化与板块关联清理在单 batch 中原子完成 */
     async softDelete(id: string): Promise<void> {
       const now = new Date().toISOString();
-      await db
-        .prepare(
-          "UPDATE groups SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
-        )
-        .bind(now, now, id)
-        .run();
+      await db.batch([
+        db
+          .prepare(
+            "UPDATE groups SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+          )
+          .bind(now, now, id),
+        db.prepare("DELETE FROM board_groups WHERE group_id = ?").bind(id),
+      ]);
     },
 
     /** 恢复 */
@@ -1125,6 +1012,7 @@ export function createGroupRepository(db: D1Database) {
         const batch: D1PreparedStatement[] = [
           db.prepare("DELETE FROM likes WHERE group_id = ?").bind(id),
           db.prepare("DELETE FROM group_tags WHERE group_id = ?").bind(id),
+          db.prepare("DELETE FROM board_groups WHERE group_id = ?").bind(id),
           db
             .prepare(
               `UPDATE assets

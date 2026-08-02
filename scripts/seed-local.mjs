@@ -479,7 +479,6 @@ function generateSQL(groups, { logos, qrCodes }) {
       lines.push(
         `INSERT INTO join_methods (id, group_id, type, value, sort_order, asset_id) VALUES ('${jmId}', '${id}', 'url', 'https://${platform.toLowerCase()}.example.com/invite/${uuid().slice(0, 8)}', ${sortOrder}, NULL);`,
       );
-      sortOrder++;
     }
 
     // Tags

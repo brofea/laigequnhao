@@ -8,9 +8,8 @@ import {
 import { publicGroupDtoSchema } from "@shared/contracts/group";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createGroupRepository } from "../repositories/group-repository";
-import { createAssetService } from "../services/asset-service";
-import { createR2Adapter } from "../adapters/r2-adapter";
 import { computeRotation } from "../services/rotation-service";
+import { toPublicGroupDto } from "../services/public-group-mapper";
 import type { Env } from "../env";
 import type { SiteConfig } from "@shared/domain";
 
@@ -56,7 +55,7 @@ groupsRoute.get("/", async (c) => {
     }
   }
 
-  // 数据库查询
+  // 数据库查询（公开边界：只返回 published）
   const repo = createGroupRepository(c.env.DB);
   const { items, total } = await repo.listPublished({
     q,
@@ -66,49 +65,7 @@ groupsRoute.get("/", async (c) => {
     skip,
   });
 
-  // 解析 QR asset URL
-  const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
-  const r2Adapter = createR2Adapter(c.env.R2, c.env);
-
-  // 过滤 → PublicGroupDto
-  const publicItems = await Promise.all(
-    items.map(async (admin) => {
-      // 解析 join methods 中 QR 的 asset URL
-      const resolvedMethods = await Promise.all(
-        admin.joinMethods.map(async (m) => {
-          if (m.type === "qr_code" && m.assetId) {
-            const url = await assetService.getPublicUrl(m.assetId);
-            const meta = await assetService.getPublicMeta(m.assetId);
-            return {
-              ...m,
-              qrCodeUrl: url ?? m.qrCodeUrl ?? undefined,
-              qrCodeMeta: meta
-                ? { width: meta.width, height: meta.height, byteLength: meta.byteLength }
-                : m.qrCodeMeta,
-            };
-          }
-          return m;
-        }),
-      );
-
-      // 剔除管理端字段
-      const {
-        submissionContact: _sc,
-        auditNotes: _an,
-        deletedAt: _da,
-        deleteProgress: _dp,
-        logoR2Key: _lk,
-        version: _v,
-        joinMethods: _jm,
-        ...rest
-      } = admin;
-      return publicGroupDtoSchema.parse({
-        ...rest,
-        logoUrl: admin.logoR2Key ? r2Adapter.getPublicUrl(admin.logoR2Key) : null,
-        joinMethods: resolvedMethods,
-      });
-    }),
-  );
+  const publicItems = await Promise.all(items.map((dto) => toPublicGroupDto(dto, c.env)));
 
   // 游标 — 当已遍历完所有结果时终止
   const newSkip = skip + items.length;
@@ -126,3 +83,31 @@ groupsRoute.get("/", async (c) => {
     }),
   );
 });
+
+/** GET /groups/:id — 已发布群组详情（深链接 ?group=） */
+groupsRoute.get(
+  "/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}",
+  async (c) => {
+    const requestId = c.get("requestId");
+    const id = c.req.param("id");
+
+    const repo = createGroupRepository(c.env.DB);
+    const dto = await repo.getPublishedById(id);
+    if (!dto) {
+      // 不存在、下架、回收站、删除统一为非敏感不可用结果（RPD §19.6）
+      return c.json(
+        apiErrorSchema.parse({
+          ok: false,
+          error: { code: "NOT_FOUND", message: "群聊不存在或不可公开。" },
+          requestId,
+        }),
+        404,
+      );
+    }
+
+    const publicDto = await toPublicGroupDto(dto, c.env);
+    return c.json(
+      apiSuccessSchema(publicGroupDtoSchema).parse({ ok: true, data: publicDto, requestId }),
+    );
+  },
+);

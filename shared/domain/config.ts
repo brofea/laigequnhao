@@ -53,6 +53,28 @@ export const rotationConfigSchema = z
   );
 export type RotationConfig = z.infer<typeof rotationConfigSchema>;
 
+// ─── 板块配置 ────────────────────────────────────────────
+//
+// hourly_random 的小时槽位使用站点配置时区（RPD §16.4），
+// 不依赖服务器本地时区。
+export const boardsConfigSchema = z.object({
+  timezone: z
+    .string()
+    .min(1)
+    .refine(
+      (tz) => {
+        try {
+          new Intl.DateTimeFormat("en", { timeZone: tz });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: "非法的 IANA 时区标识", path: ["timezone"] },
+    ),
+});
+export type BoardsConfig = z.infer<typeof boardsConfigSchema>;
+
 // ─── 功能开关 ────────────────────────────────────────────
 //
 // 二维码与群号、URL 一样始终作为公开加群方式。
@@ -72,6 +94,7 @@ export const siteConfigSchema = z.object({
   theme: themeConfigSchema,
   header: headerConfigSchema,
   rotation: rotationConfigSchema,
+  boards: boardsConfigSchema,
   platforms: z
     .array(z.string().min(1))
     .min(1)

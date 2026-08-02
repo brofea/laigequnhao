@@ -35,6 +35,10 @@ const rawConfig: SiteConfig = {
     times: ["04:01", "16:01"],
   },
 
+  boards: {
+    timezone: "Asia/Shanghai",
+  },
+
   platforms: ["QQ", "微信", "钉钉", "飞书", "小红书", "抖音", "百度贴吧", "Telegram", "Discord"],
 
   features: {},

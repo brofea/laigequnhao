@@ -68,6 +68,7 @@ describe("adminGroupDtoSchema", () => {
     deleteProgress: null,
     logoR2Key: "logos/abc.webp",
     version: 3,
+    lastPublishedAt: null,
   };
 
   it("接受完整的管理员 DTO", () => {

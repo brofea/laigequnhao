@@ -77,7 +77,7 @@ describe("GET /api/v1/groups", () => {
     expect(json.data.nextCursor).toBeDefined();
   });
 
-  it("returns only published/delisted groups (no pending/rejected)", async () => {
+  it("returns only published groups and never leaks private fields", async () => {
     const response = await apiFetch("GET", "/api/v1/groups");
     const json = (await response.json()) as {
       ok: boolean;
@@ -87,15 +87,19 @@ describe("GET /api/v1/groups", () => {
           submissionContact?: unknown;
           auditNotes?: unknown;
           version?: unknown;
+          lastPublishedAt?: unknown;
+          logoR2Key?: unknown;
         }>;
       };
     };
     expect(json.ok).toBe(true);
     for (const item of json.data.items) {
-      expect(["published", "delisted"]).toContain(item.status);
+      expect(item.status).toBe("published");
       expect(item.submissionContact).toBeUndefined();
       expect(item.auditNotes).toBeUndefined();
       expect(item.version).toBeUndefined();
+      expect(item.lastPublishedAt).toBeUndefined();
+      expect(item.logoR2Key).toBeUndefined();
     }
   });
 

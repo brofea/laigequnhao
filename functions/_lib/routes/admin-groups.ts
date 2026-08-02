@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import {
   adminGroupDtoSchema,
-  adminGroupListQuerySchema,
-  adminGroupListResponseSchema,
+  adminGroupPageQuerySchema,
+  adminGroupPageResponseSchema,
   groupCreateSchema,
   groupUpdateSchema,
 } from "@shared/contracts/group";
@@ -29,7 +29,7 @@ function resolveLogoUrl(
 // 所有路由需要认证
 adminGroupsRoute.use("*", authRequired());
 
-/** GET /admin/groups — 管理员群聊列表 */
+/** GET /admin — 管理员页码分页列表（固定每页 50 条） */
 adminGroupsRoute.get("/", async (c) => {
   const requestId = c.get("requestId");
 
@@ -39,11 +39,10 @@ adminGroupsRoute.get("/", async (c) => {
     q: c.req.query("q") ?? undefined,
     sortBy: c.req.query("sortBy") ?? undefined,
     sortDir: (c.req.query("sortDir") as "asc" | "desc") ?? "desc",
-    cursor: c.req.query("cursor") ?? null,
-    limit: Number(c.req.query("limit")) || 50,
+    page: c.req.query("page") ?? "1",
   };
 
-  const query = adminGroupListQuerySchema.safeParse(parsed);
+  const query = adminGroupPageQuerySchema.safeParse(parsed);
   if (!query.success) {
     return c.json(
       apiErrorSchema.parse({
@@ -60,14 +59,13 @@ adminGroupsRoute.get("/", async (c) => {
   }
 
   const repo = createGroupRepository(c.env.DB);
-  const { items, total, nextCursor } = await repo.listAll({
+  const { items, totalItems, totalPages } = await repo.listPage({
     statuses: query.data.statuses,
     deleted: query.data.deleted,
     q: query.data.q,
     sortBy: query.data.sortBy,
     sortDir: query.data.sortDir,
-    cursor: query.data.cursor,
-    limit: query.data.limit,
+    page: query.data.page,
   });
 
   // 为 QR 加群方式解析 asset URL
@@ -92,9 +90,15 @@ adminGroupsRoute.get("/", async (c) => {
 
   c.header("Cache-Control", "no-store");
   return c.json(
-    apiSuccessSchema(adminGroupListResponseSchema).parse({
+    apiSuccessSchema(adminGroupPageResponseSchema).parse({
       ok: true,
-      data: { items, total, nextCursor },
+      data: {
+        items,
+        page: query.data.page,
+        pageSize: 50,
+        totalItems,
+        totalPages,
+      },
       requestId,
     }),
   );

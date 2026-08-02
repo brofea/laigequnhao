@@ -17,6 +17,7 @@ const validConfig = {
     addGroup: { label: "添加新群", target: "submission-dialog" as const },
   },
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
+  boards: { timezone: "Asia/Shanghai" },
   platforms: ["QQ"],
   features: {},
 };
@@ -82,7 +83,16 @@ describe("siteConfigSchema", () => {
     expect(() =>
       siteConfigSchema.parse({
         ...validConfig,
-        rotation: { timezone: "Not/AReal/Zone", times: ["04:01"] },
+        rotation: { timezone: "Mars/Olympus", times: ["04:01"] },
+      }),
+    ).toThrow();
+  });
+
+  it("拒绝非法板块时区", () => {
+    expect(() =>
+      siteConfigSchema.parse({
+        ...validConfig,
+        boards: { timezone: "Mars/Olympus" },
       }),
     ).toThrow();
   });

@@ -14,6 +14,8 @@ export {
   groupCreateSchema,
   groupUpdateSchema,
   joinMethodInputSchema,
+  adminGroupPageQuerySchema,
+  adminGroupPageResponseSchema,
 } from "./group";
 export type {
   PublicGroupDto,
@@ -21,7 +23,42 @@ export type {
   GroupCreateInput,
   GroupUpdateInput,
   JoinMethodInput,
+  AdminGroupPageQuery,
+  AdminGroupPageResponse,
 } from "./group";
+
+export {
+  boardDtoSchema,
+  boardWithGroupsSchema,
+  boardMemberDtoSchema,
+  boardCreateSchema,
+  boardUpdateSchema,
+  boardReorderSchema,
+  boardMemberAddSchema,
+  boardMemberMoveSchema,
+  adminBoardListResponseSchema,
+  publicBoardsResponseSchema,
+  boardMemberListResponseSchema,
+} from "./board";
+export type {
+  BoardDto,
+  BoardWithGroups,
+  BoardMemberDto,
+  BoardCreateInput,
+  BoardUpdateInput,
+  BoardReorderInput,
+  BoardMemberAddInput,
+  BoardMemberMoveInput,
+} from "./board";
+
+export { DISCOVER_LIMIT, discoverResponseSchema } from "./discover";
+export type { DiscoverResponse } from "./discover";
+
+export { tagStatsSchema, tagStatsResponseSchema } from "./tags";
+export type { TagStats, TagStatsResponse } from "./tags";
+
+export { ADMIN_PAGE_SIZE, pageResponseSchema } from "./page";
+export type { PageResponse } from "./page";
 
 export { submissionRequestSchema, submissionReceiptSchema } from "./submission";
 export type { SubmissionRequest, SubmissionReceipt } from "./submission";

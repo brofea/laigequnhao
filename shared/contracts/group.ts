@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { groupKindSchema, groupStatusSchema, joinMethodSchema } from "../domain/group";
+import {
+  DESCRIPTION_MAX_WIDTH,
+  TITLE_MAX_WIDTH,
+  measureDisplayWidth,
+} from "../domain/display-width";
+import { ADMIN_PAGE_SIZE } from "./page";
 
 // ─── 公开群聊 DTO ────────────────────────────────────────
 //
@@ -82,6 +88,8 @@ export const adminGroupDtoSchema = publicGroupDtoSchema.extend({
   logoR2Key: z.string().nullable(),
   /** 乐观锁版本号 */
   version: z.number().int().nonnegative(),
+  /** 最近一次进入已发布状态的服务端时间（迁移后现有数据为 NULL） */
+  lastPublishedAt: z.string().datetime().nullable(),
 });
 export type AdminGroupDto = z.infer<typeof adminGroupDtoSchema>;
 
@@ -151,6 +159,48 @@ export const adminGroupListResponseSchema = z.object({
 });
 export type AdminGroupListResponse = z.infer<typeof adminGroupListResponseSchema>;
 
+/** 管理员页码分页查询参数（RPD §21，替代 keyset cursor） */
+export const adminGroupPageQuerySchema = z
+  .object({
+    /** 业务状态筛选（可重复的 status 参数），回收站模式为空 */
+    statuses: z.array(groupStatusSchema).optional().default([]),
+    /** 回收站模式 */
+    deleted: z.coerce.boolean().optional().default(false),
+    /** 搜索词（标题、简介、标签子串匹配） */
+    q: z.string().optional(),
+    /** 排序字段，默认 created_at */
+    sortBy: adminSortFieldSchema.optional(),
+    /** 排序方向，默认 desc */
+    sortDir: adminSortDirSchema.optional().default("desc"),
+    /** 页码，最小 1，默认 1 */
+    page: z.coerce.number().int().min(1).optional().default(1),
+  })
+  .refine(
+    (data) => {
+      if (data.deleted) return data.statuses.length === 0;
+      return true;
+    },
+    { message: "回收站模式不允许业务状态筛选", path: ["statuses"] },
+  )
+  .refine(
+    (data) => {
+      if (!data.deleted) return data.statuses.length >= 1;
+      return true;
+    },
+    { message: "正常模式至少选择一个业务状态", path: ["statuses"] },
+  );
+export type AdminGroupPageQuery = z.infer<typeof adminGroupPageQuerySchema>;
+
+/** 管理员页码分页响应：固定 pageSize 50，零条目时 totalPages 为 0 */
+export const adminGroupPageResponseSchema = z.object({
+  items: z.array(adminGroupDtoSchema),
+  page: z.number().int().min(1),
+  pageSize: z.literal(ADMIN_PAGE_SIZE),
+  totalItems: z.number().int().nonnegative(),
+  totalPages: z.number().int().nonnegative(),
+});
+export type AdminGroupPageResponse = z.infer<typeof adminGroupPageResponseSchema>;
+
 // ─── 管理员创建/更新输入 ─────────────────────────────────
 
 /** 加群方式输入（判别联合） */
@@ -179,8 +229,27 @@ export type JoinMethodInput = z.infer<typeof joinMethodInputSchema>;
 /** 群组创建输入 */
 export const groupCreateSchema = z
   .object({
-    title: z.string().min(1, "标题不能为空").max(200),
-    description: z.string().max(2000).optional().default(""),
+    title: z
+      .string()
+      .transform((s) => s.trim())
+      .pipe(
+        z
+          .string()
+          .min(1, "标题不能为空")
+          .refine((s) => measureDisplayWidth(s) <= TITLE_MAX_WIDTH, {
+            message: `标题显示宽度不能超过 ${String(TITLE_MAX_WIDTH)}`,
+          }),
+      ),
+    description: z
+      .string()
+      .transform((s) => s.trim())
+      .pipe(
+        z.string().refine((s) => measureDisplayWidth(s) <= DESCRIPTION_MAX_WIDTH, {
+          message: `简介显示宽度不能超过 ${String(DESCRIPTION_MAX_WIDTH)}`,
+        }),
+      )
+      .optional()
+      .default(""),
     kind: groupKindSchema,
     platform: z.string().min(1, "平台不能为空"),
     status: groupStatusSchema,
@@ -231,8 +300,27 @@ export type GroupCreateInput = z.infer<typeof groupCreateSchema>;
 /** 群组更新输入 */
 export const groupUpdateSchema = z
   .object({
-    title: z.string().min(1, "标题不能为空").max(200).optional(),
-    description: z.string().max(2000).optional(),
+    title: z
+      .string()
+      .transform((s) => s.trim())
+      .pipe(
+        z
+          .string()
+          .min(1, "标题不能为空")
+          .refine((s) => measureDisplayWidth(s) <= TITLE_MAX_WIDTH, {
+            message: `标题显示宽度不能超过 ${String(TITLE_MAX_WIDTH)}`,
+          }),
+      )
+      .optional(),
+    description: z
+      .string()
+      .transform((s) => s.trim())
+      .pipe(
+        z.string().refine((s) => measureDisplayWidth(s) <= DESCRIPTION_MAX_WIDTH, {
+          message: `简介显示宽度不能超过 ${String(DESCRIPTION_MAX_WIDTH)}`,
+        }),
+      )
+      .optional(),
     kind: groupKindSchema.optional(),
     platform: z.string().min(1, "平台不能为空").optional(),
     status: groupStatusSchema.optional(),
