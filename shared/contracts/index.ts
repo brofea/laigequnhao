@@ -6,7 +6,13 @@ export {
   apiResponseSchema,
   apiErrorDetailSchema,
 } from "./api";
-export type { ApiSuccess, ApiError, ApiResponse, ErrorCode as ErrorCodeType } from "./api";
+export type {
+  ApiSuccess,
+  ApiError,
+  ApiResponse,
+  ApiErrorDetail,
+  ErrorCode as ErrorCodeType,
+} from "./api";
 
 export {
   publicGroupDtoSchema,

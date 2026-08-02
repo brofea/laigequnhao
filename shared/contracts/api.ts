@@ -28,6 +28,7 @@ export const apiErrorDetailSchema = z.object({
   message: z.string(),
   fieldErrors: z.record(z.string(), z.array(z.string())).optional(),
 });
+export type ApiErrorDetail = z.infer<typeof apiErrorDetailSchema>;
 
 // ─── 响应信封 ────────────────────────────────────────────
 

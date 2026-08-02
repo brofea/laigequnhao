@@ -6,6 +6,7 @@ import {
   type DemoGroup,
   type JoinMethod,
 } from "../data/fixtures";
+import { uploadLogoAsset, uploadQrAsset } from "@/features/admin/api";
 import Badge from "./Badge.vue";
 import Button from "./Button.vue";
 import Icon from "./Icon.vue";
@@ -17,11 +18,14 @@ const props = withDefaults(
     deletable?: boolean;
     removable?: boolean;
     publicMode?: boolean;
+    /** 管理模式下提供：图片上传走真实 asset API */
+    csrfToken?: string;
   }>(),
   {
     deletable: true,
     removable: false,
     publicMode: false,
+    csrfToken: "",
   },
 );
 const emit = defineEmits<{
@@ -52,6 +56,8 @@ const newJoinMethodType = ref<JoinMethod["type"]>("link");
 const dirty = ref(false);
 const avatarPreview = ref<string | null>(null);
 const uploadMessage = ref("");
+const uploading = ref(false);
+const logoR2Key = ref<string | null>(props.group.logoR2Key ?? null);
 const avatarInput = ref<HTMLInputElement | null>(null);
 const kindOptions = [
   { value: "兴趣", label: "兴趣" },
@@ -122,7 +128,7 @@ function updateJoinMethod(method: JoinMethod, value: string) {
   method.value = value;
 }
 
-function readImage(event: Event, method?: JoinMethod) {
+async function readImage(event: Event, method?: JoinMethod) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = "";
@@ -131,6 +137,38 @@ function readImage(event: Event, method?: JoinMethod) {
     uploadMessage.value = "请选择图片文件。";
     return;
   }
+
+  // 管理模式：走真实 asset API（服务端校验类型/大小/WebP 处理）
+  if (props.csrfToken) {
+    uploading.value = true;
+    uploadMessage.value = "正在上传…";
+    try {
+      if (method) {
+        const result = await uploadQrAsset(file, props.csrfToken);
+        if (result.ok) {
+          method.assetId = result.data.id;
+          method.value = result.data.publicUrl;
+          uploadMessage.value = "二维码已上传";
+        } else {
+          uploadMessage.value = result.error.message;
+        }
+      } else {
+        const result = await uploadLogoAsset(file, props.csrfToken);
+        if (result.ok) {
+          logoR2Key.value = result.data.r2Key;
+          avatarPreview.value = result.data.publicUrl;
+          uploadMessage.value = "头像已上传";
+        } else {
+          uploadMessage.value = result.error.message;
+        }
+      }
+    } finally {
+      uploading.value = false;
+    }
+    return;
+  }
+
+  // 公开投稿/无凭证：保留本地预览（生产投稿不接受文件字段）
   const reader = new FileReader();
   reader.onload = () => {
     const data = typeof reader.result === "string" ? reader.result : "";
@@ -143,6 +181,12 @@ function readImage(event: Event, method?: JoinMethod) {
     uploadMessage.value = "已生成本地图片预览；正式上传受单个 IP/设备每小时 1 次限制。";
   };
   reader.readAsDataURL(file);
+}
+
+function removeAvatar() {
+  logoR2Key.value = null;
+  avatarPreview.value = null;
+  uploadMessage.value = "已移除头像，保存后生效。";
 }
 
 function openAvatarPicker() {
@@ -159,6 +203,7 @@ function save() {
     status: draft.status,
     tags: [...draft.tags],
     joinMethods: cloneJoinMethods(draft.joinMethods),
+    logoR2Key: logoR2Key.value,
   };
   emit("save", next);
 }
@@ -198,11 +243,9 @@ function save() {
           </p>
         </div>
         <div class="admin-edit-inline-actions">
-          <Button variant="normal" size="sm" @click="openAvatarPicker"
+          <Button variant="normal" size="sm" :disabled="uploading" @click="openAvatarPicker"
             >上传头像</Button
-          ><Button variant="quiet" size="sm" @click="emit('toast', '已模拟移除头像')"
-            >移除</Button
-          >
+          ><Button variant="quiet" size="sm" @click="removeAvatar">移除</Button>
           <input
             ref="avatarInput"
             class="app-sr-only"
@@ -227,11 +270,7 @@ function save() {
         <small>{{ draft.description.length }}/1000</small>
       </label>
       <div class="admin-edit-fields-grid">
-        <Select
-          v-model="draft.kind"
-          label="群组性质"
-          :options="kindOptions"
-        /><Select
+        <Select v-model="draft.kind" label="群组性质" :options="kindOptions" /><Select
           v-model="draft.platform"
           label="平台"
           :options="platformOptions"
@@ -244,8 +283,7 @@ function save() {
         <div v-else class="public-submit-status" aria-label="审核状态">
           <span class="app-field__label">状态</span>
           <div class="public-submit-status__value">
-            <Badge tone="warning" dot>待审核</Badge
-            ><small>提交后由管理员审核</small>
+            <Badge tone="warning" dot>待审核</Badge><small>提交后由管理员审核</small>
           </div>
         </div>
       </div>
@@ -320,9 +358,7 @@ function save() {
                 <img v-if="method.imageData" :src="method.imageData" alt="已上传的二维码预览" />
                 <span v-else>二维码图片占位</span>
               </div>
-              <label
-                class="app-button app-button--normal app-button--sm admin-edit-upload-button"
-              >
+              <label class="app-button app-button--normal app-button--sm admin-edit-upload-button">
                 <input
                   type="file"
                   accept="image/*"

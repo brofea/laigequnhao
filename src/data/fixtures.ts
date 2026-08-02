@@ -22,6 +22,8 @@ export interface JoinMethod {
   label: string;
   value: string;
   imageData?: string;
+  /** 服务端资源标识（qr_code 类型上传后由真实 API 返回） */
+  assetId?: string;
 }
 
 export interface DemoGroup {
@@ -37,6 +39,8 @@ export interface DemoGroup {
   status: GroupStatus;
   inRecycleBin: boolean;
   joinMethods: JoinMethod[];
+  /** Logo 资源标识（管理员编辑保存时提交） */
+  logoR2Key?: string | null;
 }
 
 export interface DemoBoard {

@@ -21,6 +21,9 @@ const emit = defineEmits<{
   editGroup: [group: DemoGroup, board: DemoBoard];
   addBoard: [];
   addGroup: [board: DemoBoard];
+  delete: [board: DemoBoard];
+  moveMember: [board: DemoBoard, memberId: string, direction: "up" | "down"];
+  removeMember: [board: DemoBoard, memberId: string];
   toast: [message: string];
 }>();
 
@@ -64,33 +67,20 @@ function moveBoard(id: string, offset: number) {
   next.splice(target, 0, item);
   orderedBoards.value = next;
   emit("reorder", next);
-  emit("toast", "板块顺序已在样例中更新");
 }
 
-function moveMember(boardId: string, memberId: string, offset: number) {
-  const boardIndex = orderedBoards.value.findIndex((board) => board.id === boardId);
-  const board = orderedBoards.value[boardIndex];
-  if (!board) return;
-  const memberIndex = board.members.indexOf(memberId);
-  const targetIndex = memberIndex + offset;
-  if (memberIndex < 0 || targetIndex < 0 || targetIndex >= board.members.length) return;
-  const nextMembers = [...board.members];
-  const [member] = nextMembers.splice(memberIndex, 1);
-  if (!member) return;
-  nextMembers.splice(targetIndex, 0, member);
-  const nextBoards = [...orderedBoards.value];
-  nextBoards[boardIndex] = { ...board, members: nextMembers };
-  orderedBoards.value = nextBoards;
-  emit("reorder", nextBoards);
-  emit("toast", "成员顺序已在样例中更新");
+function moveMember(board: DemoBoard, memberId: string, offset: number) {
+  const direction = offset < 0 ? "up" : "down";
+  emit("moveMember", board, memberId, direction);
 }
 
-function deleteBoard(id: string) {
-  const board = orderedBoards.value.find((item) => item.id === id);
-  if (!board) return;
-  orderedBoards.value = orderedBoards.value.filter((item) => item.id !== id);
+function removeMember(board: DemoBoard, memberId: string) {
+  emit("removeMember", board, memberId);
+}
+
+function confirmDelete(board: DemoBoard) {
   confirmDeleteId.value = null;
-  emit("toast", `已模拟删除“${board.title}”，未产生真实变更`);
+  emit("delete", board);
 }
 </script>
 
@@ -101,9 +91,7 @@ function deleteBoard(id: string) {
         <p class="eyebrow">Boards / local fixture</p>
         <h2>板块排序与成员预览</h2>
       </div>
-      <Button variant="normal" size="sm" icon="plus" @click="emit('addBoard')"
-        >添加板块</Button
-      >
+      <Button variant="normal" size="sm" icon="plus" @click="emit('addBoard')">添加板块</Button>
     </div>
 
     <div class="board-list">
@@ -126,10 +114,7 @@ function deleteBoard(id: string) {
               <strong>{{ board.title }}</strong>
               <span class="board-panel__description">{{ board.description }}</span>
             </span>
-            <Icon
-              :name="expandedId === board.id ? 'chevron-up' : 'chevron-down'"
-              size="18"
-            />
+            <Icon :name="expandedId === board.id ? 'chevron-up' : 'chevron-down'" size="18" />
           </button>
           <Badge :tone="board.enabled ? 'success' : 'neutral'" dot>{{
             board.enabled ? "启用" : "未启用"
@@ -177,17 +162,10 @@ function deleteBoard(id: string) {
           <div v-if="confirmDeleteId === board.id" class="delete-confirm" role="alert">
             <span><strong>确认删除这个板块？</strong> 这只是固定数据中的视觉演示。</span>
             <span class="delete-confirm__actions">
-              <Button
-                variant="normal"
-                tone="danger"
-                size="sm"
-                @click="deleteBoard(board.id)"
-              >
+              <Button variant="normal" tone="danger" size="sm" @click="confirmDelete(board)">
                 >确认删除</Button
               >
-              <Button variant="quiet" size="sm" @click="confirmDeleteId = null"
-                >取消</Button
-              >
+              <Button variant="quiet" size="sm" @click="confirmDeleteId = null">取消</Button>
             </span>
           </div>
           <div v-else class="board-members-toolbar">
@@ -226,7 +204,7 @@ function deleteBoard(id: string) {
                         type="button"
                         :disabled="board.members.indexOf(memberId) === 0"
                         :aria-label="`上移 ${groupFor(memberId)?.title ?? memberId}`"
-                        @click="moveMember(board.id, memberId, -1)"
+                        @click="moveMember(board, memberId, -1)"
                       >
                         <Icon name="chevron-up" size="14" />
                       </button>
@@ -235,7 +213,7 @@ function deleteBoard(id: string) {
                         type="button"
                         :disabled="board.members.indexOf(memberId) === board.members.length - 1"
                         :aria-label="`下移 ${groupFor(memberId)?.title ?? memberId}`"
-                        @click="moveMember(board.id, memberId, 1)"
+                        @click="moveMember(board, memberId, 1)"
                       >
                         <Icon name="chevron-down" size="14" />
                       </button>
@@ -253,7 +231,7 @@ function deleteBoard(id: string) {
                       <button
                         class="table-link-button table-link-button--danger"
                         type="button"
-                        @click="emit('toast', '已模拟移除成员')"
+                        @click="removeMember(board, memberId)"
                       >
                         <Icon name="arrow-right" size="14" />移除
                       </button>

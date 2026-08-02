@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { RouterLink } from "vue-router";
-import type { AdminGroupDto, PublicGroupDto } from "@shared/contracts/group";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { submitGroup } from "@/features/groups/api";
 import { useGroupDirectory } from "@/features/groups/composables/useGroupDirectory";
 import { useLikedGroups } from "@/features/groups/composables/useLikedGroups";
+import { useDiscover } from "@/features/groups/composables/useDiscover";
+import { useTags } from "@/features/groups/composables/useTags";
+import { usePublicBoards } from "@/features/groups/composables/usePublicBoards";
+import { useGroupDetail } from "@/features/groups/composables/useGroupDetail";
+import { toDemoGroup, toDemoBoardAdmin, toDemoBoardPublic } from "@/features/groups/adapters";
 import { useAdminGroups } from "@/features/admin/composables/useAdminGroups";
+import { useAdminBoards } from "@/features/admin/composables/useAdminBoards";
+import { fetchAdminGroupsPage } from "@/features/admin/api";
 import siteConfig from "../../site.config";
 import AdminTable from "./AdminTable.vue";
 import Badge from "./Badge.vue";
@@ -22,13 +28,7 @@ import Select from "./Select.vue";
 import StatsPage from "./StatsPage.vue";
 import AdminEditForm from "./AdminEditForm.vue";
 import Toast, { type ToastItem } from "./Toast.vue";
-import {
-  demoBoards,
-  demoTags,
-  groupStatusLabels,
-  type DemoBoard,
-  type DemoGroup,
-} from "../data/fixtures";
+import { groupStatusLabels, type DemoBoard, type DemoGroup } from "../data/fixtures";
 import { useTheme, type ThemePreference } from "@/features/theme/useTheme";
 
 type ViewName = "home" | "admin";
@@ -40,9 +40,23 @@ type AdminSortDirection = "asc" | "desc" | null;
 const { preference: themePreference, resolvedTheme, setPreference } = useTheme();
 const props = defineProps<{ initialView: ViewName; csrfToken?: string }>();
 const view = ref<ViewName>(props.initialView);
+const route = useRoute();
+const router = useRouter();
 const publicDirectory = useGroupDirectory();
 const likedGroups = useLikedGroups();
-const adminDirectory = useAdminGroups(() => props.csrfToken ?? "");
+const adminDirectory = useAdminGroups(
+  () => props.csrfToken ?? "",
+  () => props.initialView === "admin",
+);
+const adminBoards = useAdminBoards(() => props.csrfToken ?? "");
+// 模板顶层解包：分页与总数（Ref 从 composable 提升到 setup 顶层）
+const adminPage = adminDirectory.page;
+const adminTotalItems = adminDirectory.totalItems;
+const adminTotalPages = adminDirectory.totalPages;
+const discover = useDiscover();
+const tags = useTags();
+const publicBoards = usePublicBoards();
+const groupDetail = useGroupDetail();
 const adminTab = ref<AdminTab>("groups");
 const searchQuery = ref("");
 const activeTag = ref("");
@@ -54,9 +68,7 @@ const selectedBoardId = ref<string | null>(null);
 const boardCreateDraft = ref<DemoBoard | null>(null);
 const selectedBoardAddGroupId = ref<string | null>(null);
 const boardListVersion = ref(0);
-const boards = ref<DemoBoard[]>(
-  demoBoards.map((board) => ({ ...board, memberCount: 0, members: [] })),
-);
+const adminGroupPool = ref<DemoGroup[]>([]);
 const publicSubmitGroup = ref<DemoGroup | null>(null);
 const adminCreateGroup = ref<DemoGroup | null>(null);
 const adminQuery = ref("");
@@ -67,59 +79,68 @@ const adminSortDirection = ref<AdminSortDirection>(null);
 const toastItems = ref<ToastItem[]>([]);
 let toastId = 0;
 
+/** 点赞本地状态来源（adapter 依赖注入） */
+const likeStateSource = {
+  get(groupId: string) {
+    return localLikeState.value[groupId];
+  },
+  isLiked(groupId: string) {
+    return likedGroups.likedIds.value.has(groupId);
+  },
+};
+
 onMounted(() => {
-  if (props.initialView === "admin") void adminDirectory.fetchGroups();
+  if (props.initialView === "home") {
+    void discover.load();
+    void tags.load();
+    void publicBoards.load();
+    window.addEventListener("scroll", onWindowScroll, { passive: true });
+  } else {
+    void adminBoards.load();
+    void loadAdminGroupPool();
+  }
+});
+
+onUnmounted(() => {
+  removeScrollListener();
 });
 
 const localLikeState = ref<Record<string, { liked: boolean; likes: number }>>({});
 
-function toDemoGroup(group: PublicGroupDto | AdminGroupDto): DemoGroup {
-  const likeState = localLikeState.value[group.id];
-  return {
-    id: group.id,
-    title: group.title,
-    platform: group.platform,
-    kind: group.kind === "official" ? "工具" : "兴趣",
-    description: group.description,
-    tags: group.tags,
-    likes: likeState?.likes ?? group.likeCount,
-    liked: likeState?.liked ?? likedGroups.likedIds.value.has(group.id),
-    avatarState: group.logoUrl ? "ready" : "missing",
-    status: group.status,
-    inRecycleBin: "deletedAt" in group ? group.deletedAt !== null : false,
-    joinMethods: group.joinMethods.map((method, index) => ({
-      id: `${group.id}-method-${String(index)}`,
-      type: method.type === "group_number" ? "number" : method.type === "url" ? "link" : "qr",
-      label:
-        method.type === "group_number" ? "群号" : method.type === "url" ? "邀请链接" : "二维码",
-      value:
-        method.type === "qr_code"
-          ? "assetId" in method
-            ? (method.assetId ?? method.qrCodeUrl ?? "")
-            : (method.qrCodeUrl ?? "")
-          : (method.value ?? method.url ?? ""),
-    })),
-  };
-}
-
-const publicVisualGroups = computed(() => publicDirectory.groups.value.map(toDemoGroup));
-const adminVisualGroups = computed(() => adminDirectory.groups.value.map(toDemoGroup));
-const boardGroupPool = computed(() => publicVisualGroups.value);
+const publicVisualGroups = computed(() =>
+  publicDirectory.groups.value.map((group) => toDemoGroup(group, likeStateSource)),
+);
+const adminVisualGroups = computed(() =>
+  adminDirectory.groups.value.map((group) => toDemoGroup(group, likeStateSource)),
+);
+const discoverGroups = computed(() =>
+  discover.items.value.map((group) => toDemoGroup(group, likeStateSource)),
+);
+/** 板块：公开端取启用板块（已发布成员），管理端取全部板块（全部成员） */
+const boards = computed<DemoBoard[]>(() => {
+  if (view.value === "admin") {
+    return adminBoards.boards.value.map((board) =>
+      toDemoBoardAdmin(board, adminBoards.membersByBoard.value[board.id] ?? []),
+    );
+  }
+  return publicBoards.boards.value.map(toDemoBoardPublic);
+});
+/** 板块添加群组选择器的候选池：管理端优先取已发布+已下架群组（前 50 条） */
+const boardGroupPool = computed(() =>
+  adminGroupPool.value.length > 0 ? adminGroupPool.value : publicVisualGroups.value,
+);
 const publishedGroups = computed(() =>
   publicVisualGroups.value.filter((group) => group.status === "published" && !group.inRecycleBin),
 );
-const visibleTags = computed(() => {
-  const counts = new Map<string, number>();
-  for (const group of publishedGroups.value) {
-    for (const tag of group.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-  }
-  return demoTags.map((tag) => ({ ...tag, count: counts.get(tag.label) ?? 0 }));
-});
-const selectedGroup = computed(() =>
-  selectedGroupId.value
-    ? publishedGroups.value.find((group) => group.id === selectedGroupId.value)
-    : undefined,
+const visibleTags = computed(() =>
+  tags.tags.value.map((item) => ({ label: item.tag, count: item.count })),
 );
+const selectedGroup = computed(() => {
+  if (groupDetail.group.value) return toDemoGroup(groupDetail.group.value, likeStateSource);
+  return selectedGroupId.value
+    ? publishedGroups.value.find((group) => group.id === selectedGroupId.value)
+    : undefined;
+});
 const selectedAdminGroup = computed(() =>
   selectedAdminGroupId.value
     ? adminVisualGroups.value.find((group) => group.id === selectedAdminGroupId.value)
@@ -137,11 +158,6 @@ const selectedBoardAddGroup = computed(() =>
 );
 let boardCreateSequence = 0;
 
-function requiredGroup(id: string): DemoGroup {
-  const group = boardGroupPool.value.find((item) => item.id === id);
-  if (!group) throw new Error(`Missing published group: ${id}`);
-  return group;
-}
 const isSearchMode = computed(() => Boolean(searchQuery.value.trim()) || Boolean(activeTag.value));
 const filteredGroups = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase();
@@ -161,8 +177,11 @@ const filteredAdminGroups = computed(() => {
     const query = adminQuery.value.trim().toLocaleLowerCase();
     const matchesQuery = !query || group.title.toLocaleLowerCase().includes(query);
     const matchesRecycleBin = showRecycleBin.value || !group.inRecycleBin;
+    // 回收站模式忽略状态筛选（服务端 deleted=true 返回全部状态）
     const matchesFilter =
-      adminFilter.value === "全部状态" || groupStatusLabels[group.status] === adminFilter.value;
+      showRecycleBin.value ||
+      adminFilter.value === "全部状态" ||
+      groupStatusLabels[group.status] === adminFilter.value;
     return matchesQuery && matchesRecycleBin && matchesFilter;
   });
   if (!adminSortField.value || !adminSortDirection.value) return filtered;
@@ -228,6 +247,13 @@ async function toggleLike(group: DemoGroup) {
 
 function openGroup(group: DemoGroup) {
   selectedGroupId.value = group.id;
+  // 详情统一走 ?group= 深链接：路由变化驱动真实详情请求与浏览器历史
+  void router.replace({ query: { ...route.query, group: group.id } });
+}
+
+function closeGroupDialog() {
+  selectedGroupId.value = null;
+  groupDetail.close();
 }
 
 function openBoardEdit(board: DemoBoard) {
@@ -341,8 +367,28 @@ function themeIcon() {
       : "system";
 }
 
-function copyDemoLink() {
-  showToast("分享链接已复制（模拟反馈）", "success");
+async function copyText(text: string, successMessage: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(successMessage, "success");
+  } catch {
+    showToast("复制失败，请手动复制", "warning");
+  }
+}
+
+function copyJoinMethod(method: DemoGroup["joinMethods"][number]) {
+  if (method.type === "number") {
+    void copyText(method.value, "群号已复制");
+  } else if (method.type === "link") {
+    window.open(method.value, "_blank", "noopener");
+  } else {
+    void copyText(method.value, "二维码链接已复制");
+  }
+}
+
+async function shareGroup() {
+  if (!selectedGroup.value) return;
+  await copyText(`${window.location.origin}/?group=${selectedGroup.value.id}`, "分享链接已复制");
 }
 
 function setPreviewState(state: PreviewState) {
@@ -350,14 +396,23 @@ function setPreviewState(state: PreviewState) {
   if (state !== "ready") searchQuery.value = "";
 }
 
-function applyBoards(next: DemoBoard[]) {
-  boards.value = next;
+/** 板块顺序批量更新（服务端原子写入；失败时重新拉取服务端顺序） */
+async function applyBoards(next: DemoBoard[]) {
+  const result = await adminBoards.reorder(next.map((board) => board.id));
+  if (!result.ok) {
+    showToast(
+      result.conflict ? "板块列表已变化，请刷新后重试" : "板块顺序保存失败，请稍后重试",
+      "warning",
+    );
+    void adminBoards.load();
+    return;
+  }
+  showToast("板块顺序已保存");
 }
 
 function boardGroups(board: DemoBoard) {
-  return board.members
-    .map(requiredGroup)
-    .filter((group) => group.status === "published" && !group.inRecycleBin);
+  const real = publicBoards.boards.value.find((item) => item.id === board.id);
+  return (real?.groups ?? []).map((group) => toDemoGroup(group, likeStateSource));
 }
 
 function cycleSort(field: AdminSortField) {
@@ -370,7 +425,28 @@ function cycleSort(field: AdminSortField) {
     adminSortField.value = null;
     adminSortDirection.value = null;
   }
+  // 服务端排序同步：字段映射 + 回第一页
+  if (adminSortField.value === null) {
+    adminDirectory.setSort(undefined, "desc");
+  } else {
+    adminDirectory.setSort(
+      adminSortField.value,
+      adminSortDirection.value === "desc" ? "desc" : "asc",
+    );
+  }
 }
+
+/** 状态筛选（Select）变化 → 服务端状态集合并回第一页 */
+watch(adminFilter, (label) => {
+  const map: Record<string, import("@shared/domain").GroupStatus[]> = {
+    全部状态: ["published", "delisted", "pending", "rejected"],
+    已发布: ["published"],
+    已下架: ["delisted"],
+    待审核: ["pending"],
+    已拒绝: ["rejected"],
+  };
+  adminDirectory.setStatuses(map[label] ?? ["published", "delisted", "pending", "rejected"]);
+});
 
 function removeAdminGroup(group: DemoGroup) {
   void adminDirectory.softDelete(group.id).then((ok) => {
@@ -384,12 +460,31 @@ function toJoinMethodPayload(group: DemoGroup) {
       ? { type: "group_number" as const, value: method.value.trim(), sortOrder: index }
       : method.type === "link"
         ? { type: "url" as const, url: method.value.trim(), sortOrder: index }
-        : { type: "qr_code" as const, assetId: method.value, sortOrder: index },
+        : {
+            type: "qr_code" as const,
+            assetId: method.assetId ?? method.value,
+            sortOrder: index,
+          },
   );
 }
 
-function toAdminPayload(group: DemoGroup, version?: number) {
-  return {
+function toAdminPayload(
+  group: DemoGroup,
+  version?: number,
+):
+  | import("@shared/contracts/group").GroupCreateInput
+  | import("@shared/contracts/group").GroupUpdateInput {
+  const payload: {
+    title: string;
+    description: string;
+    kind: "official" | "interest";
+    platform: string;
+    status: import("@shared/domain").GroupStatus;
+    tags: string[];
+    joinMethods: import("@shared/contracts/group").JoinMethodInput[];
+    auditNotes: string | null;
+    logoR2Key: string | null;
+  } = {
     title: group.title.trim(),
     description: group.description,
     kind: group.kind === "工具" ? "official" : "interest",
@@ -398,17 +493,21 @@ function toAdminPayload(group: DemoGroup, version?: number) {
     tags: group.tags,
     joinMethods: toJoinMethodPayload(group),
     auditNotes: null,
-    ...(version === undefined ? {} : { version }),
+    logoR2Key: group.logoR2Key ?? null,
   };
+  return version === undefined ? payload : { ...payload, version };
 }
 
 async function saveAdminGroup(next: DemoGroup) {
   const current = adminDirectory.groups.value.find((item) => item.id === next.id);
   if (!current) return;
-  const result = await adminDirectory.updateGroup(next.id, toAdminPayload(next, current.version));
+  const result = await adminDirectory.updateGroup(
+    next.id,
+    toAdminPayload(next, current.version) as import("@shared/contracts/group").GroupUpdateInput,
+  );
   if (!result.ok) {
     showToast(
-      result.versionConflict ? "群组已被其他会话修改" : "保存失败，请检查表单内容",
+      result.versionConflict ? "群组已被其他会话修改，请刷新后重试" : "保存失败，请检查表单内容",
       "warning",
     );
     return;
@@ -424,22 +523,23 @@ function deleteAdminGroup(group: DemoGroup) {
   });
 }
 
-function removeGroupFromBoard() {
+async function removeGroupFromBoard() {
   const context = selectedAdminGroupContext.value;
   if (!context) return;
-  const board = boards.value.find((item) => item.id === context.boardId);
-  if (board) {
-    board.members = board.members.filter((memberId) => memberId !== context.groupId);
-    board.memberCount = board.members.length;
-    boardListVersion.value += 1;
-  }
   const group = boardGroupPool.value.find((item) => item.id === context.groupId);
   closeAdminGroupEdit();
+  const result = await adminBoards.removeMember(context.boardId, context.groupId);
+  if (!result.ok) {
+    showToast("移除成员失败，请稍后重试", "warning");
+    return;
+  }
   showToast(`已将“${group?.title ?? "该群组"}”移出板块`, "success");
 }
 
 async function saveAdminCreateGroup(next: DemoGroup) {
-  const result = await adminDirectory.createGroup(toAdminPayload(next));
+  const result = await adminDirectory.createGroup(
+    toAdminPayload(next) as import("@shared/contracts/group").GroupCreateInput,
+  );
   if (!result.ok) {
     showToast("保存失败，请检查表单内容", "warning");
     return;
@@ -448,28 +548,115 @@ async function saveAdminCreateGroup(next: DemoGroup) {
   showToast("新群组已保存");
 }
 
-function saveBoard(next: DemoBoard) {
-  const current = boards.value.find((board) => board.id === next.id);
-  if (current) Object.assign(current, next);
+/** 板块编辑保存 → 真实 PATCH（description 无服务端字段，仅提交标题/启停） */
+async function saveBoard(next: DemoBoard) {
+  const current = adminBoards.boards.value.find((board) => board.id === next.id);
+  if (!current) {
+    selectedBoardId.value = null;
+    return;
+  }
+  const result = await adminBoards.updateBoard(next.id, {
+    title: next.title,
+    isEnabled: next.enabled,
+    version: current.version,
+  });
+  if (!result.ok) {
+    showToast(
+      result.conflict ? "板块已被其他会话修改，请刷新后重试" : "板块保存失败，请稍后重试",
+      "warning",
+    );
+    void adminBoards.load();
+    return;
+  }
   selectedBoardId.value = null;
-  showToast("板块信息已保存（样例状态）");
+  showToast("板块信息已保存");
 }
 
-function saveBoardCreate(next: DemoBoard) {
-  boards.value.push({ ...next, memberCount: next.members.length });
+async function saveBoardCreate(next: DemoBoard) {
+  const result = await adminBoards.createBoard(next.title);
+  if (!result.ok) {
+    showToast("创建板块失败，请稍后重试", "warning");
+    return;
+  }
   boardListVersion.value += 1;
   boardCreateDraft.value = null;
-  showToast("新板块已保存（样例状态）");
+  showToast("新板块已保存");
 }
 
-function addGroupToBoard(group: DemoGroup) {
+async function deleteBoard(board: DemoBoard) {
+  const result = await adminBoards.deleteBoard(board.id);
+  if (!result.ok) {
+    showToast("删除板块失败，请稍后重试", "warning");
+    return;
+  }
+  boardListVersion.value += 1;
+  showToast(`已删除“${board.title}”`);
+}
+
+async function moveBoardMemberOp(board: DemoBoard, memberId: string, direction: "up" | "down") {
+  const result = await adminBoards.moveMember(board.id, memberId, direction);
+  if (!result.ok) {
+    showToast("成员顺序更新失败，请稍后重试", "warning");
+    void adminBoards.load();
+  }
+}
+
+async function removeBoardMemberOp(board: DemoBoard, memberId: string) {
+  const group = boardGroupPool.value.find((item) => item.id === memberId);
+  const result = await adminBoards.removeMember(board.id, memberId);
+  if (!result.ok) {
+    showToast("移除成员失败，请稍后重试", "warning");
+    return;
+  }
+  showToast(`已将“${group?.title ?? "该群组"}”移出板块`, "success");
+}
+
+async function addGroupToBoard(group: DemoGroup) {
   const board = selectedBoardAddGroup.value;
   if (!board || board.members.includes(group.id)) return;
-  board.members.push(group.id);
-  board.memberCount = board.members.length;
-  boardListVersion.value += 1;
+  const result = await adminBoards.addMember(board.id, group.id);
+  if (!result.ok) {
+    showToast(result.reason ?? "添加失败，请稍后重试", "warning");
+    return;
+  }
   selectedBoardAddGroupId.value = null;
   showToast(`已将“${group.title}”添加到“${board.title}”`);
+}
+
+/** 板块添加群组候选池：已发布 + 已下架（前 50 条） */
+async function loadAdminGroupPool() {
+  const result = await fetchAdminGroupsPage({
+    statuses: ["published", "delisted"],
+    deleted: false,
+    page: 1,
+  });
+  if (result.ok) {
+    adminGroupPool.value = result.data.items.map((group) => toDemoGroup(group, likeStateSource));
+  }
+}
+
+// 详情深链接口不可用时：非敏感提示并清理无效 group 参数
+watch(
+  () => groupDetail.error.value,
+  (err) => {
+    if (err) {
+      showToast("群组不存在或不可公开", "warning");
+      groupDetail.close();
+    }
+  },
+);
+
+// 无限滚动：接近页面底部且存在 cursor 时加载更多（公开目录）
+function onWindowScroll() {
+  if (view.value !== "home" || isSearchMode.value) return;
+  if (publicDirectory.loading.value || !publicDirectory.nextCursor.value) return;
+  if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 400) {
+    void publicDirectory.loadMore();
+  }
+}
+
+function removeScrollListener() {
+  window.removeEventListener("scroll", onWindowScroll);
 }
 </script>
 
@@ -563,7 +750,7 @@ function addGroupToBoard(group: DemoGroup) {
               </div>
               <span class="section-heading__hint">拖动卡片探索</span>
             </div>
-            <Carousel :groups="publishedGroups.slice(0, 5)" @open="openGroup" @like="toggleLike" />
+            <Carousel :groups="discoverGroups" @open="openGroup" @like="toggleLike" />
           </section>
           <section class="app-section" aria-labelledby="tag-title">
             <div class="section-heading">
@@ -727,7 +914,9 @@ function addGroupToBoard(group: DemoGroup) {
               </div>
               <div class="admin-summary">
                 <strong>群组列表</strong
-                ><span>共 {{ filteredAdminGroups.length }} 条，第 1 / 1 页</span
+                ><span
+                  >共 {{ adminTotalItems }} 条，第 {{ adminPage }} /
+                  {{ adminTotalPages || 1 }} 页</span
                 ><span class="admin-summary__sort"
                   >更新时间 <Icon name="chevron-down" size="14"
                 /></span>
@@ -747,17 +936,29 @@ function addGroupToBoard(group: DemoGroup) {
                   icon="arrow-left"
                   icon-only
                   aria-label="上一页"
-                  disabled
-                /><span class="pagination__current">1</span
-                ><button type="button" @click="showToast('分页仅用于视觉演示', 'info')">2</button
-                ><button type="button" @click="showToast('分页仅用于视觉演示', 'info')">3</button
+                  :disabled="adminPage <= 1"
+                  @click="adminDirectory.goToPage(adminPage - 1)"
+                /><span class="pagination__current">{{ adminPage }}</span
+                ><button
+                  v-if="adminTotalPages > adminPage"
+                  type="button"
+                  @click="adminDirectory.goToPage(adminPage + 1)"
+                >
+                  {{ adminPage + 1 }}</button
+                ><button
+                  v-if="adminTotalPages > adminPage + 1"
+                  type="button"
+                  @click="adminDirectory.goToPage(adminPage + 2)"
+                >
+                  {{ adminPage + 2 }}</button
                 ><Button
                   variant="quiet"
                   size="sm"
                   icon="arrow-right"
                   icon-only
                   aria-label="下一页"
-                  @click="showToast('分页仅用于视觉演示', 'info')"
+                  :disabled="adminTotalPages > 0 && adminPage >= adminTotalPages"
+                  @click="adminDirectory.goToPage(adminPage + 1)"
                 />
               </div>
             </template>
@@ -771,6 +972,9 @@ function addGroupToBoard(group: DemoGroup) {
               @edit-group="openBoardMemberEdit"
               @add-board="openBoardCreateDialog"
               @add-group="openBoardAddGroupDialog"
+              @delete="deleteBoard"
+              @move-member="moveBoardMemberOp"
+              @remove-member="removeBoardMemberOp"
               @toast="showToast($event, 'info')"
             />
             <StatsPage v-else />
@@ -791,7 +995,7 @@ function addGroupToBoard(group: DemoGroup) {
       :title="selectedGroup.title"
       labelled-by="group-dialog-title"
       test-id="group-detail-dialog"
-      @close="selectedGroupId = null"
+      @close="closeGroupDialog"
     >
       <div class="group-dialog-summary">
         <span
@@ -820,11 +1024,7 @@ function addGroupToBoard(group: DemoGroup) {
               variant="quiet"
               size="sm"
               :icon="method.type === 'link' ? 'external' : 'copy'"
-              @click="
-                method.type === 'link'
-                  ? showToast('已打开邀请链接（样例）', 'info')
-                  : copyDemoLink()
-              "
+              @click="copyJoinMethod(method)"
               >{{ method.type === "link" ? "访问" : "复制" }}</Button
             >
           </div>
@@ -843,7 +1043,7 @@ function addGroupToBoard(group: DemoGroup) {
           :aria-pressed="selectedGroup.liked"
           @click="toggleLike(selectedGroup)"
           >{{ selectedGroup.liked ? "已点赞" : "点赞" }} · {{ selectedGroup.likes }}</Button
-        ><Button variant="normal" icon="external" @click="copyDemoLink">分享</Button></template
+        ><Button variant="normal" icon="external" @click="shareGroup">分享</Button></template
       >
     </Dialog>
 
@@ -876,6 +1076,7 @@ function addGroupToBoard(group: DemoGroup) {
       <AdminEditForm
         :group="adminCreateGroup"
         :deletable="false"
+        :csrf-token="props.csrfToken ?? ''"
         @save="saveAdminCreateGroup"
         @cancel="adminCreateGroup = null"
         @toast="showToast($event, 'info')"
@@ -894,6 +1095,7 @@ function addGroupToBoard(group: DemoGroup) {
         :group="selectedAdminGroup"
         :deletable="!selectedAdminGroupContext"
         :removable="Boolean(selectedAdminGroupContext)"
+        :csrf-token="props.csrfToken ?? ''"
         @save="saveAdminGroup"
         @cancel="closeAdminGroupEdit"
         @delete="deleteAdminGroup(selectedAdminGroup)"

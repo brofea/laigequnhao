@@ -1,458 +1,296 @@
-import { ref, computed, watch, onUnmounted } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api } from "@/shared/api/client";
+import type { AdminGroupDto, GroupCreateInput, GroupUpdateInput } from "@shared/contracts/group";
+import type { GroupStatus } from "@shared/domain";
+import { normalizeSearchQuery } from "@shared/domain";
 import {
-  adminGroupDtoSchema,
-  adminGroupListResponseSchema,
-  type AdminGroupDto,
-  type AdminSortField,
-  type AdminSortDir,
-} from "@shared/contracts/group";
-import { groupStatusSchema, normalizeSearchQuery, type GroupStatus } from "@shared/domain";
-import { z } from "zod";
+  createAdminGroup,
+  fetchAdminGroupsPage,
+  permanentDeleteGroup,
+  restoreGroup,
+  softDeleteGroup,
+  updateAdminGroup,
+  type AdminGroupsQuery,
+} from "../api";
 
-const deleteResponseSchema = z.object({ id: z.string() });
-const allStatuses = [...groupStatusSchema.options];
+export const ADMIN_PAGE_SIZE = 50;
 
-function parseStatuses(raw: string | string[] | undefined): GroupStatus[] {
-  if (!raw) return [...allStatuses];
-  const values = Array.isArray(raw) ? raw : [raw];
-  const parsed = [
-    ...new Set(
-      values.filter((value): value is GroupStatus =>
-        groupStatusSchema.options.includes(value as GroupStatus),
-      ),
-    ),
-  ];
-  return parsed.length > 0 ? parsed : [...allStatuses];
-}
+/** 服务端排序字段（T04 契约）与本地表头字段的映射 */
+export const adminSortFieldMap: Record<string, string | undefined> = {
+  title: "title",
+  kind: "kind",
+  status: "status",
+  platform: "platform",
+  tags: "tags",
+  likes: "likeCount",
+};
 
-export function useAdminGroups(csrfToken: () => string) {
+/**
+ * 管理群组列表：T04 页码分页契约 + URL 状态同步。
+ *
+ * URL query 是恢复来源：page/status/deleted/q/sortBy/sortDir。
+ * 筛选/排序/搜索变化回到第一页；删除当前页最后一项自动退页。
+ */
+export function useAdminGroups(getCsrf: () => string, isActive: () => boolean = () => true) {
   const route = useRoute();
   const router = useRouter();
 
-  // ── Reactive state ──
   const groups = ref<AdminGroupDto[]>([]);
   const loading = ref(false);
-  const error = ref("");
-  const total = ref(0);
-  const nextCursor = ref<string | null>(null);
+  const error = ref<string | null>(null);
+  const page = ref(1);
+  const totalItems = ref(0);
+  const totalPages = ref(0);
+  const loaded = ref(false);
+
+  const statuses = ref<GroupStatus[]>([]);
+  const deleted = ref(false);
+  const q = ref("");
+  const sortBy = ref<string | undefined>(undefined);
+  const sortDir = ref<"asc" | "desc">("desc");
 
   let controller: AbortController | null = null;
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let immediateSearchRequested = false;
 
-  // ── CSRF headers factory ──
-  const csrfHeaders = (): Record<string, string> => ({
-    "X-CSRF-Token": csrfToken(),
-  });
+  /** 从 URL query 恢复状态（前进/后退/刷新） */
+  function readFromUrl() {
+    const query = route.query;
+    const rawStatuses = Array.isArray(query.status)
+      ? query.status
+      : query.status
+        ? [query.status]
+        : [];
+    const nextStatuses = rawStatuses.filter(
+      (s): s is GroupStatus =>
+        s === "pending" || s === "published" || s === "rejected" || s === "delisted",
+    );
+    const nextDeleted = query.deleted === "true";
+    const nextPage = Math.max(1, Number(query.page) || 1);
+    const nextQ = typeof query.q === "string" ? query.q : "";
+    const nextSortBy = typeof query.sortBy === "string" ? query.sortBy : undefined;
+    const nextSortDir = query.sortDir === "asc" ? "asc" : "desc";
 
-  // ── URL-derived reactive state ──
-
-  /** Multi-status filter: derived from URL query param "status" (repeatable) */
-  const statuses = computed<GroupStatus[]>(() =>
-    parseStatuses(
-      Array.isArray(route.query.status)
-        ? route.query.status.filter((value): value is string => value !== null)
-        : (route.query.status ?? undefined),
-    ),
-  );
-
-  const deleted = computed(() => route.query.deleted === "true");
-
-  const searchQuery = computed(() => String(route.query.q ?? ""));
-
-  const sortBy = computed<AdminSortField | undefined>(() => {
-    const v = route.query.sortBy as string | undefined;
-    return v && ["title", "kind", "status", "platform", "tags", "likeCount"].includes(v)
-      ? (v as AdminSortField)
-      : undefined;
-  });
-
-  const sortDir = computed<AdminSortDir | undefined>(() => {
-    if (!sortBy.value) return undefined;
-    const v = route.query.sortDir as string | undefined;
-    return v === "asc" ? "asc" : "desc";
-  });
-
-  // ── URL mutation helpers ──
-
-  function updateQuery(patch: Record<string, string | string[] | undefined>) {
-    const next: Record<string, unknown> = {};
-    // Copy existing query, then apply patch (skip undefined/empty-array removals)
-    for (const [k, v] of Object.entries(route.query)) {
-      next[k] = v;
-    }
-    for (const [k, v] of Object.entries(patch)) {
-      if (v === undefined || (Array.isArray(v) && v.length === 0)) {
-        Reflect.deleteProperty(next, k);
-      } else {
-        next[k] = v;
-      }
-    }
-    void router.replace({ query: next as Record<string, string | string[]> });
+    statuses.value = nextDeleted ? [] : nextStatuses;
+    deleted.value = nextDeleted;
+    q.value = nextQ;
+    page.value = nextPage;
+    sortBy.value = nextSortBy;
+    sortDir.value = nextSortDir;
   }
 
-  function toggleStatus(status: GroupStatus) {
-    if (deleted.value) return;
-    const current = [...statuses.value];
+  /** 当前 URL 中与列表状态相关的规范化签名 */
+  function queryKey(): string {
+    const rawStatuses = Array.isArray(route.query.status)
+      ? route.query.status
+      : route.query.status
+        ? [route.query.status]
+        : [];
+    return JSON.stringify({
+      statuses: [...rawStatuses].sort(),
+      deleted: route.query.deleted === "true",
+      q: route.query.q ?? "",
+      sortBy: route.query.sortBy ?? "",
+      sortDir: route.query.sortDir ?? "",
+      page: route.query.page ?? "1",
+    });
+  }
 
-    if (current.includes(status)) {
-      if (current.length <= 1) return; // must keep at least one
-      updateQuery({ status: current.filter((s) => s !== status) });
-    } else {
-      updateQuery({ status: [...current, status] });
+  let syncedKey = "";
+
+  /** 状态同步到 URL（浏览器历史可前进/后退）；status 支持多值 */
+  function syncToUrl() {
+    const query: Record<string, string | string[]> = {};
+    if (!deleted.value && statuses.value.length > 0) {
+      query["status"] = [...statuses.value];
     }
-  }
-
-  function toggleDeleted() {
-    if (deleted.value) {
-      // 退出回收站：读取 URL 中保存的状态组合
-      const rawSaved = route.query.saved as string | string[] | undefined;
-      const restore = parseStatuses(rawSaved);
-      updateQuery({ deleted: undefined, saved: undefined, status: restore });
-    } else {
-      // 进入回收站：将当前状态组合保存到 URL
-      updateQuery({
-        deleted: "true",
-        status: undefined,
-        saved: statuses.value.length > 0 ? statuses.value : undefined,
-      });
+    if (deleted.value) query["deleted"] = "true";
+    if (q.value) query["q"] = q.value;
+    if (sortBy.value) {
+      query["sortBy"] = sortBy.value;
+      query["sortDir"] = sortDir.value;
     }
+    query["page"] = String(page.value);
+    syncedKey = JSON.stringify({
+      statuses: [...statuses.value].sort(),
+      deleted: deleted.value,
+      q: q.value,
+      sortBy: sortBy.value ?? "",
+      sortDir: sortDir.value,
+      page: String(page.value),
+    });
+    void router.replace({ query });
   }
 
-  function setSearch(q: string) {
-    updateQuery({ q: normalizeSearchQuery(q) ?? undefined });
+  function buildQuery(signal?: AbortSignal): AdminGroupsQuery {
+    return {
+      statuses: deleted.value ? [] : statuses.value,
+      deleted: deleted.value,
+      q: q.value || undefined,
+      sortBy: sortBy.value,
+      sortDir: sortDir.value,
+      page: page.value,
+      signal,
+    };
   }
 
-  function setSort(field: AdminSortField) {
-    if (sortBy.value === field) {
-      if (sortDir.value === "asc") {
-        updateQuery({ sortDir: "desc" });
-      } else {
-        updateQuery({ sortBy: undefined, sortDir: undefined });
-      }
-    } else {
-      updateQuery({ sortBy: field, sortDir: "asc" });
-    }
-  }
-
-  // ── Data fetching ──
-
-  async function fetchGroups(cursor?: string | null, append = false) {
+  async function fetchGroups() {
+    // 非管理视图不请求管理接口（避免公开首页携带管理请求）
+    if (!isActive()) return;
     controller?.abort();
     controller = new AbortController();
     loading.value = true;
-    error.value = "";
+    error.value = null;
+
+    // 回收站模式与状态筛选互斥：URL 恢复时不产生非法组合
+    if (!deleted.value && statuses.value.length === 0) {
+      statuses.value = ["published", "delisted", "pending", "rejected"];
+    }
 
     try {
-      const qs = new URLSearchParams();
-      if (!deleted.value) {
-        for (const s of statuses.value) qs.append("status", s);
-      } else {
-        qs.set("deleted", "true");
-      }
-      if (searchQuery.value) qs.set("q", searchQuery.value);
-      if (sortBy.value) {
-        qs.set("sortBy", sortBy.value);
-        qs.set("sortDir", sortDir.value ?? "asc");
-      } else {
-        qs.set("sortBy", "status");
-        qs.set("sortDir", "asc");
-      }
-      if (cursor) qs.set("cursor", cursor);
-      qs.set("limit", "50");
-
-      const result = await api.get(
-        `/admin?${qs.toString()}`,
-        adminGroupListResponseSchema,
-        csrfHeaders(),
-        controller.signal,
-      );
-
+      const result = await fetchAdminGroupsPage(buildQuery(controller.signal));
       if (result.ok) {
-        if (append) {
-          groups.value = [...groups.value, ...result.data.items];
-        } else {
-          groups.value = result.data.items;
-        }
-        total.value = result.data.total;
-        nextCursor.value = result.data.nextCursor;
+        groups.value = result.data.items;
+        totalItems.value = result.data.totalItems;
+        totalPages.value = result.data.totalPages;
+        page.value = result.data.page;
+        loaded.value = true;
       } else {
         error.value = result.error.message;
       }
-    } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
+    } catch (e) {
       if (e instanceof Error && e.name === "AbortError") return;
-      error.value = "加载失败";
+      error.value = "加载失败，请重试";
     } finally {
       loading.value = false;
     }
   }
 
-  // ── Watchers: fetch on filter/sort change ──
-
-  watch([statuses, deleted, sortBy, sortDir], () => {
-    void fetchGroups(null, false);
-  });
-
-  // Debounced search watch
-  watch(searchQuery, (newQ, oldQ) => {
-    if (newQ === oldQ) return;
-    if (immediateSearchRequested) return;
-    if (debounceTimer) clearTimeout(debounceTimer);
-    if (!newQ) {
-      void fetchGroups(null, false);
-    } else {
-      debounceTimer = setTimeout(() => {
-        void fetchGroups(null, false);
-      }, 300);
-    }
-  });
-
-  /** Immediate search (Enter key or clear) */
-  async function searchImmediate(q = searchQuery.value) {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    immediateSearchRequested = true;
-    try {
-      await router.replace({
-        query: {
-          ...route.query,
-          q: normalizeSearchQuery(q) ?? undefined,
-        },
-      });
-    } finally {
-      immediateSearchRequested = false;
-    }
-    await fetchGroups(null, false);
+  function retry() {
+    void fetchGroups();
   }
 
-  /** Load more (cursor pagination) */
-  async function loadMore() {
-    if (loading.value || !nextCursor.value) return;
-    await fetchGroups(nextCursor.value, true);
+  function setSearch(value: string) {
+    q.value = normalizeSearchQuery(value) ?? "";
+    page.value = 1;
+    syncToUrl();
+    void fetchGroups();
   }
 
-  async function refetchLoadedWindow(previouslyLoaded: number) {
-    await fetchGroups(null, false);
-    while (
-      groups.value.length < Math.min(previouslyLoaded, total.value) &&
-      nextCursor.value !== null
-    ) {
-      const cursor = nextCursor.value;
-      await fetchGroups(cursor, true);
-      if (nextCursor.value === cursor) break;
-    }
+  function setStatuses(next: GroupStatus[]) {
+    statuses.value = next;
+    deleted.value = false;
+    page.value = 1;
+    syncToUrl();
+    void fetchGroups();
   }
 
-  function activeSortKey(dto: AdminGroupDto): string | number | null {
-    switch (sortBy.value) {
-      case "title":
-        return dto.title.toLocaleLowerCase("en");
-      case "kind":
-        return dto.kind;
-      case "status":
-        return dto.status;
-      case "platform":
-        return dto.platform.toLocaleLowerCase("en");
-      case "tags":
-        return dto.tags[0]?.toLocaleLowerCase("en") ?? null;
-      case "likeCount":
-        return dto.likeCount;
-      default:
-        return null;
-    }
+  function toggleDeleted() {
+    deleted.value = !deleted.value;
+    statuses.value = [];
+    page.value = 1;
+    syncToUrl();
+    void fetchGroups();
   }
 
-  // ── CRUD operations (in-place update, no full refresh) ──
-
-  async function createGroup(
-    fields: Record<string, unknown>,
-  ): Promise<{ ok: boolean; dto?: AdminGroupDto; fieldErrors?: Record<string, string[]> }> {
-    const result = await api.post(`/admin`, adminGroupDtoSchema, fields, csrfHeaders());
-    if (result.ok) {
-      // 创建成功：补取原已加载窗口，保持服务端排序与游标一致。
-      await refetchLoadedWindow(groups.value.length);
-      return { ok: true, dto: result.data };
-    }
-    error.value = result.error.message;
-    return {
-      ok: false,
-      fieldErrors: (result.error as Record<string, unknown>).fieldErrors as
-        Record<string, string[]> | undefined,
-    };
+  function setSort(field: string | undefined, dir: "asc" | "desc") {
+    sortBy.value = field ? adminSortFieldMap[field] : undefined;
+    sortDir.value = dir;
+    page.value = 1;
+    syncToUrl();
+    void fetchGroups();
   }
 
-  async function updateGroup(
-    id: string,
-    fields: Record<string, unknown>,
-  ): Promise<{
-    ok: boolean;
-    dto?: AdminGroupDto;
-    versionConflict?: boolean;
-    fieldErrors?: Record<string, string[]>;
-  }> {
-    const result = await api.patch(`/admin/${id}`, adminGroupDtoSchema, fields, csrfHeaders());
-    if (result.ok) {
-      // 用权威 DTO 替换列表中的项
-      const dto = result.data;
-      if (matchesCurrentFilter(dto)) {
-        const idx = groups.value.findIndex((g) => g.id === id);
-        if (idx !== -1) {
-          const previouslyLoaded = groups.value.length;
-          const previous = groups.value[idx];
-          if (!previous) {
-            await refetchLoadedWindow(previouslyLoaded);
-            return { ok: true, dto };
-          }
-          const sortKeyChanged =
-            sortBy.value !== undefined && !Object.is(activeSortKey(previous), activeSortKey(dto));
-          groups.value[idx] = dto;
-          if (sortKeyChanged) {
-            await refetchLoadedWindow(previouslyLoaded);
-          }
-        } else {
-          await refetchLoadedWindow(groups.value.length);
-        }
-      } else {
-        // 不匹配当前筛选，移除
-        groups.value = groups.value.filter((g) => g.id !== id);
-        total.value -= 1;
-      }
-      return { ok: true, dto };
-    }
-
-    const errCode = (result.error as Record<string, unknown>).code as string | undefined;
-    if (errCode === "VERSION_CONFLICT") {
-      // 重新获取权威 DTO 以便用户对比修改
-      try {
-        const singleResult = await api.get(`/admin/${id}`, adminGroupDtoSchema, csrfHeaders());
-        if (singleResult.ok) {
-          const idx = groups.value.findIndex((g) => g.id === id);
-          if (idx !== -1) {
-            groups.value[idx] = singleResult.data;
-          }
-        }
-      } catch {
-        /* 获取失败不影响版本冲突提示 */
-      }
-      return { ok: false, versionConflict: true };
-    }
-
-    error.value = result.error.message;
-    return {
-      ok: false,
-      fieldErrors: (result.error as Record<string, unknown>).fieldErrors as
-        Record<string, string[]> | undefined,
-    };
+  function goToPage(next: number) {
+    if (next < 1 || (totalPages.value > 0 && next > totalPages.value)) return;
+    page.value = next;
+    syncToUrl();
+    void fetchGroups();
   }
 
-  /** 检查 DTO 是否匹配当前筛选条件（状态、回收站、搜索词） */
-  function matchesCurrentFilter(dto: AdminGroupDto): boolean {
-    // 回收站模式：只显示软删除记录
-    if (deleted.value) {
-      return dto.deletedAt !== null;
-    }
-    // 正常模式：状态匹配 + 非软删除
-    if (!statuses.value.includes(dto.status)) return false;
-    if (dto.deletedAt !== null) return false;
-    // 搜索词匹配
-    const q = normalizeSearchQuery(searchQuery.value);
-    if (q) {
-      const inTitle = dto.title.toLocaleLowerCase("en").includes(q);
-      const inDesc = dto.description.toLocaleLowerCase("en").includes(q);
-      const inTags = dto.tags.some((tag) => tag.toLocaleLowerCase("en").includes(q));
-      if (!inTitle && !inDesc && !inTags) return false;
+  async function softDelete(id: string): Promise<boolean> {
+    const result = await softDeleteGroup(id, getCsrf());
+    if (!result.ok) return false;
+    await fetchGroups();
+    // 删除当前页最后一项且不是第一页时退到上一页
+    if (groups.value.length === 0 && page.value > 1) {
+      goToPage(page.value - 1);
     }
     return true;
   }
 
-  async function softDelete(id: string): Promise<boolean> {
-    const result = await api.delete(`/admin/${id}`, deleteResponseSchema, csrfHeaders());
-    if (result.ok) {
-      groups.value = groups.value.filter((g) => g.id !== id);
-      total.value = Math.max(0, total.value - 1);
-      return true;
-    }
-    return false;
-  }
-
   async function restore(id: string): Promise<boolean> {
-    const result = await api.post(`/admin/${id}/restore`, adminGroupDtoSchema, {}, csrfHeaders());
-    if (result.ok) {
-      const dto = result.data;
-      // 恢复后记录可能不匹配当前筛选（如回收站中恢复 → 不应留在这里）
-      if (deleted.value) {
-        // 当前是回收站视图：恢复的记录应该移除
-        groups.value = groups.value.filter((g) => g.id !== id);
-        total.value = Math.max(0, total.value - 1);
-      } else if (matchesCurrentFilter(dto)) {
-        // 匹配当前筛选：替换
-        const idx = groups.value.findIndex((g) => g.id === id);
-        if (idx !== -1) {
-          groups.value[idx] = dto;
-        } else {
-          groups.value = [...groups.value, dto];
-          total.value += 1;
-        }
-      } else {
-        // 不匹配当前筛选：移除
-        groups.value = groups.value.filter((g) => g.id !== id);
-        total.value = Math.max(0, total.value - 1);
-      }
-      return true;
-    }
-    return false;
+    const result = await restoreGroup(id, getCsrf());
+    if (!result.ok) return false;
+    void fetchGroups();
+    return true;
   }
 
-  async function permanentDelete(id: string): Promise<boolean> {
-    const result = await api.delete(
-      `/admin/trash/groups/${id}`,
-      deleteResponseSchema,
-      csrfHeaders(),
-    );
-    if (result.ok) {
-      groups.value = groups.value.filter((g) => g.id !== id);
-      total.value = Math.max(0, total.value - 1);
-      return true;
-    }
-    error.value = (result.error as { message?: string }).message ?? "永久删除失败";
-    return false;
+  async function purge(id: string): Promise<boolean> {
+    const result = await permanentDeleteGroup(id, getCsrf());
+    if (!result.ok) return false;
+    void fetchGroups();
+    return true;
   }
 
-  // ── Cleanup ──
-  onUnmounted(() => {
-    controller?.abort();
-    if (debounceTimer) clearTimeout(debounceTimer);
-  });
+  async function createGroup(input: GroupCreateInput): Promise<{ ok: boolean }> {
+    const result = await createAdminGroup(input, getCsrf());
+    if (!result.ok) return { ok: false };
+    void fetchGroups();
+    return { ok: true };
+  }
 
-  // ── Public API ──
+  async function updateGroup(
+    id: string,
+    input: GroupUpdateInput,
+  ): Promise<{ ok: boolean; versionConflict?: boolean }> {
+    const result = await updateAdminGroup(id, input, getCsrf());
+    if (!result.ok) {
+      return { ok: false, versionConflict: result.error.kind === "conflict" };
+    }
+    void fetchGroups();
+    return { ok: true };
+  }
+
+  watch(
+    () => route.query,
+    () => {
+      if (!isActive()) return;
+      // 自己写入的 URL（syncedKey 匹配）不重复请求；外部导航（前进/后退）才恢复
+      const key = queryKey();
+      if (key === syncedKey) return;
+      syncedKey = key;
+      readFromUrl();
+      void fetchGroups();
+    },
+    { immediate: true },
+  );
+
+  onUnmounted(() => controller?.abort());
+
   return {
-    // state
     groups,
     loading,
     error,
-    total,
-    nextCursor,
-    // URL-derived
+    page,
+    totalItems,
+    totalPages,
+    pageSize: ADMIN_PAGE_SIZE,
+    loaded,
     statuses,
     deleted,
-    searchQuery,
+    q,
     sortBy,
     sortDir,
-    // actions
-    toggleStatus,
-    toggleDeleted,
-    setSearch,
-    setSort,
-    searchImmediate,
-    loadMore,
     fetchGroups,
-    // CRUD
-    createGroup,
-    updateGroup,
+    retry,
+    setSearch,
+    setStatuses,
+    toggleDeleted,
+    setSort,
+    goToPage,
     softDelete,
     restore,
-    permanentDelete,
+    purge,
+    createGroup,
+    updateGroup,
   };
 }

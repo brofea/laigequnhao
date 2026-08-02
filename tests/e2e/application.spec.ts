@@ -75,6 +75,9 @@ test("board management retains keyboard and mobile-friendly member actions", asy
   await page.getByRole("button", { name: "板块管理" }).click();
   await expect(page.getByRole("heading", { name: "板块排序与成员预览" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "板块排序与成员预览" })).toBeVisible();
-  await expect(page.getByText("这个板块还没有成员").first()).toBeVisible();
+  // 空状态或已填充成员表均合法（依赖数据库种子状态）
+  const emptyState = page.getByText("这个板块还没有成员").first();
+  const memberRows = page.locator(".board-members tbody tr").first();
+  await expect(emptyState.or(memberRows)).toBeVisible();
   await expect(page.getByRole("button", { name: "添加新群" }).first()).toBeVisible();
 });
