@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="6" fill="#2563eb"/>
-  <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="18" font-family="sans-serif" font-weight="bold">群</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="18" fill="#2d5be8" />
+  <path d="M18 20h28v8H18zm0 16h28v8H18z" fill="#fff" />
+  <circle cx="24" cy="32" r="4" fill="#fff" />
+  <circle cx="40" cy="32" r="4" fill="#fff" />
 </svg>

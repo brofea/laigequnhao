@@ -4,9 +4,24 @@ import { z } from "zod";
 export const themeConfigSchema = z.object({
   primaryColor: z.string().min(1),
   accentColor: z.string().min(1),
-  defaultMode: z.enum(["light", "dark"]),
+  defaultMode: z.enum(["system", "light", "dark"]),
 });
 export type ThemeConfig = z.infer<typeof themeConfigSchema>;
+
+// ─── 公共顶栏配置 ───────────────────────────────────────
+// 这些字段只描述正式前端的品牌和入口，不承载业务状态。
+export const headerConfigSchema = z.object({
+  brandLabel: z.string().min(1),
+  brandMark: z.string().min(1),
+  githubUrl: z.string().url(),
+  githubLabel: z.string().min(1),
+  addGroup: z.object({
+    label: z.string().min(1),
+    target: z.enum(["submission-dialog", "route"]),
+    route: z.string().startsWith("/").optional(),
+  }),
+});
+export type HeaderConfig = z.infer<typeof headerConfigSchema>;
 
 // ─── 轮换配置 ────────────────────────────────────────────
 const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -55,8 +70,12 @@ export const siteConfigSchema = z.object({
   copyright: z.string().min(1),
 
   theme: themeConfigSchema,
+  header: headerConfigSchema,
   rotation: rotationConfigSchema,
-  platforms: z.array(z.string().min(1)).min(1).refine((p) => new Set(p).size === p.length, "平台名不可重复"),
+  platforms: z
+    .array(z.string().min(1))
+    .min(1)
+    .refine((p) => new Set(p).size === p.length, "平台名不可重复"),
 
   features: featuresConfigSchema,
 });

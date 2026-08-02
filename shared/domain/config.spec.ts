@@ -9,8 +9,15 @@ const validConfig = {
   contactEmail: "admin@test.edu.cn",
   copyright: "© 2026",
   theme: { primaryColor: "#2563eb", accentColor: "#f59e0b", defaultMode: "light" as const },
+  header: {
+    brandLabel: "测试站点",
+    brandMark: "测",
+    githubUrl: "https://github.com/example/project",
+    githubLabel: "GitHub",
+    addGroup: { label: "添加新群", target: "submission-dialog" as const },
+  },
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
-  platforms: [{ id: "qq", name: "QQ" }],
+  platforms: ["QQ"],
   features: {},
 };
 
@@ -30,10 +37,7 @@ describe("siteConfigSchema", () => {
   it("拒绝重复平台 ID", () => {
     const config = {
       ...validConfig,
-      platforms: [
-        { id: "qq", name: "QQ" },
-        { id: "qq", name: "QQ 重复" },
-      ],
+      platforms: ["QQ", "QQ"],
     };
     expect(() => siteConfigSchema.parse(config)).toThrow();
   });

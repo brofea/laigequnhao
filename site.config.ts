@@ -8,7 +8,7 @@ export type { SiteConfig, JoinMethod, GroupKind, GroupStatus };
 const rawConfig: SiteConfig = {
   name: "示例大学",
   shortName: "示例",
-  title: "来个群号 — 示例大学",
+  title: "来个群号",
   description: "发现并加入校园群聊",
   contactEmail: "admin@example.edu.cn",
   copyright: "© 2026 示例大学",
@@ -16,7 +16,18 @@ const rawConfig: SiteConfig = {
   theme: {
     primaryColor: "#2563eb",
     accentColor: "#f59e0b",
-    defaultMode: "light",
+    defaultMode: "system",
+  },
+
+  header: {
+    brandLabel: "来个群号",
+    brandMark: "群",
+    githubUrl: "https://github.com/brofea/laigequnhao",
+    githubLabel: "GitHub",
+    addGroup: {
+      label: "添加新群",
+      target: "submission-dialog",
+    },
   },
 
   rotation: {
@@ -24,17 +35,7 @@ const rawConfig: SiteConfig = {
     times: ["04:01", "16:01"],
   },
 
-  platforms: [
-    "QQ",
-    "微信",
-    "钉钉",
-    "飞书",
-    "小红书",
-    "抖音",
-    "百度贴吧",
-    "Telegram",
-    "Discord",
-  ],
+  platforms: ["QQ", "微信", "钉钉", "飞书", "小红书", "抖音", "百度贴吧", "Telegram", "Discord"],
 
   features: {},
 };

@@ -35,7 +35,7 @@
     "vitest.config.ts",
     "vitest.workers.config.ts",
     "playwright.config.ts",
-    "tests/e2e/admin-qr.spec.ts",
+    "tests/e2e/application.spec.ts",
     "postcss.config.js",
     "tailwind.config.ts"
   ],
