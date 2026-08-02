@@ -102,3 +102,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: T04 后端能力扩展实施与验收
+
+**Date**: 2026-08-02
+**Task**: T04 后端能力扩展实施与验收
+**Branch**: `main`
+
+### Summary
+
+完成 T04 后端能力扩展：0004 迁移（last_published_at/boards/board_groups/默认板块）、板块管理 API（CRUD/排序/成员/回收站原子清理）、发布状态时间规则、发现/标签/板块公开接口、管理页码分页 50、共享显示宽度 Contract。修复公开列表含 delisted 的 P0 缺口。单元 73 + Workers 103 + E2E 10 全绿；lint/typecheck/build 通过。完成 T05 移交包，归档 T04。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1a016b` | (see git log) |
+| `9d1392a` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
