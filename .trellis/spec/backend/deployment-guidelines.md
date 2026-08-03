@@ -25,6 +25,8 @@
 - 缺少管理员/会话配置时，管理员登录和会话不可用；缺少 `LIKE_PEPPER` 时点赞不可用；缺少任一 Turnstile Sitekey/Secret 时投稿不可用；基础静态网站和不依赖该配置的 API 仍可用。
 - 缺少功能 Secret 的 API 响应使用标准信封、`DEPENDENCY_UNAVAILABLE` 和 HTTP 503，并包含不泄露 Secret 的“尚未配置”说明。
 - Preview 默认关闭；如启用，必须绑定独立 Preview Worker、D1 和 R2，不得使用生产 D1/R2。
+- `pnpm dev` 由 Cloudflare Vite Plugin 提供单进程本地 Worker/HMR；Vite 配置必须提前注入 Vue compiler，避免热更新在插件 `buildStart` 前读取空 compiler。
+- `pnpm seed` 只复用用户已经启动的 loopback API：默认使用 `http://localhost:5173/api/v1`，只启动 `pnpm worker:dev` 时通过 `SEED_API_BASE` 指向 `http://127.0.0.1:8788/api/v1`；不得自动启动或停止开发服务。
 
 ### 4. Validation & Error Matrix
 
@@ -38,12 +40,14 @@
 | D1/R2 已存在 | 复用资源和 binding，不重复创建 |
 | 远程 migration 失败 | 立即停止，不执行 Worker deploy；保留 migration 元数据和已创建资源 |
 | Worker/R2/D1 权限不足、名称冲突或账号不匹配 | 立即失败，输出资源和权限下一步；不得偷偷创建第二套生产资源 |
+| `pnpm seed` 无法连接本地 API | 在任何 D1/R2 写入前以非零退出结束，提示先启动 `pnpm dev` 或设置 loopback `SEED_API_BASE`；不自动拉起服务 |
 
 ### 5. Good / Base / Bad Cases
 
 - Good：首次 Workers Build 无 Runtime secrets 也创建/复用资源、完成 migrations、发布 SPA；随后在 Dashboard 添加 Secret，管理员、点赞或投稿分别恢复。
 - Base：第二次 `main` 提交再次触发 Workers Build，复用相同 Worker/D1/R2，只应用新增 migration，不 seed、不 clean。
 - Bad：首次部署前强制要求四个 Secret，先失败一次再 Retry；把 Sitekey 放入 Runtime secret，或把 Secret key 编译进前端 bundle；本地命令连接生产资源。
+- Bad：开发服务器只监听 `localhost`，seed 却固定请求 `127.0.0.1`；或 seed 为了“方便”偷偷启动一个后台 Vite/Worker，导致端口、日志和进程生命周期不可控。
 
 ### 6. Tests Required
 
@@ -51,6 +55,7 @@
 - Worker 测试：缺少管理员、点赞、Turnstile 配置分别断言 HTTP 503、`DEPENDENCY_UNAVAILABLE` 和“尚未配置”文案；配置齐全时断言原有业务行为不变。
 - 本地质量：`pnpm typecheck`、`pnpm test`、`pnpm test:workers`、`pnpm build`、`pnpm lint`；lint 必须 0 errors 且不新增 warnings。
 - 真实验收：项目所有者通过 Dashboard 连续触发两次 Workers Builds；第一次验证资源创建、migration、Worker/SPA 上线，第二次验证资源复用和新增 migration。fake Wrangler 或本地两次 `pnpm deploy` 不能替代真实验收。
+- 本地开发 smoke：启动 `pnpm dev` 后修改任一 `.vue` 文件，HMR 不得抛出 `invalidateTypeCache`/null；未启动 API 时执行 `pnpm seed` 必须输出可操作提示并保持 D1/R2 不变。
 
 ### 7. Wrong vs Correct
 

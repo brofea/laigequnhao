@@ -1,6 +1,7 @@
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import * as vueCompiler from "vue/compiler-sfc";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,7 +13,10 @@ export default defineConfig(({ mode }) => ({
   // wrangler.json uses the plugin's actual client output (for example,
   // dist/client) for Workers Static Assets.
   plugins: [
-    vue(),
+    // Inject the compiler eagerly. The Vue plugin otherwise initializes it in
+    // buildStart; Cloudflare Vite Plugin can deliver an HMR event before that
+    // hook and plugin-vue then reads invalidateTypeCache from null.
+    vue({ compiler: vueCompiler }),
     ...(mode === "frontend-only" || mode === "e2e"
       ? []
       : [cloudflare({ configPath: "./wrangler.jsonc" })]),

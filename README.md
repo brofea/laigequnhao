@@ -57,7 +57,7 @@
 └── .dev.vars.example       # 本地 secrets 模板
 ```
 
-## 快速开始 
+## 快速开始
 
 本节针对本地开发环境，若要部署到 Cloudflare，请跳过本节，直接阅读下一节
 
@@ -98,8 +98,9 @@ pnpm dev
 
 访问 http://localhost:5173。需要开发数据时运行 `pnpm seed`；该命令只写本地 D1/R2，重复执行前会拒绝非空数据库，不会隐式清理
 
-`pnpm seed` 默认访问 `pnpm dev` 的 `5173` 单地址；若只启动 `pnpm worker:dev`，请先设置
-`SEED_API_BASE=http://127.0.0.1:8788/api/v1`
+`pnpm seed` 默认访问 `pnpm dev` 的 `http://localhost:5173` 单地址；它不会启动任何服务，必须先启动
+`pnpm dev`。若只启动 `pnpm worker:dev` 或使用其他本地端口，请明确设置 loopback 地址，例如
+`SEED_API_BASE=http://127.0.0.1:8788/api/v1`。API 连接失败时命令会以非零状态退出并提示下一步
 
 如需清理本地数据，运行 `pnpm clean` 并完成二次确认。它会清理本地 D1 应用数据和本地 R2 对象，但保留 schema、数据库实例和 `d1_migrations`
 
@@ -148,7 +149,7 @@ Cloudflare Turnstile Widget 用于识别机器人并保护网站安全，按照�
 1. 在 Cloudflare Dashboard 搜索 **Turnstile → Add widget manually**。
 2. 填写 widget 名称如 `lgqh-production`，填入 URL，不要填写 `https://`、端口或路径
 3. 创建后记录 **Sitekey** 和 **Secret key**
-4. 回到 Worker 的 **Settings → Builds → Build variables and secrets**，添加变量  `VITE_TURNSTILE_SITE_KEY`，值为 **Sitekey**
+4. 回到 Worker 的 **Settings → Builds → Build variables and secrets**，添加变量 `VITE_TURNSTILE_SITE_KEY`，值为 **Sitekey**
 5. 回到 Worker 的 **Settings → Variables and Secrets**，添加 Secret 类变量 `TURNSTILE_SECRET_KEY`，值为 **Secret key**，点击 **Deploy** 重新构建
 
 ### 验证部署

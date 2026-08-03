@@ -22,15 +22,51 @@ import sharp from "sharp";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GROUP_COUNT = 140;
 const SQL_FILE = join(__dirname, "..", "seed-local.sql");
-const API_BASE = process.env.SEED_API_BASE ?? "http://127.0.0.1:5173/api/v1";
+export const DEFAULT_SEED_API_BASE = "http://localhost:5173/api/v1";
+export const API_BASE = resolveSeedApiBase();
 const PERSIST_TO = process.env.WRANGLER_PERSIST_TO ?? resolve(__dirname, "..", ".wrangler/state");
 const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
 
-function assertLocalSeedTarget() {
-  const url = new URL(API_BASE);
-  if (!["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
-    throw new Error(`seed only accepts a loopback API; refused ${url.hostname}`);
+export function resolveSeedApiBase(env = process.env) {
+  const configured = env.SEED_API_BASE?.trim();
+  return (configured || DEFAULT_SEED_API_BASE).replace(/\/+$/, "");
+}
+
+export function validateSeedApiBase(apiBase) {
+  let url;
+  try {
+    url = new URL(apiBase);
+  } catch (error) {
+    throw new Error(`SEED_API_BASE 不是有效的本地 API 地址：${apiBase}`, { cause: error });
   }
+
+  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!/^https?:$/.test(url.protocol) || !["localhost", "127.0.0.1", "::1"].includes(hostname)) {
+    throw new Error(`seed 只能访问 loopback 本地 API；当前 SEED_API_BASE 为 ${apiBase}`);
+  }
+
+  return url;
+}
+
+export function formatSeedApiUnavailableError(apiBase, error) {
+  const reason = error instanceof Error && error.message ? ` 原始错误：${error.message}` : "";
+  return `无法连接本地 Seed API：${apiBase}。请先运行 pnpm dev，确认 http://localhost:5173 可访问；如果使用其他本地端口，请明确设置 loopback 的 SEED_API_BASE（例如 SEED_API_BASE=http://127.0.0.1:8788/api/v1）。${reason}`;
+}
+
+export async function requestSeedApi(
+  path,
+  options = {},
+  { apiBase = API_BASE, fetchImpl = fetch } = {},
+) {
+  try {
+    return await fetchImpl(`${apiBase}${path}`, options);
+  } catch (error) {
+    throw new Error(formatSeedApiUnavailableError(apiBase, error), { cause: error });
+  }
+}
+
+function assertLocalSeedTarget() {
+  validateSeedApiBase(API_BASE);
   try {
     const output = execSync(
       `${NPX} wrangler d1 execute lgqh-dev --local --persist-to "${PERSIST_TO}" --command "SELECT COUNT(*) AS count FROM groups;" --json`,
@@ -45,6 +81,27 @@ function assertLocalSeedTarget() {
     }
   } catch (error) {
     throw new Error(`seed target check failed: ${error.message}`, { cause: error });
+  }
+}
+
+export async function assertApiReachable(apiBase = API_BASE, fetchImpl = fetch) {
+  validateSeedApiBase(apiBase);
+  try {
+    const response = await requestSeedApi(
+      "/health",
+      {
+        signal: AbortSignal.timeout(3000),
+      },
+      { apiBase, fetchImpl },
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("无法连接本地 Seed API")) {
+      throw error;
+    }
+    throw new Error(formatSeedApiUnavailableError(apiBase, error), { cause: error });
   }
 }
 
@@ -71,8 +128,6 @@ function readAdminPassword() {
   }
   return "123456";
 }
-const ADMIN_PASSWORD = readAdminPassword();
-
 // ─── 工具函数 ─────────────────────────────────────────────
 const uuid = () => crypto.randomUUID();
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -303,10 +358,10 @@ let csrfToken = null;
 let sessionCookie = null;
 
 async function authenticate() {
-  const res = await fetch(`${API_BASE}/admin/session`, {
+  const res = await requestSeedApi("/admin/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password: ADMIN_PASSWORD }),
+    body: JSON.stringify({ password: readAdminPassword() }),
   });
   const json = await res.json();
   if (!json.ok) throw new Error(`认证失败: ${json.error?.message}`);
@@ -324,7 +379,7 @@ async function uploadViaApi(buffer, purpose) {
   form.append("purpose", purpose);
   const headers = { "X-CSRF-Token": csrfToken };
   if (sessionCookie) headers["Cookie"] = sessionCookie;
-  const res = await fetch(`${API_BASE}/admin/assets`, {
+  const res = await requestSeedApi("/admin/assets", {
     method: "POST",
     headers,
     body: form,
@@ -545,9 +600,10 @@ function generateSQL(groups, { logos, qrCodes }) {
 }
 
 // ─── 主流程 ────────────────────────────────────────────────
-async function main() {
+export async function main() {
   console.log("═══ 全链路种子数据生成 ═══\n");
   console.log(`API: ${API_BASE}`);
+  await assertApiReachable();
   assertLocalSeedTarget();
   await authenticate();
 
@@ -593,4 +649,15 @@ async function main() {
     process.exitCode = 1;
   }
 }
-main();
+export async function runSeedCli() {
+  try {
+    await main();
+  } catch (error) {
+    console.error(`❌ seed 失败：${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  }
+}
+
+const isMainModule =
+  process.argv[1] && resolve(process.argv[1]) === resolve(__dirname, "seed-local.mjs");
+if (isMainModule) await runSeedCli();
