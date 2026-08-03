@@ -25,18 +25,27 @@ export function toDemoGroup(
 ): DemoGroup {
   const local = likeState.get(group.id);
   const joinMethods: DemoGroup["joinMethods"] = group.joinMethods
-    .map<DemoGroup["joinMethods"][number]>((method, index) => ({
-      id: `${group.id}-method-${String(index)}`,
-      type: method.type === "group_number" ? "number" : method.type === "url" ? "link" : "qr",
-      label:
-        method.type === "group_number" ? "群号" : method.type === "url" ? "邀请链接" : "二维码",
-      value:
-        method.type === "qr_code"
-          ? "assetId" in method
-            ? (method.assetId ?? method.qrCodeUrl ?? "")
-            : (method.qrCodeUrl ?? "")
-          : (method.value ?? method.url ?? ""),
-    }))
+    .map<DemoGroup["joinMethods"][number]>((method, index) => {
+      if (method.type === "qr_code") {
+        const assetId = "assetId" in method ? (method.assetId ?? undefined) : undefined;
+        const previewUrl =
+          "assetUrl" in method ? (method.assetUrl ?? method.qrCodeUrl) : method.qrCodeUrl;
+        return {
+          id: `${group.id}-method-${String(index)}`,
+          type: "qr",
+          label: "二维码",
+          value: previewUrl ?? assetId ?? "",
+          assetId,
+          imagePreviewUrl: previewUrl ?? undefined,
+        };
+      }
+      return {
+        id: `${group.id}-method-${String(index)}`,
+        type: method.type === "group_number" ? "number" : "link",
+        label: method.type === "group_number" ? "群号" : "邀请链接",
+        value: method.value ?? method.url ?? "",
+      };
+    })
     .sort((a, b) => (JOIN_METHOD_ORDER[a.type] ?? 9) - (JOIN_METHOD_ORDER[b.type] ?? 9));
   return {
     id: group.id,
@@ -48,6 +57,8 @@ export function toDemoGroup(
     likes: local?.likes ?? group.likeCount,
     liked: local?.liked ?? likeState.isLiked(group.id),
     avatarState: group.logoUrl ? "ready" : "missing",
+    logoR2Key: "logoR2Key" in group ? group.logoR2Key : undefined,
+    logoUrl: group.logoUrl ?? null,
     status: group.status,
     inRecycleBin: "deletedAt" in group ? group.deletedAt !== null : false,
     joinMethods,

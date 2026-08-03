@@ -26,6 +26,8 @@ export interface Env {
   LOGIN_MAX_ATTEMPTS?: string;
   /** 登录限流窗口（分钟，默认 15） */
   LOGIN_WINDOW_MINUTES?: string;
+  /** 单个 IP/设备每小时可提交新群组数量（默认 1） */
+  SUBMISSION_LIMIT_PER_HOUR?: string;
 }
 
 export interface AdminAuthSecrets {
@@ -58,4 +60,12 @@ export function getLikePepper(
 ): string | undefined {
   if (!isConfiguredSecret(env.LIKE_PEPPER)) return undefined;
   return isConfiguredSecret(env.DEV_LIKE_PEPPER) ? env.DEV_LIKE_PEPPER : env.LIKE_PEPPER;
+}
+
+/** 投稿限流数量：单个 IP/设备每小时可提交新群组数。非法配置回退默认 1。 */
+export function getSubmissionLimitPerHour(env: Pick<Env, "SUBMISSION_LIMIT_PER_HOUR">): number {
+  const raw = env.SUBMISSION_LIMIT_PER_HOUR?.trim();
+  if (!raw) return 1;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }

@@ -1,6 +1,7 @@
 import { createR2Adapter, type R2Adapter } from "../adapters/r2-adapter";
 import type { Env } from "../env";
 import type { AdminAssetDto, AssetInfo } from "@shared/contracts/asset";
+import type { ValidatedImageUpload } from "./image-validation";
 
 // ─── 内部行类型 ──────────────────────────────────────────
 
@@ -56,12 +57,59 @@ export function createAssetService(
      * 这样任何 R2 部分失败都有可追踪的 D1 记录，可由 cleanup 重试。
      */
     async uploadStaged(
-      buffer: ArrayBuffer,
-      purpose: "logo" | "qr_code",
-      meta: { width: number; height: number; byteLength: number },
+      uploadOrBuffer: ValidatedImageUpload | ArrayBuffer,
+      purpose?: "logo" | "qr_code",
+      legacyMeta?: { width: number; height: number; byteLength: number },
     ): Promise<AssetInfo> {
+      const isValidatedUpload = (
+        value: ValidatedImageUpload | ArrayBuffer,
+      ): value is ValidatedImageUpload => {
+        if (!(typeof value === "object" && value !== null && "bytes" in value)) return false;
+        const candidate = value as {
+          bytes: unknown;
+          purpose?: unknown;
+          width?: unknown;
+          height?: unknown;
+          byteLength?: unknown;
+        };
+        return (
+          candidate.bytes instanceof Uint8Array &&
+          typeof candidate.purpose === "string" &&
+          typeof candidate.width === "number" &&
+          typeof candidate.height === "number" &&
+          typeof candidate.byteLength === "number"
+        );
+      };
+
+      let bytes: Uint8Array;
+      let uploadPurpose: "logo" | "qr_code";
+      let width: number;
+      let height: number;
+
+      if (isValidatedUpload(uploadOrBuffer)) {
+        bytes = uploadOrBuffer.bytes;
+        uploadPurpose = uploadOrBuffer.purpose;
+        width = uploadOrBuffer.width;
+        height = uploadOrBuffer.height;
+        if (uploadOrBuffer.byteLength !== bytes.byteLength) {
+          throw new AssetServiceError("VALIDATION_FAILED", "Asset byte length is inconsistent.");
+        }
+      } else {
+        if (!purpose || !legacyMeta) {
+          throw new AssetServiceError("VALIDATION_FAILED", "Asset upload metadata is required.");
+        }
+        bytes = new Uint8Array(uploadOrBuffer);
+        uploadPurpose = purpose;
+        width = legacyMeta.width;
+        height = legacyMeta.height;
+        if (legacyMeta.byteLength !== bytes.byteLength) {
+          throw new AssetServiceError("VALIDATION_FAILED", "Asset byte length is inconsistent.");
+        }
+      }
+
+      const byteLength = bytes.byteLength;
       const id = crypto.randomUUID();
-      const key = `${purpose}/${id}.webp`;
+      const key = `${uploadPurpose}/${id}.webp`;
 
       // 1. 先写 D1 staged 行，避免出现无法追踪的 R2 孤儿。
       try {
@@ -70,7 +118,7 @@ export function createAssetService(
             `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status)
              VALUES (?, ?, ?, 'image/webp', ?, ?, ?, 'staged')`,
           )
-          .bind(id, key, purpose, meta.byteLength, meta.width, meta.height)
+          .bind(id, key, uploadPurpose, byteLength, width, height)
           .run();
       } catch {
         throw new AssetServiceError("D1_WRITE_FAILED", "Failed to save asset metadata.");
@@ -78,7 +126,9 @@ export function createAssetService(
 
       // 2. 上传 R2；失败时保留可重试状态。
       try {
-        await r2Adapter.upload(key, buffer);
+        // Copy the view so a caller cannot accidentally upload bytes outside
+        // the validated Uint8Array slice.
+        await r2Adapter.upload(key, bytes.slice().buffer);
       } catch {
         try {
           await db
@@ -101,12 +151,12 @@ export function createAssetService(
 
       return {
         id,
-        purpose,
+        purpose: uploadPurpose,
         r2Key: key,
         contentType: "image/webp" as const,
-        byteLength: meta.byteLength,
-        width: meta.width,
-        height: meta.height,
+        byteLength,
+        width,
+        height,
         status: "staged",
         publicUrl: r2Adapter.getPublicUrl(key),
       };

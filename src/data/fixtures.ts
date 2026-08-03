@@ -21,6 +21,9 @@ export interface JoinMethod {
   type: JoinMethodType;
   label: string;
   value: string;
+  /** 浏览器压缩后的临时预览 URL；由表单负责 revoke。 */
+  imagePreviewUrl?: string;
+  /** 仅用于静态视觉夹具的预置图片地址，不承载用户上传文件。 */
   imageData?: string;
   /** 服务端资源标识（qr_code 类型上传后由真实 API 返回） */
   assetId?: string;
@@ -41,6 +44,8 @@ export interface DemoGroup {
   joinMethods: JoinMethod[];
   /** Logo 资源标识（管理员编辑保存时提交） */
   logoR2Key?: string | null;
+  /** Logo 公开图片地址（ready 状态时渲染真实图片） */
+  logoUrl?: string | null;
   /** 提交者联系方式（仅提交/管理私密区，不公开展示） */
   contact?: string | null;
 }

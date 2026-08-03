@@ -1,10 +1,22 @@
 import { z } from "zod";
 import { groupKindSchema } from "../domain/group";
+import { ASSET_UPLOAD_REQUEST_MAX_BYTES } from "./asset";
 import {
   DESCRIPTION_MAX_WIDTH,
   TITLE_MAX_WIDTH,
   measureDisplayWidth,
 } from "../domain/display-width";
+
+/**
+ * 公开投稿 multipart 请求的硬上限。
+ *
+ * 这是请求封装（JSON、边界和单张最终文件）的上限，不是原图选择上限；
+ * 最终 WebP 的用途专属上限仍由图片校验器和资源契约分别执行。
+ */
+export const SUBMISSION_MULTIPART_MAX_BYTES = ASSET_UPLOAD_REQUEST_MAX_BYTES;
+
+/** 公开投稿最多接收一个 Logo 文件，二维码仍由管理端独立维护。 */
+export const SUBMISSION_LOGO_FORM_FIELD = "logo";
 
 // ─── 访客提交请求 ────────────────────────────────────────
 

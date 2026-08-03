@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from "vue";
 import type { DemoGroup } from "../data/fixtures";
 import Badge from "./Badge.vue";
 import Icon from "./Icon.vue";
@@ -9,6 +10,18 @@ const emit = defineEmits<{
   open: [group: DemoGroup];
   like: [group: DemoGroup];
 }>();
+
+const avatarFailed = ref(false);
+watch(
+  () => props.group.logoUrl,
+  () => {
+    avatarFailed.value = false;
+  },
+);
+
+function onAvatarError() {
+  avatarFailed.value = true;
+}
 </script>
 
 <template>
@@ -20,7 +33,14 @@ const emit = defineEmits<{
           :class="`group-avatar--${props.group.avatarState}`"
           aria-hidden="true"
         >
-          <span v-if="props.group.avatarState === 'ready'">{{
+          <img
+            v-if="props.group.avatarState === 'ready' && props.group.logoUrl && !avatarFailed"
+            :src="props.group.logoUrl"
+            :alt="props.group.title"
+            loading="lazy"
+            @error="onAvatarError"
+          />
+          <span v-else-if="props.group.avatarState === 'ready'">{{
             props.group.title.slice(0, 1)
           }}</span>
           <span v-else-if="props.group.avatarState === 'missing'">◎</span>

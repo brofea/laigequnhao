@@ -1722,11 +1722,20 @@ h3 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.qr-placeholder {
+.qr-preview {
   display: grid;
   place-items: center;
   gap: 8px;
   margin-top: 14px;
+  max-width: 100%;
+}
+.qr-placeholder {
+  display: grid;
+  width: min(100%, 440px);
+  max-width: 100%;
+  box-sizing: border-box;
+  place-items: center;
+  overflow: hidden;
   padding: 14px;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
@@ -1740,19 +1749,20 @@ h3 {
   );
 }
 .qr-placeholder__image {
+  display: block;
+  width: auto;
+  height: auto;
   max-width: 100%;
-  max-height: 220px;
+  max-height: min(480px, calc(100vh - 360px));
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
-}
-.qr-placeholder span {
-  color: var(--text-primary);
-  font-size: 4rem;
-  line-height: 1;
+  object-fit: contain;
 }
 .qr-placeholder__hint {
+  display: block;
   color: var(--text-muted) !important;
   font-size: 0.72rem;
+  text-align: center;
 }
 .qr-placeholder small {
   font-size: 0.72rem;
@@ -2564,6 +2574,13 @@ h3 {
   display: block;
   margin: 4px 0 0 36px;
 }
+.admin-edit-rate-limit-note {
+  margin: 14px 0 2px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  text-align: center;
+}
 .group-avatar img {
   width: 100%;
   height: 100%;
@@ -3106,6 +3123,13 @@ h3 {
   }
   .app-dialog__footer .app-button {
     flex: 1;
+  }
+  .qr-placeholder {
+    width: 100%;
+  }
+  .qr-placeholder__image {
+    width: 100%;
+    max-height: none;
   }
   .group-dialog-scroll {
     max-height: 46vh;

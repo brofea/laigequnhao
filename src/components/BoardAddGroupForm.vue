@@ -17,6 +17,7 @@ const emit = defineEmits<{
 
 const query = ref("");
 const normalizedQuery = computed(() => query.value.trim().toLocaleLowerCase());
+const failedAvatarIds = ref(new Set<string>());
 const results = computed(() => {
   if (!normalizedQuery.value) return [];
   return props.groups.filter(
@@ -25,6 +26,10 @@ const results = computed(() => {
       group.title.toLocaleLowerCase().includes(normalizedQuery.value),
   );
 });
+
+function onAvatarError(groupId: string) {
+  failedAvatarIds.value = new Set(failedAvatarIds.value).add(groupId);
+}
 </script>
 
 <template>
@@ -55,7 +60,14 @@ const results = computed(() => {
           :class="`group-avatar--${group.avatarState}`"
           aria-hidden="true"
         >
-          <span v-if="group.avatarState === 'ready'">{{ group.title.slice(0, 1) }}</span>
+          <img
+            v-if="group.avatarState === 'ready' && group.logoUrl && !failedAvatarIds.has(group.id)"
+            :src="group.logoUrl"
+            :alt="group.title"
+            loading="lazy"
+            @error="onAvatarError(group.id)"
+          />
+          <span v-else-if="group.avatarState === 'ready'">{{ group.title.slice(0, 1) }}</span>
           <span v-else-if="group.avatarState === 'missing'">◎</span>
           <span v-else>!</span>
         </span>

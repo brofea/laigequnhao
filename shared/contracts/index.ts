@@ -66,7 +66,12 @@ export type { TagStats, TagStatsResponse } from "./tags";
 export { ADMIN_PAGE_SIZE, pageResponseSchema } from "./page";
 export type { PageResponse } from "./page";
 
-export { submissionRequestSchema, submissionReceiptSchema } from "./submission";
+export {
+  submissionRequestSchema,
+  submissionReceiptSchema,
+  SUBMISSION_MULTIPART_MAX_BYTES,
+  SUBMISSION_LOGO_FORM_FIELD,
+} from "./submission";
 export type { SubmissionRequest, SubmissionReceipt } from "./submission";
 
 export { likeToggleResponseSchema } from "./like";
@@ -77,6 +82,9 @@ export type { LoginRequest, SessionResponse, SessionStatus } from "./auth";
 
 export { listQuerySchema, cursorPageSchema, encodeCursor, decodeCursor } from "./pagination";
 export type { ListQuery, CursorPage } from "./pagination";
+
+export { publicConfigSchema } from "./public-config";
+export type { PublicConfig } from "./public-config";
 
 export { healthResponseSchema } from "./health";
 export type { HealthResponse } from "./health";

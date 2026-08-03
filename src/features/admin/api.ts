@@ -57,28 +57,32 @@ export async function logout(): Promise<
   return api.delete("/admin/session", sessionStatusSchema);
 }
 
-export async function uploadQrAsset(
+async function uploadAsset(
   blob: Blob,
+  purpose: "logo" | "qr_code",
+  filename: string,
   csrfToken: string,
 ): Promise<ApiOkResult<AssetInfo> | ApiErrorResult> {
   const formData = new FormData();
-  formData.append("file", blob, "qr.webp");
-  formData.append("purpose", "qr_code");
+  formData.append("file", blob, filename);
+  formData.append("purpose", purpose);
   return api.postForm("/admin/assets", assetInfoSchema, formData, {
     "X-CSRF-Token": csrfToken,
   });
+}
+
+export function uploadQrAsset(
+  blob: Blob,
+  csrfToken: string,
+): Promise<ApiOkResult<AssetInfo> | ApiErrorResult> {
+  return uploadAsset(blob, "qr_code", "qr.webp", csrfToken);
 }
 
 export async function uploadLogoAsset(
   blob: Blob,
   csrfToken: string,
 ): Promise<ApiOkResult<AssetInfo> | ApiErrorResult> {
-  const formData = new FormData();
-  formData.append("file", blob, "logo.webp");
-  formData.append("purpose", "logo");
-  return api.postForm("/admin/assets", assetInfoSchema, formData, {
-    "X-CSRF-Token": csrfToken,
-  });
+  return uploadAsset(blob, "logo", "logo.webp", csrfToken);
 }
 
 export async function purgeStagedAsset(

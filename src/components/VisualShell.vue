@@ -139,6 +139,13 @@ const selectedGroup = computed(() => {
     ? publishedGroups.value.find((group) => group.id === selectedGroupId.value)
     : undefined;
 });
+const dialogAvatarFailed = ref(false);
+watch(
+  () => selectedGroup.value?.logoUrl,
+  () => {
+    dialogAvatarFailed.value = false;
+  },
+);
 const selectedAdminGroup = computed(() =>
   selectedAdminGroupId.value
     ? adminVisualGroups.value.find((group) => group.id === selectedAdminGroupId.value)
@@ -304,6 +311,10 @@ function openPublicSubmitDialog() {
   };
 }
 
+function closePublicSubmitDialog() {
+  publicSubmitGroup.value = null;
+}
+
 function openAdminCreateDialog() {
   adminCreateGroup.value = {
     id: "admin-create-sample",
@@ -321,20 +332,23 @@ function openAdminCreateDialog() {
   };
 }
 
-async function submitPublicGroup(next: DemoGroup, turnstileToken: string) {
+async function submitPublicGroup(next: DemoGroup, turnstileToken: string, logoBlob?: Blob) {
   const groupNumber = next.joinMethods.find((method) => method.type === "number")?.value;
   const url = next.joinMethods.find((method) => method.type === "link")?.value;
-  const result = await submitGroup({
-    title: next.title,
-    kind: "interest",
-    platform: next.platform,
-    groupNumber: groupNumber || undefined,
-    url: url || undefined,
-    tags: next.tags.length ? next.tags : undefined,
-    description: next.description || undefined,
-    contact: next.contact?.trim() || undefined,
-    turnstileToken,
-  });
+  const result = await submitGroup(
+    {
+      title: next.title,
+      kind: next.kind === "工具" ? "official" : "interest",
+      platform: next.platform,
+      groupNumber: groupNumber || undefined,
+      url: url || undefined,
+      tags: next.tags.length ? next.tags : undefined,
+      description: next.description || undefined,
+      contact: next.contact?.trim() || undefined,
+      turnstileToken,
+    },
+    logoBlob,
+  );
   if (!result.ok) {
     showToast(result.error.message, "warning");
     return;
@@ -1027,7 +1041,17 @@ function removeScrollListener() {
         <span
           class="group-avatar group-avatar--large"
           :class="`group-avatar--${selectedGroup.avatarState}`"
-          >{{ selectedGroup.avatarState === "ready" ? selectedGroup.title.slice(0, 1) : "◎" }}</span
+          ><img
+            v-if="
+              selectedGroup.avatarState === 'ready' && selectedGroup.logoUrl && !dialogAvatarFailed
+            "
+            :src="selectedGroup.logoUrl"
+            :alt="selectedGroup.title"
+            @error="dialogAvatarFailed = true"
+          /><span v-else-if="selectedGroup.avatarState === 'ready'">{{
+            selectedGroup.title.slice(0, 1)
+          }}</span
+          ><span v-else>◎</span></span
         >
         <div>
           <Badge tone="accent">{{ selectedGroup.platform }}</Badge>
@@ -1064,14 +1088,17 @@ function removeScrollListener() {
         </div>
         <div
           v-if="selectedGroup.joinMethods.some((method) => method.type === 'qr')"
-          class="qr-placeholder"
+          class="qr-preview"
         >
-          <img
-            v-if="selectedGroup.joinMethods.find((m) => m.type === 'qr')?.value"
-            :src="selectedGroup.joinMethods.find((m) => m.type === 'qr')?.value"
-            alt="群组二维码"
-            class="qr-placeholder__image"
-          /><span class="qr-placeholder__hint">扫码或长按图片保存</span>
+          <div class="qr-placeholder">
+            <img
+              v-if="selectedGroup.joinMethods.find((m) => m.type === 'qr')?.value"
+              :src="selectedGroup.joinMethods.find((m) => m.type === 'qr')?.value"
+              alt="群组二维码"
+              class="qr-placeholder__image"
+            />
+          </div>
+          <span class="qr-placeholder__hint">扫码或长按图片保存</span>
         </div>
       </div>
       <template #footer
@@ -1091,14 +1118,14 @@ function removeScrollListener() {
       labelled-by="public-submit-dialog-title"
       size="form"
       test-id="public-submit-dialog"
-      @close="publicSubmitGroup = null"
+      @close="closePublicSubmitDialog"
     >
       <AdminEditForm
         :group="publicSubmitGroup"
         :deletable="false"
         public-mode
         @save="submitPublicGroup"
-        @cancel="publicSubmitGroup = null"
+        @cancel="closePublicSubmitDialog"
         @toast="showToast($event, 'info')"
       />
     </Dialog>

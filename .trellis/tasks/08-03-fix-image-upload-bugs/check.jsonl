@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"完成后检查图片工具、表单、公开/管理展示和全套前端质量门禁。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核文件格式、大小、解码、Turnstile、R2/D1 补偿失败的稳定错误码和安全消息。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核 ready asset 与 pending group 的 D1 batch、引用计数和回滚语义。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"按项目要求验证真实 R2 响应体、隔离 D1、图片边界和 multipart 公开投稿。"}

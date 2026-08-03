@@ -56,6 +56,25 @@ interface SubmissionDetailRow {
   notes: string | null;
 }
 
+/**
+ * 投稿 service 经过文件校验后生成的内部 Logo 资源。
+ *
+ * 这个类型不接受来自 HTTP 的 asset ID、key 或元数据；调用方必须先生成
+ * 资源 ID/key，并把共享图片校验器产出的实际尺寸和字节数传入。
+ */
+export interface SubmissionReadyAssetInput {
+  id: string;
+  r2Key: string;
+  purpose: "logo";
+  byteLength: number;
+  width: number;
+  height: number;
+}
+
+export interface SubmissionAssetCleanupInput extends SubmissionReadyAssetInput {
+  requestId: string;
+}
+
 // ─── 行 → DTO 映射 ──────────────────────────────────────
 
 function mapToAdminDto(
@@ -438,6 +457,8 @@ export function createGroupRepository(db: D1Database) {
       contact?: string | null;
       /** 提交者备注（用户提交入口使用） */
       notes?: string | null;
+      /** 投稿 service 传入的已校验、已写入 R2 的内部 ready Logo。 */
+      readyAsset?: SubmissionReadyAssetInput;
     }): Promise<AdminGroupDto> {
       const id = crypto.randomUUID();
       const rotationKey = crypto.randomUUID();
@@ -446,7 +467,31 @@ export function createGroupRepository(db: D1Database) {
       // 新建后直接发布：写入服务端时间；其余状态保持 NULL
       const lastPublishedAt = status === "published" ? now : null;
 
-      const batch: D1PreparedStatement[] = [
+      const batch: D1PreparedStatement[] = [];
+
+      // 投稿资源和 pending 群组必须在同一个 D1 batch 中完成聚合写入。
+      // 这里的 asset 记录只能来自 service 内部的已校验对象，不能由请求字段构造。
+      if (input.readyAsset) {
+        batch.push(
+          db
+            .prepare(
+              `INSERT INTO assets (
+                 id, r2_key, purpose, content_type, byte_length, width, height,
+                 status, ref_count
+               )
+               VALUES (?, ?, 'logo', 'image/webp', ?, ?, ?, 'ready', 1)`,
+            )
+            .bind(
+              input.readyAsset.id,
+              input.readyAsset.r2Key,
+              input.readyAsset.byteLength,
+              input.readyAsset.width,
+              input.readyAsset.height,
+            ),
+        );
+      }
+
+      batch.push(
         db
           .prepare(
             `INSERT INTO groups (
@@ -464,16 +509,16 @@ export function createGroupRepository(db: D1Database) {
             input.platform,
             status,
             rotationKey,
-            input.logoR2Key ?? null,
-            input.logoUrl ?? null,
-            input.logoMeta?.width ?? null,
-            input.logoMeta?.height ?? null,
-            input.logoMeta?.byteLength ?? null,
+            input.readyAsset?.r2Key ?? input.logoR2Key ?? null,
+            input.readyAsset ? null : (input.logoUrl ?? null),
+            input.readyAsset?.width ?? input.logoMeta?.width ?? null,
+            input.readyAsset?.height ?? input.logoMeta?.height ?? null,
+            input.readyAsset?.byteLength ?? input.logoMeta?.byteLength ?? null,
             now,
             now,
             lastPublishedAt,
           ),
-      ];
+      );
 
       // 标签（过滤空值，保留 sort_order）
       const validTags = input.tags.filter((t) => t.trim().length > 0);
@@ -557,6 +602,40 @@ export function createGroupRepository(db: D1Database) {
       await db.batch(batch);
 
       return (await this.getById(id))!;
+    },
+
+    /**
+     * 记录投稿 R2 补偿失败的资源，使已有 delete_failed cleanup 能够重试。
+     *
+     * 只有投稿 service 生成的内部资源对象可以调用此方法；requestId 只用于
+     * 日志/审计关联，不写入资源 key 或公开 DTO。
+     */
+    async recordSubmissionAssetCleanup(input: SubmissionAssetCleanupInput): Promise<void> {
+      await db
+        .prepare(
+          `INSERT INTO assets (
+             id, r2_key, purpose, content_type, byte_length, width, height,
+             status, ref_count, delete_attempts, delete_last_error, delete_last_error_code
+           )
+           VALUES (?, ?, 'logo', 'image/webp', ?, ?, ?, 'delete_failed', 0, 1, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             status = 'delete_failed',
+             ref_count = 0,
+             delete_attempts = MAX(delete_attempts, 1),
+             delete_last_error = excluded.delete_last_error,
+             delete_last_error_code = excluded.delete_last_error_code,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+        )
+        .bind(
+          input.id,
+          input.r2Key,
+          input.byteLength,
+          input.width,
+          input.height,
+          "Submission R2 compensation delete failed.",
+          "R2_DELETE_FAILED",
+        )
+        .run();
     },
 
     // ─── 管理员方法 ────────────────────────────────────────

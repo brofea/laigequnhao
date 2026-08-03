@@ -10,6 +10,7 @@ import {
   submissionReceiptSchema,
   type SubmissionRequest,
 } from "@shared/contracts/submission";
+import { publicConfigSchema, type PublicConfig } from "@shared/contracts/public-config";
 import { z } from "zod";
 
 type ApiErrorResult = { ok: false; error: ClientError; requestId?: string };
@@ -84,7 +85,23 @@ export async function toggleLike(
 
 export async function submitGroup(
   input: SubmissionRequest,
+  logoBlob?: Blob,
 ): Promise<ApiOkResult<{ id: string; title: string; status: string }> | ApiErrorResult> {
   const validated = submissionRequestSchema.parse(input);
+  if (logoBlob) {
+    const formData = new FormData();
+    // Blob 不进入 JSON schema；multipart 只承载最终压缩后的 WebP。
+    formData.append("payload", JSON.stringify(validated));
+    formData.append("file", logoBlob, "logo.webp");
+    formData.append("filePurpose", "logo");
+    return api.postForm("/submissions", submissionReceiptSchema, formData);
+  }
   return api.post("/submissions", submissionReceiptSchema, validated);
+}
+
+/** 公开运行配置（投稿限流数量等，随后端配置变化） */
+export async function fetchPublicConfig(
+  signal?: AbortSignal,
+): Promise<ApiOkResult<PublicConfig> | ApiErrorResult> {
+  return api.get("/config", publicConfigSchema, undefined, signal);
 }

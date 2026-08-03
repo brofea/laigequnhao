@@ -1,0 +1,6 @@
+{"file":".trellis/spec/frontend/architecture.md","reason":"前端图片压缩必须封装在浏览器适配器中，并遵守组件→API 客户端→共享契约的数据流边界。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"AdminEditForm 负责用户意图与预览状态，需遵守 props、事件、无障碍和失败状态约束。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"文件元数据、multipart 响应和共享 DTO 必须经过运行时校验，不能用未经检查的 payload 断言。"}
+{"file":".trellis/spec/backend/api-guidelines.md","reason":"上传、multipart 投稿、公开/管理 DTO、R2/D1 边界和错误信封必须遵守项目 API 契约。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Worker 端要求显式 Cloudflare binding、共享 Zod、上传限制、R2/D1 错误处理和集成测试。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"覆盖图片处理决策、WebP 验证、R2/D1 聚合一致性和公开投稿回归测试。"}

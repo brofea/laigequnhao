@@ -464,12 +464,22 @@ async function uploadAll(images, groups) {
 }
 
 // ─── 生成 SQL ─────────────────────────────────────────────
+/** 幂等写入 asset：空库插入，已存在（staged，来自上传接口）则原地升级为 ready */
+function assetUpsertSql(a, purpose, t) {
+  return (
+    `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', '${purpose}', 'image/webp', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}') ` +
+    `ON CONFLICT(id) DO UPDATE SET r2_key = excluded.r2_key, purpose = excluded.purpose, content_type = excluded.content_type, byte_length = excluded.byte_length, width = excluded.width, height = excluded.height, status = excluded.status, ref_count = 0, updated_at = excluded.updated_at;`
+  );
+}
+
 function generateSQL(groups, { logos, qrCodes }) {
   const lines = [];
   lines.push("BEGIN TRANSACTION;");
   lines.push("");
 
-  // Asset INSERTs（先插 logos，再插 QR codes）
+  // Asset upserts（先插 logos，再插 QR codes）
+  // 上传接口已把 asset 行写入 D1（status='staged'），此处把 staged 原地升级为 ready；
+  // 空库时则直接插入。不能用普通 INSERT，否则与已有行主键冲突。
   const assetRefCounts = new Map();
   const logoAssetIds = new Array(groups.length).fill(null);
   const qrAssetIds = new Array(groups.length).fill(null);
@@ -478,9 +488,7 @@ function generateSQL(groups, { logos, qrCodes }) {
     const a = logos[i];
     if (a) {
       const t = now();
-      lines.push(
-        `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', 'logo', 'image/webp', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}');`,
-      );
+      lines.push(assetUpsertSql(a, "logo", t));
       logoAssetIds[i] = a.id;
     }
   }
@@ -488,9 +496,7 @@ function generateSQL(groups, { logos, qrCodes }) {
     const a = qrCodes[i];
     if (a) {
       const t = now();
-      lines.push(
-        `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', 'qr_code', 'image/webp', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}');`,
-      );
+      lines.push(assetUpsertSql(a, "qr_code", t));
       qrAssetIds[i] = a.id;
     }
   }
@@ -598,6 +604,8 @@ function generateSQL(groups, { logos, qrCodes }) {
   );
   return lines.join("\n");
 }
+
+export { generateSQL };
 
 // ─── 主流程 ────────────────────────────────────────────────
 export async function main() {

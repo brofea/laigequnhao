@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import {
   groupStatusLabels,
   groupStatusTones,
   type DemoGroup,
   type JoinMethod,
 } from "../data/fixtures";
-import { uploadLogoAsset, uploadQrAsset } from "@/features/admin/api";
+import { purgeStagedAsset, uploadLogoAsset, uploadQrAsset } from "@/features/admin/api";
+import { fetchPublicConfig } from "@/features/groups/api";
+import {
+  compressImage,
+  ImageCompressionError,
+  revokeImagePreview,
+} from "@/shared/browser/image-compression";
 import Badge from "./Badge.vue";
 import Button from "./Button.vue";
 import Icon from "./Icon.vue";
@@ -30,7 +36,7 @@ const props = withDefaults(
   },
 );
 const emit = defineEmits<{
-  save: [group: DemoGroup, turnstileToken: string];
+  save: [group: DemoGroup, turnstileToken: string, logoBlob?: Blob];
   cancel: [];
   delete: [];
   remove: [];
@@ -56,10 +62,21 @@ const newTag = ref("");
 const newJoinMethodType = ref<JoinMethod["type"]>("link");
 const dirty = ref(false);
 const avatarPreview = ref<string | null>(null);
+const avatarPreviewOwned = ref(false);
+const avatarRemoved = ref(false);
+const pendingLogoBlob = ref<Blob | null>(null);
+const avatarFailed = ref(false);
+watch(
+  () => props.group.logoUrl,
+  () => {
+    avatarFailed.value = false;
+  },
+);
 const uploadMessage = ref("");
 const turnstileToken = ref("");
 const turnstileError = ref("");
 const uploading = ref(false);
+const submissionLimitPerHour = ref<number | null>(null);
 const logoR2Key = ref<string | null>(props.group.logoR2Key ?? null);
 const avatarInput = ref<HTMLInputElement | null>(null);
 const kindOptions = [
@@ -84,6 +101,11 @@ const joinMethodOptions = [
   { value: "number" as const, label: "群号" },
   { value: "qr" as const, label: "二维码" },
 ];
+const visibleJoinMethodOptions = computed(() =>
+  props.publicMode
+    ? joinMethodOptions.filter((option) => option.value !== "qr")
+    : joinMethodOptions,
+);
 const joinMethodConfig: Record<JoinMethod["type"], { label: string; value: string }> = {
   link: { label: "邀请链接", value: "https://sample.invalid/new-link" },
   number: { label: "群号", value: "待填写群号" },
@@ -98,6 +120,65 @@ watch(
   { deep: true },
 );
 
+const ownedPreviewUrls = new Set<string>();
+const imageRequestVersions = new Map<string, number>();
+
+function imageRequestKey(method?: JoinMethod): string {
+  return method ? `join-method:${method.id}` : "logo";
+}
+
+function nextImageRequestVersion(key: string): number {
+  const version = (imageRequestVersions.get(key) ?? 0) + 1;
+  imageRequestVersions.set(key, version);
+  return version;
+}
+
+function isCurrentImageRequest(key: string, version: number): boolean {
+  return imageRequestVersions.get(key) === version;
+}
+
+function revokeOwnedPreview(previewUrl: string | null | undefined) {
+  if (!previewUrl || !ownedPreviewUrls.has(previewUrl)) return;
+  ownedPreviewUrls.delete(previewUrl);
+  revokeImagePreview(previewUrl);
+}
+
+function replaceAvatarPreview(previewUrl: string | null, owned = false) {
+  if (avatarPreviewOwned.value) revokeOwnedPreview(avatarPreview.value);
+  avatarPreview.value = previewUrl;
+  avatarPreviewOwned.value = owned && previewUrl !== null;
+  if (avatarPreviewOwned.value && previewUrl) ownedPreviewUrls.add(previewUrl);
+}
+
+function replaceJoinPreview(method: JoinMethod, previewUrl: string | undefined, owned = false) {
+  revokeOwnedPreview(method.imagePreviewUrl);
+  method.imagePreviewUrl = previewUrl;
+  if (owned && previewUrl) ownedPreviewUrls.add(previewUrl);
+}
+
+function invalidateImageRequests() {
+  for (const key of imageRequestVersions.keys()) nextImageRequestVersion(key);
+}
+
+function clearLocalPreviews() {
+  if (avatarPreviewOwned.value) revokeOwnedPreview(avatarPreview.value);
+  avatarPreviewOwned.value = false;
+  for (const previewUrl of ownedPreviewUrls) revokeImagePreview(previewUrl);
+  ownedPreviewUrls.clear();
+  pendingLogoBlob.value = null;
+  invalidateImageRequests();
+}
+
+onMounted(async () => {
+  if (!props.publicMode) return;
+  const result = await fetchPublicConfig();
+  if (result.ok) submissionLimitPerHour.value = result.data.submissionLimitPerHour;
+});
+
+onUnmounted(() => {
+  clearLocalPreviews();
+});
+
 function addTag() {
   const tag = newTag.value.trim();
   if (!tag || tag.length > 7 || draft.tags.length >= 5 || draft.tags.includes(tag)) return;
@@ -111,6 +192,7 @@ function removeTag(tag: string) {
 
 function addJoinMethod(type: JoinMethod["type"] = newJoinMethodType.value) {
   // 每种加群方式最多一个：已存在同类型则忽略
+  if (props.publicMode && type === "qr") return;
   if (draft.joinMethods.some((method) => method.type === type)) return;
   const config = joinMethodConfig[type];
   draft.joinMethods.push({
@@ -126,7 +208,12 @@ function chooseJoinMethod(value: string) {
 }
 
 function removeJoinMethod(id: string) {
-  draft.joinMethods = draft.joinMethods.filter((method) => method.id !== id);
+  const method = draft.joinMethods.find((item) => item.id === id);
+  if (method) {
+    nextImageRequestVersion(imageRequestKey(method));
+    replaceJoinPreview(method, undefined);
+  }
+  draft.joinMethods = draft.joinMethods.filter((item) => item.id !== id);
 }
 
 function updateJoinMethod(method: JoinMethod, value: string) {
@@ -134,63 +221,89 @@ function updateJoinMethod(method: JoinMethod, value: string) {
 }
 
 async function readImage(event: Event, method?: JoinMethod) {
-  const input = event.target as HTMLInputElement;
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement)) return;
   const file = input.files?.[0];
   input.value = "";
   if (!file) return;
-  if (!file.type.startsWith("image/")) {
-    uploadMessage.value = "请选择图片文件。";
+
+  if (props.publicMode && method) {
+    uploadMessage.value = "公开投稿只支持一张头像图片。";
+    return;
+  }
+  const csrfToken = props.csrfToken;
+  if (!props.publicMode && !csrfToken) {
+    uploadMessage.value = "管理员会话已失效，请重新登录后上传图片。";
     return;
   }
 
-  // 管理模式：走真实 asset API（服务端校验类型/大小/WebP 处理）
-  if (props.csrfToken) {
-    uploading.value = true;
-    uploadMessage.value = "正在上传…";
-    try {
-      if (method) {
-        const result = await uploadQrAsset(file, props.csrfToken);
-        if (result.ok) {
-          method.assetId = result.data.id;
-          method.value = result.data.publicUrl;
-          uploadMessage.value = "二维码已上传";
-        } else {
-          uploadMessage.value = result.error.message;
-        }
-      } else {
-        const result = await uploadLogoAsset(file, props.csrfToken);
-        if (result.ok) {
-          logoR2Key.value = result.data.r2Key;
-          avatarPreview.value = result.data.publicUrl;
-          uploadMessage.value = "头像已上传";
-        } else {
-          uploadMessage.value = result.error.message;
-        }
-      }
-    } finally {
-      uploading.value = false;
+  const requestKey = imageRequestKey(method);
+  const requestVersion = nextImageRequestVersion(requestKey);
+  uploading.value = true;
+  uploadMessage.value = props.publicMode ? "正在处理图片…" : "正在压缩并上传…";
+  try {
+    const compressed = await compressImage(file, method ? "qr_code" : "logo");
+    if (!isCurrentImageRequest(requestKey, requestVersion)) {
+      revokeImagePreview(compressed.previewUrl);
+      return;
     }
-    return;
-  }
 
-  // 公开投稿/无凭证：保留本地预览（生产投稿不接受文件字段）
-  const reader = new FileReader();
-  reader.onload = () => {
-    const data = typeof reader.result === "string" ? reader.result : "";
+    if (props.publicMode) {
+      replaceAvatarPreview(compressed.previewUrl, true);
+      pendingLogoBlob.value = compressed.blob;
+      avatarRemoved.value = false;
+      uploadMessage.value = "头像已准备好，提交时会与表单一起上传。";
+      return;
+    }
+
     if (method) {
-      method.imageData = data;
-      method.value = "已上传二维码图片";
+      replaceJoinPreview(method, compressed.previewUrl, true);
+      const result = await uploadQrAsset(compressed.blob, csrfToken);
+      if (!isCurrentImageRequest(requestKey, requestVersion)) {
+        if (result.ok) void purgeStagedAsset(result.data.id, csrfToken);
+        return;
+      }
+      if (result.ok) {
+        method.assetId = result.data.id;
+        method.value = result.data.publicUrl;
+        replaceJoinPreview(method, result.data.publicUrl);
+        uploadMessage.value = "二维码已上传";
+      } else {
+        uploadMessage.value = result.error.message;
+      }
     } else {
-      avatarPreview.value = data;
+      replaceAvatarPreview(compressed.previewUrl, true);
+      const result = await uploadLogoAsset(compressed.blob, csrfToken);
+      if (!isCurrentImageRequest(requestKey, requestVersion)) {
+        if (result.ok) void purgeStagedAsset(result.data.id, csrfToken);
+        return;
+      }
+      if (result.ok) {
+        logoR2Key.value = result.data.r2Key;
+        replaceAvatarPreview(result.data.publicUrl);
+        avatarRemoved.value = false;
+        uploadMessage.value = "头像已上传";
+      } else {
+        uploadMessage.value = result.error.message;
+      }
     }
-    uploadMessage.value = "已生成本地图片预览；正式上传受单个 IP/设备每小时 1 次限制。";
-  };
-  reader.readAsDataURL(file);
+  } catch (error) {
+    if (error instanceof ImageCompressionError) {
+      uploadMessage.value = error.message;
+    } else {
+      uploadMessage.value = "图片处理失败，请换一张图片重试。";
+    }
+  } finally {
+    uploading.value = false;
+  }
 }
 
 function removeAvatar() {
+  nextImageRequestVersion("logo");
   logoR2Key.value = null;
-  avatarPreview.value = null;
+  pendingLogoBlob.value = null;
+  replaceAvatarPreview(null);
+  avatarRemoved.value = true;
   uploadMessage.value = "已移除头像，保存后生效。";
 }
 
@@ -208,9 +321,24 @@ function openAvatarPicker() {
   avatarInput.value?.click();
 }
 
+function cancel() {
+  clearLocalPreviews();
+  emit("cancel");
+}
+
+function requestDestructiveAction() {
+  clearLocalPreviews();
+  if (props.removable) emit("remove");
+  else emit("delete");
+}
+
 function save() {
   if (props.publicMode && !turnstileToken.value) {
     turnstileError.value ||= "请先完成安全验证后再提交。";
+    return;
+  }
+  if (uploading.value) {
+    uploadMessage.value = "图片仍在处理中，请稍候。";
     return;
   }
 
@@ -226,7 +354,12 @@ function save() {
     logoR2Key: logoR2Key.value,
     contact: props.publicMode ? draft.contact : props.group.contact,
   };
-  emit("save", next, turnstileToken.value);
+  emit(
+    "save",
+    next,
+    turnstileToken.value,
+    props.publicMode ? (pendingLogoBlob.value ?? undefined) : undefined,
+  );
 }
 </script>
 
@@ -252,6 +385,17 @@ function save() {
           :class="`group-avatar--${props.group.avatarState}`"
         >
           <img v-if="avatarPreview" :src="avatarPreview" alt="已上传的群组头像预览" />
+          <img
+            v-else-if="
+              props.group.avatarState === 'ready' &&
+              props.group.logoUrl &&
+              !avatarFailed &&
+              !avatarRemoved
+            "
+            :src="props.group.logoUrl"
+            :alt="props.group.title"
+            @error="avatarFailed = true"
+          />
           <template v-else>{{
             props.group.avatarState === "ready" ? draft.title.slice(0, 1) : "◎"
           }}</template>
@@ -270,7 +414,7 @@ function save() {
             ref="avatarInput"
             class="app-sr-only"
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/webp"
             aria-label="上传群组头像"
             @change="readImage"
           />
@@ -357,7 +501,7 @@ function save() {
           label="加群方式"
           trigger-label="添加加群方式"
           trigger-icon="plus"
-          :options="joinMethodOptions"
+          :options="visibleJoinMethodOptions"
           @update:model-value="chooseJoinMethod"
         />
       </div>
@@ -372,16 +516,21 @@ function save() {
             method.type === "qr" ? "⌗" : method.type === "number" ? "#" : "↗"
           }}</span>
           <template v-if="method.type === 'qr'">
-            <div class="admin-edit-qr-editor">
+            <div v-if="!props.publicMode" class="admin-edit-qr-editor">
               <span class="admin-edit-join-label">{{ method.label }}</span>
               <div class="admin-edit-qr-preview">
-                <img v-if="method.imageData" :src="method.imageData" alt="已上传的二维码预览" />
+                <img
+                  v-if="method.imagePreviewUrl || method.imageData"
+                  :src="method.imagePreviewUrl || method.imageData"
+                  alt="已上传的二维码预览"
+                />
                 <span v-else>二维码图片占位</span>
               </div>
               <label class="app-button app-button--normal app-button--sm admin-edit-upload-button">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/webp"
+                  :disabled="uploading"
                   :aria-label="`上传${method.label}`"
                   @change="readImage($event, method)"
                 />
@@ -390,6 +539,7 @@ function save() {
               </label>
               <small>最大上传 5MB 图片，支持多种格式。</small>
             </div>
+            <p v-else class="table-muted">公开投稿不支持二维码上传。</p>
           </template>
           <div v-else class="admin-edit-join-inputs">
             <span class="admin-edit-join-label">{{ method.label }}</span
@@ -413,7 +563,9 @@ function save() {
           <strong>还没有加群方式</strong><span>添加链接、群号或二维码。</span>
         </div>
       </div>
-      <small v-if="uploadMessage" class="admin-edit-upload-message">{{ uploadMessage }}</small>
+      <small v-if="uploadMessage" class="admin-edit-upload-message" role="status">{{
+        uploadMessage
+      }}</small>
     </section>
 
     <section v-if="!props.publicMode" class="admin-edit-section">
@@ -472,14 +624,17 @@ function save() {
         variant="quiet"
         tone="danger"
         :icon="props.removable ? 'arrow-right' : 'trash'"
-        @click="props.removable ? emit('remove') : emit('delete')"
+        @click="requestDestructiveAction"
         >{{ props.removable ? "移除群组" : "删除群组" }}</Button
       >
       <span class="admin-edit-form__footer-spacer"></span>
-      <Button variant="quiet" @click="emit('cancel')">取消</Button
+      <Button variant="quiet" @click="cancel">取消</Button
       ><Button variant="normal" type="submit" icon="check">{{
         props.publicMode ? "提交群组" : "保存修改"
       }}</Button>
     </div>
+    <p v-if="props.publicMode && submissionLimitPerHour" class="admin-edit-rate-limit-note">
+      单个 IP / 设备每小时只能提交 {{ submissionLimitPerHour }} 个群
+    </p>
   </form>
 </template>

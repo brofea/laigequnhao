@@ -32,6 +32,35 @@ export function createR2Adapter(r2: R2Bucket, env: Env) {
       await r2.delete(key);
     },
 
+    /**
+     * 投稿聚合失败后的同步补偿删除。
+     *
+     * 这个入口不把底层 R2 异常传播给日志系统，避免把依赖错误或请求内容
+     * 泄漏到客户端；调用方会根据 false 写入 delete_failed 清理记录。
+     */
+    async compensateDelete(
+      key: string,
+      context: { requestId: string; resourceId: string },
+    ): Promise<boolean> {
+      try {
+        await r2.delete(key);
+        return true;
+      } catch {
+        console.error(
+          JSON.stringify({
+            level: "error",
+            event: "submission.r2_compensation_failed",
+            requestId: context.requestId,
+            resourceId: context.resourceId,
+            resourceKey: key,
+            dependency: "R2",
+            errorCode: "R2_DELETE_FAILED",
+          }),
+        );
+        return false;
+      }
+    },
+
     /** 获取公开访问 URL */
     getPublicUrl(key: string): string {
       const encodedKey = encodeObjectKey(key);

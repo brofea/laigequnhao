@@ -31,6 +31,7 @@
     "db:test:unlock": "wrangler d1 execute lgqh-test-local --local --config wrangler.test.jsonc --command=\"DELETE FROM rate_limits;\""
   },
   "dependencies": {
+    "@cf-wasm/photon": "^0.4.0",
     "hono": "^4.6.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
@@ -50,6 +51,7 @@
     "eslint-plugin-vue": "^9.32.0",
     "globals": "^15.14.0",
     "jsdom": "^25.0.1",
+    "jsqr": "^1.4.0",
     "postcss": "^8.4.49",
     "prettier": "^3.4.0",
     "sharp": "^0.35.3",

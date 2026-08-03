@@ -13,7 +13,7 @@
 | `NOT_FOUND` | 404 | 资源不存在或被有意隐藏 |
 | `VERSION_CONFLICT` | 409 | 管理员编辑基于过期版本 |
 | `STATE_CONFLICT` | 409 | 领域不变量或永久删除状态冲突 |
-| `PAYLOAD_TOO_LARGE` | 413 | 超过 Logo/二维码硬上限 |
+| `PAYLOAD_TOO_LARGE` | 413 | 超过 multipart 请求总上限或 Logo/二维码最终文件硬上限 |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | 最终上传文件不是有效 WebP |
 | `RATE_LIMITED` | 429 | 超出服务端限制 |
 | `DEPENDENCY_UNAVAILABLE` | 503 | D1、R2、Turnstile 或 Analytics 不可用 |
@@ -40,6 +40,7 @@
 - Turnstile 超时时，访客提交按失败关闭处理。
 - Cloudflare Analytics 失败不应隐藏 D1 业务指标。
 - 永久删除期间 R2/D1 部分失败时保留重试状态，绝不报告完全成功。
+- 图片上传先限制请求体和实际文件字节，再读取 WebP 头部尺寸、检查宽高/总像素，最后才完整解码；R2 已写入但 D1/投稿创建失败时必须补偿删除，补偿删除失败要记录 request ID、资源 key 和错误，并保留 `delete_failed` 清理状态供后续重试。
 
 ## 客户端行为
 

@@ -50,7 +50,7 @@
 
 公开群聊 DTO 可以包含 ID、标题、描述、性质 `kind`、平台、标签、公开状态、Logo URL/元数据、当前阶段允许公开使用的加群方式、点赞数，以及获准展示的时间戳。禁止包含提交者联系方式、审核备注、软删除字段、R2 对象 key、投票者 hash 或内部版本号。
 
-访客提交必须包含标题、性质 `kind`、已配置的平台，以及至少一个群号或 HTTPS URL。可以包含 1–5 个可选标签、描述、备注和私密联系方式。拒绝 multipart 和文件字段。
+访客提交必须包含标题、性质 `kind`、已配置的平台，以及至少一个群号或 HTTPS URL。可以包含 1–5 个可选标签、描述、备注和私密联系方式。无图片时使用 JSON；带头像时使用一次性的 `multipart/form-data`，只允许附带一个最终压缩后的 Logo WebP，并与投稿表单一起完成 Turnstile 验证和写入。公开投稿不得调用 staged/adopt 或其他临时图片上传接口。
 
 点赞路由通过 `X-Device-Id` header 接收由浏览器生成并持久化的 UUID。缺失或格式无效时返回 `VALIDATION_FAILED`。持久化前，使用 Secret pepper 对规范化后的设备 ID 做 hash。成功的 PUT/DELETE 返回权威点赞数和最终 `liked` 状态；不得把设备 ID 或 hash 放入响应。
 
@@ -169,7 +169,7 @@ WHERE status = 'published' AND deleted_at IS NULL;
 
 `last_published_at` 不进入公开 DTO；`hourly_random` 的小时槽位使用 `site.config.boards.timezone`，不写数据库位置。
 
-资源上传使用 `multipart/form-data`，但只接受一个最终 WebP。用途为 `logo` 或 `qr_code`；硬上限分别为 100 KB 和 300 KB。写入 R2 前，服务端必须验证 RIFF/WEBP 签名、可解析尺寸、用途和实际字节长度。
+资源上传使用 `multipart/form-data`，但只接受一个最终 WebP。用途为 `logo` 或 `qr_code`；硬上限分别为 80 KB 和 400 KB，Logo 最长边/总像素上限为 128/16,384，二维码为 1024/1,048,576；上传请求体总上限为 512 KB。浏览器原图上限 5 MB 只属于客户端预处理约束，不能作为后端收到压缩 WebP 后的校验条件。写入 R2 前，服务端必须依次限制请求体和实际文件字节数、读取 WebP 头部尺寸、检查宽高与总像素，最后才在 workerd 中完整解码验证可解码性；不得信任客户端声明的尺寸或字节数。
 
 ## 场景：管理员图片资源的本地访问与聚合保存
 
@@ -217,6 +217,61 @@ emit("update:assetId", clientKey, result.id);
 
 // Correct：展示 URL 立即进入草稿，保存时服务端再采用稳定资源标识
 emit("update:assetId", clientKey, result.id, result.publicUrl);
+```
+
+## 场景：公开投稿单请求图片写入与 R2 补偿
+
+### 1. Scope / Trigger
+
+- 适用范围：访客创建一条带头像的投稿，以及该头像从浏览器预览到审核前存储的完整链路。
+- 公开投稿只允许在最终提交请求中携带一张头像；管理员已有的认证 staged/adopt 资源流程继续保留。
+- 目标：避免公开 staged 资源、临时状态和孤儿资源，同时保证 R2 与 D1 写入失败时可恢复。
+
+### 2. Signatures
+
+- 无图片：`POST /api/v1/submissions` 使用 JSON，包含投稿 payload 和 Turnstile token。
+- 带图片：同一路径使用 `multipart/form-data`，包含 `payload` JSON、`file`（或 `logo`）以及可选的 `filePurpose=logo`/独立 Turnstile token；服务端统一验证后才写入。
+- 服务端生成内部 R2 key，写入 Logo 对象后以同一 D1 batch 创建 ready asset 引用和投稿群组。
+
+### 3. Contracts
+
+- 浏览器接受最大 5 MB 的 PNG/JPEG/WebP 原图，先缩放、转换 WebP 并本地预览；透明 Logo 保留 alpha，二维码使用白底不透明 WebP。
+- 最终 Logo/二维码分别限制 80 KB/400 KB；分别限制 128/1024 最长边和 16,384/1,048,576 总像素；请求体总上限为 512 KB。
+- 后端只信任实际请求体和文件字节，按“请求体/文件字节 → WebP 头部尺寸 → 宽高/像素 → 完整解码”顺序校验。
+- 公开端不得有 staged/adopt 上传接口；R2 写入后若 D1 或投稿创建失败，必须补偿删除；补偿删除失败要记录 request ID、资源 key 和错误，并留下 `delete_failed` 清理记录供后续重试。
+
+### 4. Validation & Error Matrix
+
+- 请求体或最终文件超限 → `PAYLOAD_TOO_LARGE`（413）。
+- 非 WebP、RIFF 结构无效或无法完整解码 → `UNSUPPORTED_MEDIA_TYPE`（415）。
+- 宽高或总像素超限 → `VALIDATION_FAILED`（400）。
+- Turnstile、R2 或 D1 不可用 → `DEPENDENCY_UNAVAILABLE`（503），不得留下可公开采用的半成品。
+- 补偿删除失败 → 保留安全错误响应，结构化记录并进入 `delete_failed` 清理队列。
+
+### 5. Good / Base / Bad Cases
+
+- Good：用户选择 5 MB 以内原图，浏览器本地得到目标 WebP，最终请求一次完成 Turnstile、R2 和 D1 写入。
+- Base：压缩结果仍超限时按质量阶梯递减；仍无法满足上限则保留本地预览并提示用户调整图片。
+- Bad：先公开上传临时 key、信任前端尺寸/字节声明，或 D1 失败后不删除 R2 对象。
+
+### 6. Tests Required
+
+- 浏览器单测覆盖透明 Logo、白底二维码、质量阶梯、5 MB 原图、对象 URL 清理，并使用真实二维码解码器验收压缩结果。
+- Workers Vitest 必须在本地 workerd 中覆盖 multipart 请求体/文件上限、WebP 头部和像素先验校验、真实解码、ready asset 聚合及 R2 补偿/清理失败。
+- Playwright 覆盖管理员头像/二维码上传和公开单请求头像投稿，至少运行桌面与移动视口。
+
+### 7. Wrong vs Correct
+
+```ts
+// Wrong：公开端先调用临时上传接口，再把临时 key 交给投稿接口
+await api.post("/public/uploads", file);
+await api.post("/submissions", { ...payload, logoKey });
+
+// Correct：公开端只在最终投稿时发送压缩后的单张图片
+const form = new FormData();
+form.append("payload", JSON.stringify(payload));
+form.append("file", compressedLogo, "logo.webp");
+await api.postForm("/submissions", form);
 ```
 
 ## 认证与请求安全
