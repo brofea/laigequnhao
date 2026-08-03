@@ -55,7 +55,7 @@ export type RotationConfig = z.infer<typeof rotationConfigSchema>;
 
 // ─── 板块配置 ────────────────────────────────────────────
 //
-// hourly_random 的小时槽位使用站点配置时区（RPD §16.4），
+// hourly_random 的小时槽位使用站点配置时区（PRD §16.4），
 // 不依赖服务器本地时区。
 export const boardsConfigSchema = z.object({
   timezone: z

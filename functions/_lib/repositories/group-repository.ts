@@ -257,7 +257,7 @@ function toSubstringLikePattern(value: string): string {
   return `%${value.replace(/[\\%_]/g, "\\$&")}%`;
 }
 
-/** 管理列表 ORDER BY：允许列表 + 固定稳定次排序 id（RPD §21.6） */
+/** 管理列表 ORDER BY：允许列表 + 固定稳定次排序 id（PRD §21.6） */
 function buildAdminOrderBy(
   sortBy: "title" | "kind" | "status" | "platform" | "tags" | "likeCount" | undefined,
   sortDir: "asc" | "desc",
@@ -561,7 +561,7 @@ export function createGroupRepository(db: D1Database) {
 
     // ─── 管理员方法 ────────────────────────────────────────
 
-    /** 管理员页码分页列表（RPD §21：固定每页 50，排序恒加稳定次排序 id） */
+    /** 管理员页码分页列表（PRD §21：固定每页 50，排序恒加稳定次排序 id） */
     async listPage(params: {
       statuses: GroupStatus[];
       deleted: boolean;

@@ -159,7 +159,7 @@ export const adminGroupListResponseSchema = z.object({
 });
 export type AdminGroupListResponse = z.infer<typeof adminGroupListResponseSchema>;
 
-/** 管理员页码分页查询参数（RPD §21，替代 keyset cursor） */
+/** 管理员页码分页查询参数（PRD §21，替代 keyset cursor） */
 export const adminGroupPageQuerySchema = z
   .object({
     /** 业务状态筛选（可重复的 status 参数），回收站模式为空 */

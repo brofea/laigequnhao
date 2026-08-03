@@ -8,7 +8,7 @@
 
 在任何新任务开始前，必须确认：
 
-- `docs/PRD/v2/RPD.md` 已被完整读取。
+- `docs/PRD/v2/PRD.md` 已被完整读取。
 - 用户确认 T01-T03 的成果冻结，prototype v2 是视觉真源。
 - 旧 T04-T10 不在活动任务树中，仅保留归档参考。
 - 新 T04-T06 的 `prd.md`、`design.md`、`implement.md` 已存在。

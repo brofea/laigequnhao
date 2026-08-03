@@ -203,7 +203,7 @@ export function createBoardRepository(db: D1Database) {
     /**
      * 添加成员。
      *
-     * 规则（RPD §15.6）：published/delisted 可加，trash 拒绝，重复成员拒绝；
+     * 规则（PRD §15.6）：published/delisted 可加，trash 拒绝，重复成员拒绝；
      * 位置追加到末尾。PK (board_id, group_id) 作为防重兜底。
      */
     async addMember(boardId: string, groupId: string): Promise<AddMemberResult> {

@@ -2,7 +2,7 @@
   "id": "lgqh-v2",
   "name": "lgqh-v2",
   "title": "网站 V2 大版本升级总任务",
-  "description": "依据 docs/PRD/v2/RPD.md（用户指定的 PRD.md 在仓库中实际命名为 RPD.md）负责网站 V2 总体规划、T04-T06 依赖协调、跨任务集成与最终验收；T01-T03 视为已完成，T04-T10 旧任务已废弃并归档。",
+  "description": "依据 docs/PRD/v2/PRD.md 负责网站 V2 总体规划、T04-T06 依赖协调、跨任务集成与最终验收；T01-T03 视为已完成，T04-T10 旧任务已废弃并归档。",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,

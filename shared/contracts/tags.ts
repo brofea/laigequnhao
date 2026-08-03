@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // ─── 标签聚合统计 ────────────────────────────────────────
 //
-// 只统计已发布群组（RPD §14.1），单次聚合查询（RPD §14.5）。
+// 只统计已发布群组（PRD §14.1），单次聚合查询（PRD §14.5）。
 
 export const tagStatsSchema = z.object({
   tag: z.string(),

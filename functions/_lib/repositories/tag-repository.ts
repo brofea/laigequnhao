@@ -1,6 +1,6 @@
 import type { TagStats } from "@shared/contracts/tags";
 
-/** 标签聚合查询：单次聚合，只统计已发布群组（RPD §14.1、§14.5） */
+/** 标签聚合查询：单次聚合，只统计已发布群组（PRD §14.1、§14.5） */
 export function createTagRepository(db: D1Database) {
   return {
     /** 已发布群组的标签计数，按 count DESC, tag ASC 稳定排序 */

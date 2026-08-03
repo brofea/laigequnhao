@@ -94,7 +94,7 @@ groupsRoute.get(
     const repo = createGroupRepository(c.env.DB);
     const dto = await repo.getPublishedById(id);
     if (!dto) {
-      // 不存在、下架、回收站、删除统一为非敏感不可用结果（RPD §19.6）
+      // 不存在、下架、回收站、删除统一为非敏感不可用结果（PRD §19.6）
       return c.json(
         apiErrorSchema.parse({
           ok: false,

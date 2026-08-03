@@ -11,7 +11,7 @@ import type { Env } from "../env";
 type Vars = { requestId: string };
 export const boardsRoute = new Hono<{ Bindings: Env; Variables: Vars }>();
 
-/** GET /boards — 启用板块及其已发布成员（RPD §15） */
+/** GET /boards — 启用板块及其已发布成员（PRD §15） */
 boardsRoute.get("/", async (c) => {
   const requestId = c.get("requestId");
 

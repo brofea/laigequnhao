@@ -16,7 +16,7 @@ export type LikeStateSource = {
   isLiked(groupId: string): boolean;
 };
 
-/** 加群方式展示顺序：群号 → 邀请链接 → 二维码（RPD 补充要求，展示与存储解耦） */
+/** 加群方式展示顺序：群号 → 邀请链接 → 二维码（PRD 补充要求，展示与存储解耦） */
 const JOIN_METHOD_ORDER: Record<string, number> = { number: 0, link: 1, qr: 2 };
 
 export function toDemoGroup(

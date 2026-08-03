@@ -1626,10 +1626,10 @@ acceptance.md
 本章唯一的产品依据是：
 
 ~~~text
-docs/PRD/v2/RPD.md
+docs/PRD/v2/PRD.md
 ~~~
 
-仓库中不存在 docs/PRD/v2/PRD.md；用户已确认 RPD.md 即当前人工审核的总 PRD。docs/PRD/v2 目录下原有的子任务 PRD 全部过时并删除，不再保留第二套子任务边界。
+仓库中仅保留 docs/PRD/v2/PRD.md；它是当前人工审核的总 PRD。docs/PRD/v2 目录下原有的子任务 PRD 全部过时并删除，不再保留第二套子任务边界。
 
 当前任务状态如下：
 
