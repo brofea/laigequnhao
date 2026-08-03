@@ -1,76 +1,51 @@
-import { defineConfig, type Plugin } from "vite";
+import { cloudflare } from "@cloudflare/vite-plugin";
+import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
-import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const localR2Root = resolve(__dirname, ".wrangler/state/v3/r2/miniflare-R2BucketObject");
 
-function localR2AssetsPlugin(): Plugin {
-  return {
-    name: "local-r2-assets",
-    configureServer(server) {
-      server.middlewares.use((request, response, next) => {
-        void (async () => {
-          let key: string;
-          try {
-            const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-            if (!pathname.startsWith("/assets/")) {
-              next();
-              return;
-            }
-            key = decodeURIComponent(pathname.slice("/assets/".length));
-          } catch {
-            response.statusCode = 400;
-            response.end("Bad Request");
-            return;
-          }
-
-          const filePath = resolve(localR2Root, key);
-          if (!key || !filePath.startsWith(`${localR2Root}${sep}`)) {
-            response.statusCode = 404;
-            response.end("Not Found");
-            return;
-          }
-
-          try {
-            if (!(await stat(filePath)).isFile()) {
-              next();
-              return;
-            }
-            response.setHeader("Content-Type", "image/webp");
-            response.setHeader("Cache-Control", "no-cache");
-            response.setHeader("X-Content-Type-Options", "nosniff");
-            createReadStream(filePath).pipe(response);
-          } catch {
-            next();
-          }
-        })();
-      });
-    },
-  };
-}
-
-export default defineConfig({
-  plugins: [vue(), localR2AssetsPlugin()],
+export default defineConfig(({ mode }) => ({
+  // The Cloudflare plugin owns the Worker runtime, local bindings, and the
+  // client output directory. Do not set build.outDir: the generated
+  // wrangler.json uses the plugin's actual client output (for example,
+  // dist/client) for Workers Static Assets.
+  plugins: [
+    vue(),
+    ...(mode === "frontend-only" || mode === "e2e"
+      ? []
+      : [cloudflare({ configPath: "./wrangler.jsonc" })]),
+  ],
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
       "@shared": resolve(__dirname, "shared"),
     },
   },
-  server: {
-    proxy: {
-      "/api": {
-        target: "http://localhost:8788",
-        changeOrigin: true,
-      },
-    },
-  },
+  ...(mode === "frontend-only" || mode === "e2e"
+    ? {
+        server: {
+          proxy: {
+            "/api": {
+              // Frontend-only and E2E modes may talk to an explicitly local
+              // Worker, never to a remote or production endpoint.
+              target: "http://127.0.0.1:8788",
+              changeOrigin: true,
+            },
+          },
+          ...(mode === "e2e"
+            ? {
+                // Playwright runs against a long-lived dev server while the
+                // API process owns the test database. An HMR error overlay
+                // would become page content and look like a UI failure.
+                hmr: { overlay: false },
+              }
+            : {}),
+        },
+      }
+    : {}),
   build: {
     target: "ES2022",
-    outDir: "dist",
   },
-});
+}));

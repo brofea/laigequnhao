@@ -2,7 +2,7 @@
 
 ## 边界
 
-所有应用端点都位于 `/api/v1` 下。Pages 路由只能为 `/api/*` 调用 Function。Hono 统一负责请求 ID、JSON 处理、校验、认证、Origin/CSRF 检查、限流、日志和最终错误映射。
+所有应用端点都位于 `/api/v1` 下。Worker/Assets 分流只让 `/api/*` 进入 Hono；静态资源和 SPA fallback 不得被 API catch-all 截获。Hono 统一负责请求 ID、JSON 处理、校验、认证、Origin/CSRF 检查、限流、日志和最终错误映射。
 
 公开 DTO 和管理员 DTO 是 `shared/contracts/` 中彼此独立的 Zod schema。禁止直接序列化数据库行。
 

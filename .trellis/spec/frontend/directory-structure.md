@@ -30,7 +30,7 @@ shared/
 site.config.ts
 ```
 
-仓库根目录下的 `shared/` 与运行时无关，可同时被 Vue 应用和 Pages Functions 导入。`src/shared/` 仅供前端使用。
+仓库根目录下的 `shared/` 与运行时无关，可同时被 Vue 应用和 Worker 业务层导入。`src/shared/` 仅供前端使用。
 
 ## 功能职责
 

@@ -1,10 +1,13 @@
 import type { Env } from "../env";
 import { LOGO_MAX_BYTES, QR_CODE_TARGET_BYTES } from "@shared/contracts/asset";
 
-/** R2 自定义域名（从环境变量读取，不硬编码 r2.dev） */
+/** R2 自定义域名；未配置时回退到同源 Worker asset route。 */
 function getPublicBaseUrl(env: Env): string {
-  // 生产环境应通过 wrangler secret put R2_PUBLIC_BASE_URL 设置
   return (env.R2_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+}
+
+function encodeObjectKey(key: string): string {
+  return key.split("/").map(encodeURIComponent).join("/");
 }
 
 /** R2 适配器 — 资源上传/删除/公开 URL */
@@ -31,7 +34,8 @@ export function createR2Adapter(r2: R2Bucket, env: Env) {
 
     /** 获取公开访问 URL */
     getPublicUrl(key: string): string {
-      return `${baseUrl}/${key}`;
+      const encodedKey = encodeObjectKey(key);
+      return `${baseUrl || "/api/v1/assets"}/${encodedKey}`;
     },
 
     /** 获取对象元数据 */

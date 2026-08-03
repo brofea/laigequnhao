@@ -2,7 +2,7 @@
   "id": "lgqh-v2",
   "name": "lgqh-v2",
   "title": "网站 V2 大版本升级总任务",
-  "description": "依据 docs/PRD/v2/PRD.md 负责网站 V2 总体规划、T04-T06 依赖协调、跨任务集成与最终验收；T01-T03 视为已完成，T04-T10 旧任务已废弃并归档。",
+  "description": "依据 docs/PRD/v2/PRD.md 负责网站 V2 总体规划、T04-T07 依赖协调、跨任务集成与最终验收；T01-T06 已完成，T07 负责从 Pages 迁移到单一 Workers Static Assets + Hono Worker，并统一 Cloudflare 资源、migration、本地开发和 pnpm 发布流程，旧 T04-T10 任务已废弃并归档。",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -24,10 +24,11 @@
     "08-01-03-lgqh-v2-theme-header-foundation",
     "08-02-lgqh-v2-backend-feature-expansion",
     "08-02-lgqh-v2-fullstack-integration",
-    "08-02-lgqh-v2-system-hardening-release"
+    "08-02-lgqh-v2-system-hardening-release",
+    "08-03-lgqh-v2-cloudflare-deployment"
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "任务体系已重规划：T01-T03 是不可推翻的已完成前置；旧 T04-T10 已移入 .trellis/tasks/archive/2026-08/，仅作历史参考；新 T04 后端能力扩展 → 新 T05 全栈业务适配 → 新 T06 系统加固与发布验收，全部创建为 planning。T03 另有一个独立视觉迁移任务记录，当前状态仍需在实施前与用户声明的已完成状态对齐。",
+  "notes": "任务体系已重规划：T01-T06 已完成，旧 T04-T10 已移入 .trellis/tasks/archive/2026-08/，仅作历史参考；当前依赖为 T04 后端能力扩展 → T05 全栈业务适配 → T06 系统加固与发布验收 → T07 Cloudflare Workers 架构迁移与命令体系 → 总任务最终验收。新 T07 以单一 Worker + Workers Static Assets 为生产目标，保留 Hono/D1/R2 业务语义，统一本地 dev/migrate/seed/clean 与 Workers Builds 的 build/deploy；资源检查和缺失预配必须幂等、冲突停止、无远程 clean，Wrangler 自动预配 Beta 只作为待验证能力，不作为无条件保证。第一阶段不修改冻结前端视觉，Turnstile 生产投稿保留 A1 blocked。",
   "meta": {}
 }

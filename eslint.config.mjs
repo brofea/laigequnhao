@@ -68,6 +68,15 @@ export default tseslint.config(
     },
   },
   {
+    files: ["worker/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: "./worker/tsconfig.json",
+      },
+    },
+  },
+  {
     files: ["**/*.vue"],
     languageOptions: {
       parserOptions: {

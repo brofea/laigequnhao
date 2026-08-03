@@ -1,4 +1,4 @@
-# Pages Functions 质量规范
+# Cloudflare Worker 质量规范
 
 ## 必须通过的门禁
 

@@ -12,9 +12,9 @@
 |---|---|---|
 | 纯单元测试 | Vitest | 领域 helper、schema、轮换、归一化和图片决策 |
 | Vue 组件测试 | Vitest + Vue Test Utils | 渲染、交互和无障碍状态 |
-| Function 集成测试 | Cloudflare Workers Vitest integration | Hono、D1、R2、中间件和 migration |
+| Worker 集成测试 | Cloudflare Workers Vitest integration | Worker fetch、Hono、D1、R2、中间件和 migration |
 | 浏览器 E2E | Playwright | 访客和管理员的关键路径 |
-| 构建/部署 smoke test | Vite + Wrangler | 生产 bundle、Pages 路由和 binding 结构 |
+| 构建/部署 smoke test | Vite + Wrangler | 生产 bundle、Worker/Assets 路由和 binding 结构 |
 
 不要 mock 被测单元。只 mock 当前测试层不负责的外部边界。
 
@@ -55,9 +55,9 @@
 
 优先按无障碍 role 查询，不使用依赖实现细节的 selector。
 
-## Pages Functions 集成测试
+## Worker 集成测试
 
-使用 Cloudflare Vitest integration 在 `workerd` 中运行 API 测试。每个测试文件都在隔离的本地 D1 中应用真实 SQL migration。配置隔离的 R2 binding，只 stub Turnstile/Analytics 网络响应。
+使用 Cloudflare Vitest integration 在 `workerd` 中运行生产 `worker/index.ts` 的 API 测试。每个测试文件都在隔离的本地 D1 中应用真实 SQL migration。配置隔离的 R2 binding，只 stub Turnstile/Analytics 网络响应。
 
 质量门禁必须使用 `@cloudflare/vitest-pool-workers` 的隔离存储，不得通过
 `getPlatformProxy()` 复用工作区 `.wrangler/state`。setup 应使用

@@ -1,10 +1,10 @@
-# Pages Functions 开发规范
+# Cloudflare Worker 后端开发规范
 
-这些文件定义“来个群号”的初始服务端契约。运行时是 Cloudflare Pages Functions（`workerd`），不是 Node.js 服务器。
+这些文件定义“来个群号”的服务端契约。生产运行时是独立 Cloudflare Module Worker（`workerd`），不是 Pages 项目或 Node.js 服务器；Hono API 与 Workers Static Assets 由同一 Worker 部署。
 
 ## 基准技术栈
 
-- 仅挂载在 `/api/v1` 下的 Hono 应用
+- 仅挂载在 `/api/v1` 下、由 Worker `fetch` 入口承载的 Hono 应用
 - 与前端共享的 Zod schema
 - 直接使用 D1 预处理语句和有序 SQL migration
 - 通过 R2 binding 存储最终 WebP 资源
@@ -26,4 +26,4 @@
 
 ## 当前依据
 
-目前还没有产品 Functions。`.trellis/tasks/00-bootstrap-guidelines/` 下的 bootstrap PRD 和 `design.md` 是这份初始契约的依据。首次构建后，使用已实现的真实示例替换目标路径引用。
+生产入口为 `worker/index.ts`，业务路由和服务仍位于 `functions/_lib/` 以保持边界稳定。Pages adapter 已退役；`.trellis/tasks/08-03-lgqh-v2-cloudflare-deployment/` 记录 Worker、Assets、D1/R2 和命令迁移约束。

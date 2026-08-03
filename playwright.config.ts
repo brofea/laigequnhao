@@ -29,7 +29,7 @@ export default defineConfig({
       timeout: 120000,
     },
     {
-      command: "pnpm dev --host 127.0.0.1",
+      command: "pnpm dev --mode e2e --host 127.0.0.1",
       url: "http://localhost:5173",
       reuseExistingServer: false,
       timeout: 120000,

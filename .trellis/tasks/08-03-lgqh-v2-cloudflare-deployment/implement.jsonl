@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/08-03-lgqh-v2-cloudflare-deployment/research.md","reason":"本任务的仓库事实、Cloudflare 官方能力核对和无远程写入最小实验结果。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Worker、静态资源、API、D1/R2、命令和 Workers Builds 之间存在跨层数据流，需要统一边界。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"部署、D1/R2、Workers Vitest、Playwright 和本地环境隔离必须遵守项目测试门禁。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"D1 migration 元数据、R2/D1 补偿、资源生命周期和本地/远程隔离是部署编排的约束。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Worker runtime、显式 binding、安全配置和质量门禁适用于根入口和部署命令。"}
+{"file":".trellis/spec/frontend/architecture.md","reason":"前端 API 同源、浏览器边界和视觉冻结约束限制 Vite/Worker 迁移的可改范围。"}

@@ -1,60 +1,69 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "laigequnhao",
-  "pages_build_output_dir": "./dist",
+  "main": "./worker/index.ts",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Cloudflare Vite Plugin fills in assets.directory in its generated
+  // wrangler.json. Keeping only routing here accepts the plugin's official
+  // client output (including dist/client) instead of hard-coding a folder.
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
   "observability": {
     "enabled": true,
   },
-  // ─── Secrets ────────────────────────────────────────────────
-  // 以下 secrets 必须通过 wrangler secret put <KEY> 设置：
-  //   ADMIN_PASSWORD     — 管理员共享密码
-  //   SESSION_SECRET     — 会话签名密钥
-  //   LIKE_PEPPER        — 匿名设备 ID 哈希 pepper
-  //   TURNSTILE_SECRET_KEY — Cloudflare Turnstile 密钥
-  //   R2_PUBLIC_BASE_URL — R2 自定义域名（如 https://assets.example.com）
-  //
-  // 本地开发使用 .dev.vars（已 .gitignore），模板见 .dev.vars.example
-  // ─── D1 数据库 ────────────────────────────────────────────
+  // 本地开发由 Cloudflare Vite Plugin / Wrangler 使用本地 D1/R2 模拟。
+  // 不写入 database_id，避免把部署者账号的资源 ID 固化到源配置。
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "lgqh-dev",
-      "database_id": "66acce6c-7415-4193-a0fe-a9899006ee61",
+      "migrations_dir": "migrations",
     },
   ],
-  // ─── R2 存储桶 ────────────────────────────────────────────
   "r2_buckets": [
     {
       "binding": "R2",
       "bucket_name": "lgqh-dev",
     },
   ],
-  // ─── 本地环境变量 ─────────────────────────────────────────
   "vars": {
+    "ENVIRONMENT": "local",
     "SKIP_TURNSTILE": "true",
+    "SECURE_COOKIE": "false",
   },
-  // ─── 环境隔离 ──────────────────────────────────────────────
+  // Wrangler uses this declaration as the source of truth for local/type
+  // validation and fails deploy if the deployed Worker lacks these secrets.
+  // Values are never stored here.
+  "secrets": {
+    "required": ["ADMIN_PASSWORD", "SESSION_SECRET", "LIKE_PEPPER", "TURNSTILE_SECRET_KEY"],
+  },
   "env": {
     "preview": {
+      "name": "laigequnhao-preview",
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "lgqh-dev",
-          "database_id": "66acce6c-7415-4193-a0fe-a9899006ee61",
-          "remote": true,
+          "database_name": "laigequnhao-preview",
+          "migrations_dir": "migrations",
         },
       ],
       "r2_buckets": [
         {
           "binding": "R2",
-          "bucket_name": "lgqh-dev",
-          "remote": true,
+          "bucket_name": "laigequnhao-assets-preview",
         },
       ],
       "vars": {
+        "ENVIRONMENT": "preview",
         "SKIP_TURNSTILE": "true",
+        "SECURE_COOKIE": "true",
+      },
+      "secrets": {
+        "required": ["ADMIN_PASSWORD", "SESSION_SECRET", "LIKE_PEPPER", "TURNSTILE_SECRET_KEY"],
       },
     },
     "production": {
@@ -62,7 +71,7 @@
         {
           "binding": "DB",
           "database_name": "laigequnhao-prod",
-          "database_id": "production",
+          "migrations_dir": "migrations",
         },
       ],
       "r2_buckets": [
@@ -72,8 +81,12 @@
         },
       ],
       "vars": {
+        "ENVIRONMENT": "production",
         "SKIP_TURNSTILE": "false",
         "SECURE_COOKIE": "true",
+      },
+      "secrets": {
+        "required": ["ADMIN_PASSWORD", "SESSION_SECRET", "LIKE_PEPPER", "TURNSTILE_SECRET_KEY"],
       },
     },
   },

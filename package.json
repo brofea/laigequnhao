@@ -3,30 +3,32 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.17.0",
   "scripts": {
     "dev": "vite dev",
-    "build": "vue-tsc --build --force && vite build",
+    "vite:dev": "vite dev --mode frontend-only",
+    "worker:dev": "node scripts/worker-dev.mjs",
+    "build": "node scripts/build.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
-    "typecheck": "vue-tsc --build --force && tsc -p functions/tsconfig.json --noEmit",
+    "typecheck": "vue-tsc --build --force && tsc -p functions/tsconfig.json --noEmit && tsc -p worker/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:workers": "vitest run --config vitest.workers.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "pages:dev": "wrangler pages dev --remote --proxy 5173 --port 8788",
-    "pages:dev:local": "wrangler pages dev --proxy 5173 --port 8788",
-    "pages:deploy": "wrangler pages deploy ./dist",
-    "db:migrate": "wrangler d1 migrations apply DB --remote --config wrangler.jsonc",
-    "db:migrate:local": "wrangler d1 migrations apply lgqh-dev --local",
-    "db:migrate:preview": "wrangler d1 migrations apply DB --remote --env preview --config wrangler.jsonc",
-    "db:migrate:prod": "wrangler d1 migrations apply DB --remote --env production --config wrangler.jsonc",
+    "db:migrate": "wrangler d1 migrations apply lgqh-dev --local --config wrangler.jsonc --persist-to .wrangler/state",
+    "db:migrate:remote": "node scripts/migrate-remote.mjs",
+    "seed": "node scripts/seed.mjs",
+    "clean": "node scripts/clean.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "release": "pnpm build && pnpm deploy",
+    "cloudflare:check": "node scripts/cloudflare-resources.mjs --check",
     "db:test:migrate": "wrangler d1 migrations apply lgqh-test-local --local --config wrangler.test.jsonc",
     "db:test:reset": "wrangler d1 execute lgqh-test-local --local --config wrangler.test.jsonc --command=\"DROP TABLE IF EXISTS rate_limits; DROP TABLE IF EXISTS likes; DROP TABLE IF EXISTS submission_details; DROP TABLE IF EXISTS join_methods; DROP TABLE IF EXISTS group_tags; DROP TABLE IF EXISTS assets; DROP TABLE IF EXISTS groups;\"",
-    "db:test:unlock": "wrangler d1 execute lgqh-test-local --local --config wrangler.test.jsonc --command=\"DELETE FROM rate_limits;\"",
-    "seed:local": "node scripts/seed-local.mjs"
+    "db:test:unlock": "wrangler d1 execute lgqh-test-local --local --config wrangler.test.jsonc --command=\"DELETE FROM rate_limits;\""
   },
   "dependencies": {
     "hono": "^4.6.0",
@@ -34,6 +36,7 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.50.0",
     "@cloudflare/vitest-pool-workers": "^0.8.0",
     "@cloudflare/workers-types": "^4.20251221.0",
     "@eslint/js": "^10.0.1",
@@ -57,7 +60,7 @@
     "vitest": "^3.0.0",
     "vue-eslint-parser": "^9.4.3",
     "vue-tsc": "^2.2.0",
-    "wrangler": "^4.0.0",
+    "wrangler": "^4.118.0",
     "zod": "^3.24.0"
   }
 }

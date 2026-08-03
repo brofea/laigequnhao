@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "lgqh-provision-draft-check",
+  "main": "../../../../tests/e2e/worker.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [{ "binding": "DB" }],
+  "r2_buckets": [{ "binding": "R2" }]
+}

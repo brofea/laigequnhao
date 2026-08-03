@@ -5,7 +5,7 @@
 ## 环境准备
 
 - [ ] `pnpm install` 成功
-- [ ] `pnpm db:migrate:local` 成功
+- [ ] `pnpm db:migrate` 成功（只写本地 D1）
 - [ ] `.dev.vars` 已配置（`ADMIN_PASSWORD` 已设置）
 - [ ] `pnpm dev` 启动成功，浏览器可访问 http://localhost:5173
 

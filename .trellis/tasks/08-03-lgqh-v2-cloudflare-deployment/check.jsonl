@@ -1,0 +1,5 @@
+{"file":".trellis/tasks/08-03-lgqh-v2-cloudflare-deployment/research.md","reason":"检查结论必须能追溯到实际 Pages/Worker 配置、Wrangler dry-run 和官方文档，而不是假设。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"用于复核本地 D1/R2 隔离、Workers runtime、E2E server 和完整质量命令。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"用于复核 migration 顺序、失败恢复、R2 清理和禁止远程 destructive 操作。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"用于复核 Worker binding、错误边界、Secrets 脱敏和部署前质量门禁。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"用于复核本任务不改变视觉表现且前端运行时接线不破坏既有 E2E 门禁。"}

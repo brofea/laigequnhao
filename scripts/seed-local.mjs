@@ -3,7 +3,8 @@
  * 全链路种子数据脚本
  * 用法: node scripts/seed-local.mjs
  *
- * 前提: 先启动 pnpm pages:dev:local（API 在 localhost:8788）
+ * 前提: 先启动 pnpm dev（默认通过单地址 localhost:5173 访问 Worker API）
+ * 若单独运行 pnpm worker:dev，请设置 SEED_API_BASE=http://127.0.0.1:8788/api/v1。
  *
  * 下载 → 压缩（logo 128px/80KB, QR 1024px/400KB）→ 通过 API 上传 R2 → 写 D1
  *
@@ -21,8 +22,31 @@ import sharp from "sharp";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GROUP_COUNT = 140;
 const SQL_FILE = join(__dirname, "..", "seed-local.sql");
-const API_BASE = "http://localhost:8788/api/v1";
+const API_BASE = process.env.SEED_API_BASE ?? "http://127.0.0.1:5173/api/v1";
+const PERSIST_TO = process.env.WRANGLER_PERSIST_TO ?? resolve(__dirname, "..", ".wrangler/state");
 const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
+
+function assertLocalSeedTarget() {
+  const url = new URL(API_BASE);
+  if (!["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
+    throw new Error(`seed only accepts a loopback API; refused ${url.hostname}`);
+  }
+  try {
+    const output = execSync(
+      `${NPX} wrangler d1 execute lgqh-dev --local --persist-to "${PERSIST_TO}" --command "SELECT COUNT(*) AS count FROM groups;" --json`,
+      { cwd: resolve(__dirname, ".."), encoding: "utf-8", timeout: 30000, stdio: "pipe" },
+    );
+    const count = Number(output.match(/"count"\s*:\s*(\d+)/)?.[1] ?? NaN);
+    if (!Number.isFinite(count)) throw new Error("could not read the local groups count");
+    if (count > 0 && process.env.SEED_ALLOW_NONEMPTY !== "true") {
+      throw new Error(
+        "local D1 already contains application rows; run pnpm clean first or set SEED_ALLOW_NONEMPTY=true explicitly",
+      );
+    }
+  } catch (error) {
+    throw new Error(`seed target check failed: ${error.message}`, { cause: error });
+  }
+}
 
 // ─── 压缩参数（与 shared/contracts/asset.ts 同步）─────────
 const LOGO_MAX_DIM = 128;
@@ -388,9 +412,6 @@ async function uploadAll(images, groups) {
 function generateSQL(groups, { logos, qrCodes }) {
   const lines = [];
   lines.push("BEGIN TRANSACTION;");
-  lines.push("DELETE FROM likes; DELETE FROM group_tags; DELETE FROM join_methods;");
-  lines.push("DELETE FROM submission_details; DELETE FROM assets; DELETE FROM groups;");
-  lines.push("DELETE FROM rate_limits;");
   lines.push("");
 
   // Asset INSERTs（先插 logos，再插 QR codes）
@@ -527,6 +548,7 @@ function generateSQL(groups, { logos, qrCodes }) {
 async function main() {
   console.log("═══ 全链路种子数据生成 ═══\n");
   console.log(`API: ${API_BASE}`);
+  assertLocalSeedTarget();
   await authenticate();
 
   // 1. 下载所有图片（全部压缩logo）
@@ -556,15 +578,19 @@ async function main() {
 
   // 5. 执行
   try {
-    execSync(`${NPX} wrangler d1 execute lgqh-dev --local --file "${SQL_FILE}"`, {
-      encoding: "utf-8",
-      timeout: 300000,
-      stdio: "pipe",
-    });
+    execSync(
+      `${NPX} wrangler d1 execute lgqh-dev --local --persist-to "${PERSIST_TO}" --file "${SQL_FILE}"`,
+      {
+        encoding: "utf-8",
+        timeout: 300000,
+        stdio: "pipe",
+      },
+    );
     console.log("✅ 种子数据完成");
   } catch (err) {
     console.error("❌ 执行失败:", err.stderr?.slice(0, 200) || err.message);
     console.log(`SQL 文件保留: ${SQL_FILE}`);
+    process.exitCode = 1;
   }
 }
 main();

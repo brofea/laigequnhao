@@ -1,11 +1,11 @@
-# Pages Functions 目录结构
+# Cloudflare Worker 目录结构
 
 ## 目标结构
 
 ```text
+worker/
+└── index.ts
 functions/
-├── api/
-│   └── [[route]].ts
 └── _lib/
     ├── app.ts
     ├── env.ts
@@ -24,7 +24,7 @@ tests/
 └── workers/
 ```
 
-`functions/api/[[route]].ts` 是把请求传给 Hono 应用的轻量 Pages 适配器，不包含业务逻辑。
+`worker/index.ts` 是把 Worker `fetch` 请求传给 Hono 应用的轻量生产适配器，不包含业务逻辑；`functions/_lib/` 保留路由、service、repository 和 adapter 边界。
 
 ## 职责归属
 

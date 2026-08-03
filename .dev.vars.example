@@ -1,14 +1,17 @@
 # 本地开发 Secrets — 请勿提交到版本控制
 # 复制此文件为 .dev.vars 并填入本地开发值
-# 生产环境请使用 `wrangler secret put <KEY>` 设置
+# 生产环境请在 Worker Settings > Variables and Secrets 中设置 Runtime secrets
 
 ADMIN_PASSWORD=dev-admin-password
 SESSION_SECRET=dev-session-secret-change-me
 LIKE_PEPPER=dev-like-pepper-change-me
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 SKIP_TURNSTILE=true
+SECURE_COOKIE=false
+ENVIRONMENT=local
 DEV_LIKE_PEPPER=dev-like-pepper-change-me
 # 本地图片由 API 路由从 R2 Binding 提供（兼容本地 Miniflare 和远程 R2）
+# 可选；默认使用同源 Worker 的 /api/v1/assets/<key>
 R2_PUBLIC_BASE_URL=http://localhost:5173/api/v1/assets
 # 登录限流（可选，默认 5 次/15 分钟）
 LOGIN_MAX_ATTEMPTS=100

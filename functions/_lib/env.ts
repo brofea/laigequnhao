@@ -1,6 +1,8 @@
-/** Cloudflare Pages Functions 环境绑定类型 */
+/** Cloudflare Worker 运行环境绑定类型 */
 
 export interface Env {
+  /** Workers Static Assets binding（非 API 请求由平台直接处理） */
+  ASSETS?: Fetcher;
   /** D1 数据库 */
   DB: D1Database;
   /** R2 存储桶 */

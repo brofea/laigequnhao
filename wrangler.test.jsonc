@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "laigequnhao-test",
+  "main": "./worker/index.ts",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
   // 本文件只供自动化测试使用。未设置 remote，D1/R2 均由 workerd 本地模拟。
@@ -8,7 +9,9 @@
     {
       "binding": "DB",
       "database_name": "lgqh-test-local",
-      "database_id": "98f266f6-fdf8-48ea-8f4a-1ce921741cd7",
+      // Local-only Miniflare sentinel; this is not a Cloudflare resource ID.
+      "database_id": "00000000-0000-4000-8000-000000000002",
+      "migrations_dir": "migrations",
     },
   ],
   "r2_buckets": [
