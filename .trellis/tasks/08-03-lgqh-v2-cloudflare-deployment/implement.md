@@ -2,11 +2,11 @@
 
 ## 当前实施状态（2026-08-03）
 
-已落地：Worker 根入口、Cloudflare Vite Plugin 单进程 `pnpm dev`、官方 `dist/client` 构建输出消费、SPA/API 分流、本地 D1/R2 命令、`pnpm seed`/`pnpm clean` 安全边界、显式 D1/R2 资源编排、远程 migration → deploy 顺序、`secrets.required` 真实配置声明、Preview 默认拒绝、Pages adapter 退役，以及 Workers Vitest/Playwright 入口统一。
+已落地：Worker 根入口、Cloudflare Vite Plugin 单进程 `pnpm dev`、官方 `dist/client` 构建输出消费、SPA/API 分流、本地 D1/R2 命令、`pnpm seed`/`pnpm clean` 安全边界、显式 D1/R2 资源编排、远程 migration → deploy 顺序、缺 Secret 时的运行时功能降级、Turnstile Sitekey/Secret key 配置链路、Preview 默认拒绝、Pages adapter 退役，以及 Workers Vitest/Playwright 入口统一。
 
 已验证：`pnpm build`（构建产物不保留 `.dev.vars`）、`pnpm typecheck`、`pnpm test`（82 tests）、`pnpm test:workers`（104 tests）、`pnpm dev` 的 API/SPA smoke、`pnpm worker:dev` 的本地 D1/R2 binding 和 Wrangler Plugin dry-run 均通过；E2E 曾有一次 68/68 全通过，后续一次为 67/68，唯一移动端板块管理用例单独重跑通过；`pnpm lint` 为 0 errors、42 条既有 warnings。
 
-当前状态：代码实施与本地验证完成，真实 Cloudflare 环境验收待项目所有者执行。当前认证账号没有目标 D1/R2，且 Workers Builds 所需 Runtime secrets 尚未由所有者在 Worker Dashboard 配置；Agent 未获授权执行真实资源创建，因此不把未完成的真实验收描述为代码实现失败。待所有者配置 secrets 后，必须仅通过 Dashboard 的 Fork → Import repository → Save and Deploy 完成第一次成功 Workers Build，再以第二个 main commit 触发第二次 Build 验证资源复用。
+当前状态：代码实施与本地验证完成，真实 Cloudflare 环境验收待项目所有者执行。当前认证账号没有目标 D1/R2；Agent 未获授权执行真实资源创建，因此不把未完成的真实验收描述为代码实现失败。首次后台 Build 应先验证无 Runtime secrets 时也能创建资源、执行 migration 并发布基础网站；随后配置对应 secrets/Sitekey 启用功能，再以第二个 main commit 触发第二次 Build 验证资源复用。
 
 ## 1. 实施前置和审查门
 

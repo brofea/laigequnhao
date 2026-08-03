@@ -17,6 +17,7 @@ function apiFetch(
   path: string,
   headers?: Record<string, string>,
   body?: unknown,
+  runtimeEnv: Env = env,
 ): Promise<Response> {
   const req = new Request(`http://localhost${path}`, {
     method,
@@ -27,7 +28,7 @@ function apiFetch(
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  return app.fetch(req, env);
+  return app.fetch(req, runtimeEnv);
 }
 
 function parseSetCookie(raw: string | null): string {
@@ -37,6 +38,21 @@ function parseSetCookie(raw: string | null): string {
 }
 
 describe("POST /api/v1/admin/session", () => {
+  it("returns DEPENDENCY_UNAVAILABLE when ADMIN_PASSWORD is missing", async () => {
+    const response = await apiFetch(
+      "POST",
+      "/api/v1/admin/session",
+      {},
+      { password },
+      { ...env, ADMIN_PASSWORD: undefined },
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "DEPENDENCY_UNAVAILABLE" },
+    });
+  });
+
   it("returns 401 for wrong password", async () => {
     const response = await apiFetch("POST", "/api/v1/admin/session", {}, { password: "wrong" });
     expect(response.status).toBe(401);
@@ -59,6 +75,18 @@ describe("POST /api/v1/admin/session", () => {
 });
 
 describe("GET /api/v1/admin/session", () => {
+  it("returns DEPENDENCY_UNAVAILABLE when SESSION_SECRET is missing", async () => {
+    const response = await apiFetch("GET", "/api/v1/admin/session", {}, undefined, {
+      ...env,
+      SESSION_SECRET: undefined,
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "DEPENDENCY_UNAVAILABLE" },
+    });
+  });
+
   it("returns 401 without cookie", async () => {
     const response = await apiFetch("GET", "/api/v1/admin/session");
     expect(response.status).toBe(401);

@@ -1,7 +1,8 @@
 import { createMiddleware } from "hono/factory";
 import { createAuthService } from "../services/auth-service";
 import { apiErrorSchema } from "@shared/contracts/api";
-import type { Env } from "../env";
+import { dependencyUnavailable } from "../api-error";
+import { getAdminAuthSecrets, type Env } from "../env";
 
 const COOKIE_NAME = "session";
 
@@ -10,7 +11,22 @@ type AuthVars = { requestId: string; sessionId: string };
 /** 需要认证的中间件 */
 export function authRequired() {
   return createMiddleware<{ Bindings: Env; Variables: AuthVars }>(async (c, next) => {
-    const auth = createAuthService(c.env);
+    const adminSecrets = getAdminAuthSecrets(c.env);
+    if (!adminSecrets) {
+      return c.json(
+        dependencyUnavailable(
+          c.get("requestId"),
+          "管理员功能尚未配置：请设置 ADMIN_PASSWORD 和 SESSION_SECRET。",
+        ),
+        503,
+      );
+    }
+
+    const auth = createAuthService({
+      ...adminSecrets,
+      LOGIN_MAX_ATTEMPTS: c.env.LOGIN_MAX_ATTEMPTS,
+      LOGIN_WINDOW_MINUTES: c.env.LOGIN_WINDOW_MINUTES,
+    });
     const cookie = c.req.header("Cookie") ?? "";
     const match = cookie.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]*)`));
     const sessionValue = match?.[1];
@@ -78,7 +94,22 @@ export function csrfProtection() {
       );
     }
 
-    const auth = createAuthService(c.env);
+    const adminSecrets = getAdminAuthSecrets(c.env);
+    if (!adminSecrets) {
+      return c.json(
+        dependencyUnavailable(
+          c.get("requestId"),
+          "管理员功能尚未配置：请设置 ADMIN_PASSWORD 和 SESSION_SECRET。",
+        ),
+        503,
+      );
+    }
+
+    const auth = createAuthService({
+      ...adminSecrets,
+      LOGIN_MAX_ATTEMPTS: c.env.LOGIN_MAX_ATTEMPTS,
+      LOGIN_WINDOW_MINUTES: c.env.LOGIN_WINDOW_MINUTES,
+    });
     const valid = await auth.verifyCsrfToken(sessionId, csrfHeader);
     if (!valid) {
       return c.json(

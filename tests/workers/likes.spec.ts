@@ -10,6 +10,7 @@ function apiFetch(
   path: string,
   headers?: Record<string, string>,
   body?: unknown,
+  runtimeEnv: Env = env,
 ): Promise<Response> {
   const req = new Request(`http://localhost${path}`, {
     method,
@@ -20,7 +21,7 @@ function apiFetch(
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  return app.fetch(req, env);
+  return app.fetch(req, runtimeEnv);
 }
 
 describe("PUT/DELETE /api/v1/groups/:id/like", () => {
@@ -47,6 +48,21 @@ describe("PUT/DELETE /api/v1/groups/:id/like", () => {
         "2026-01-01T00:00:00.000Z",
       )
       .run();
+  });
+
+  it("returns DEPENDENCY_UNAVAILABLE when LIKE_PEPPER is missing", async () => {
+    const response = await apiFetch(
+      "PUT",
+      `/api/v1/groups/${groupId}/like`,
+      { "X-Device-Id": crypto.randomUUID() },
+      undefined,
+      { ...env, LIKE_PEPPER: undefined },
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "DEPENDENCY_UNAVAILABLE" },
+    });
   });
 
   it("creates a like via PUT", async () => {
@@ -122,10 +138,7 @@ describe("PUT/DELETE /api/v1/groups/:id/like", () => {
       .prepare("INSERT INTO likes (group_id, voter_hash) VALUES (?, ?)")
       .bind(groupId, "deadbeefdeadbeef")
       .run();
-    await db
-      .prepare("UPDATE groups SET like_count = 67 WHERE id = ?")
-      .bind(groupId)
-      .run();
+    await db.prepare("UPDATE groups SET like_count = 67 WHERE id = ?").bind(groupId).run();
 
     // 点赞接口必须把 like_count 校正为 likes 实际行数（COUNT），而非沿用旧值
     const response = await apiFetch("PUT", `/api/v1/groups/${groupId}/like`, {

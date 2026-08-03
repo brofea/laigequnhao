@@ -5,7 +5,8 @@ import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createLikeRepository } from "../repositories/like-repository";
 import { createRateLimitRepository } from "../repositories/rate-limit-repository";
 import { hashDeviceId } from "../adapters/hash-adapter";
-import type { Env } from "../env";
+import { dependencyUnavailable } from "../api-error";
+import { getLikePepper, type Env } from "../env";
 
 const deviceIdSchema = z.string().uuid();
 
@@ -14,6 +15,14 @@ export const likesRoute = new Hono<{ Bindings: Env; Variables: Vars }>();
 
 /** PUT /groups/:id/like — 点赞 */
 likesRoute.put("/:id/like", async (c) => {
+  const pepper = getLikePepper(c.env);
+  if (!pepper) {
+    return c.json(
+      dependencyUnavailable(c.get("requestId"), "点赞功能尚未配置：请设置 LIKE_PEPPER。"),
+      503,
+    );
+  }
+
   const groupId = c.req.param("id");
   if (!groupId) {
     return c.json(
@@ -39,11 +48,19 @@ likesRoute.put("/:id/like", async (c) => {
     );
   }
 
-  return toggleLike(c, groupId, parsed.data, "like");
+  return toggleLike(c, groupId, parsed.data, "like", pepper);
 });
 
 /** DELETE /groups/:id/like — 取消点赞 */
 likesRoute.delete("/:id/like", async (c) => {
+  const pepper = getLikePepper(c.env);
+  if (!pepper) {
+    return c.json(
+      dependencyUnavailable(c.get("requestId"), "点赞功能尚未配置：请设置 LIKE_PEPPER。"),
+      503,
+    );
+  }
+
   const groupId = c.req.param("id");
   if (!groupId) {
     return c.json(
@@ -69,7 +86,7 @@ likesRoute.delete("/:id/like", async (c) => {
     );
   }
 
-  return toggleLike(c, groupId, parsed.data, "unlike");
+  return toggleLike(c, groupId, parsed.data, "unlike", pepper);
 });
 
 async function toggleLike(
@@ -81,6 +98,7 @@ async function toggleLike(
   groupId: string,
   deviceId: string,
   action: "like" | "unlike",
+  pepper: string,
 ) {
   const requestId = c.get("requestId");
 
@@ -99,7 +117,6 @@ async function toggleLike(
   }
 
   // Hash device ID
-  const pepper = c.env.DEV_LIKE_PEPPER ?? c.env.LIKE_PEPPER;
   const voterHash = await hashDeviceId(deviceId, pepper);
 
   // 执行

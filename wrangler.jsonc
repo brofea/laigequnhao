@@ -35,12 +35,6 @@
     "SKIP_TURNSTILE": "true",
     "SECURE_COOKIE": "false",
   },
-  // Wrangler uses this declaration as the source of truth for local/type
-  // validation and fails deploy if the deployed Worker lacks these secrets.
-  // Values are never stored here.
-  "secrets": {
-    "required": ["ADMIN_PASSWORD", "SESSION_SECRET", "LIKE_PEPPER", "TURNSTILE_SECRET_KEY"],
-  },
   "env": {
     "preview": {
       "name": "laigequnhao-preview",
@@ -62,9 +56,6 @@
         "SKIP_TURNSTILE": "true",
         "SECURE_COOKIE": "true",
       },
-      "secrets": {
-        "required": ["ADMIN_PASSWORD", "SESSION_SECRET", "LIKE_PEPPER", "TURNSTILE_SECRET_KEY"],
-      },
     },
     "production": {
       "d1_databases": [
@@ -84,9 +75,6 @@
         "ENVIRONMENT": "production",
         "SKIP_TURNSTILE": "false",
         "SECURE_COOKIE": "true",
-      },
-      "secrets": {
-        "required": ["ADMIN_PASSWORD", "SESSION_SECRET", "LIKE_PEPPER", "TURNSTILE_SECRET_KEY"],
       },
     },
   },

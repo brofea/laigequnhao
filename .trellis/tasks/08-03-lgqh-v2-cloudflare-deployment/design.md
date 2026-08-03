@@ -163,7 +163,7 @@ pnpm deploy
   └─ wrangler deploy --config generated
 ```
 
-`pnpm deploy` 在 Workers Builds 中必须是非交互的：默认 Worker/D1/R2 名称固定为 `laigequnhao`、`laigequnhao-prod`、`laigequnhao-assets-prod`，只有明确的部署环境变量才允许覆盖。它不能提示用户 clone、运行本地命令或手工绑定；缺少 Cloudflare 构建凭据、资源权限或已声明的 Runtime secrets 时，底层 Wrangler 必须失败并输出下一步。仓库不再使用自定义 `CF_DEPLOY_ENV` 或 `CF_SECRETS_CONFIGURED` 开关；`CF_WORKER_NAME`、`CF_D1_NAME`、`CF_R2_NAME` 仅是高级部署脚本的可选名称覆盖，不是必须配置的 Build variable 或 Runtime variable。
+`pnpm deploy` 在 Workers Builds 中必须是非交互的：默认 Worker/D1/R2 名称固定为 `laigequnhao`、`laigequnhao-prod`、`laigequnhao-assets-prod`，只有明确的部署环境变量才允许覆盖。它不能提示用户 clone、运行本地命令或手工绑定；缺少 Cloudflare 构建凭据、资源权限时必须失败并输出下一步，但缺少业务 Runtime secrets 不得阻断基础资源预配、migration 或 Worker 发布。仓库不再使用自定义 `CF_DEPLOY_ENV`、`CF_SECRETS_CONFIGURED` 或 `secrets.required`；`CF_WORKER_NAME`、`CF_D1_NAME`、`CF_R2_NAME` 仅是高级部署脚本的可选名称覆盖，不是必须配置的 Build variable 或 Runtime variable。
 
 硬性真实验收环境为一次全新或隔离 Cloudflare 账号/资源命名空间：第一次 Fork → Import repository → `pnpm build` → `pnpm deploy` 必须创建/复用资源、执行 migration 并上线；提交第二个 commit 后同样触发 Workers Builds，必须复用相同 Worker/D1/R2，仅应用新增 migration。fake Wrangler 只验证编排分支，不计入该验收。
 
@@ -222,7 +222,7 @@ pnpm dev
 | `pnpm seed` | Local | 写入本地测试数据和本地 R2 | 本地 URL、固定/随机 seed | 远程 URL、生产环境、已有数据策略不满足时退出 |
 | `pnpm clean` | Local | 清理本地 D1 应用数据和本地 R2 对象 | 二次确认，逐项列出 D1/R2 | 任一确认缺失/目标非 local 即退出；保留 schema、实例和 `d1_migrations` |
 | `pnpm build` | Local/Workers Builds | 生成 Vite Plugin/Worker 实际构建产物 | 无远程凭据要求 | 构建失败退出，不迁移/预配 |
-| `pnpm deploy` | Production Workers Builds | 预配/复用资源、remote migration、Worker deploy | build 已完成、Dashboard Runtime secrets 已配置 | 任一阶段失败立即停止，不 seed/clean |
+| `pnpm deploy` | Production Workers Builds | 预配/复用资源、remote migration、Worker deploy | build 已完成；业务 Runtime secrets 可在发布后补齐 | 资源/migration/deploy 阶段失败立即停止，不 seed/clean；缺 Secret 只禁用对应功能 |
 | `pnpm release` | 本地手动 Production | `build` 后调用 deploy | 显式人工发布确认 | build 或 deploy 失败即退出 |
 | `pnpm cloudflare:check` | 只读 remote | account/Worker/D1/R2/migration 检查 | 登录和目标环境 | 只报告，不创建、不迁移、不 deploy |
 
@@ -240,7 +240,7 @@ README 主流程只突出前两层中的六个核心命令；`clean` 确认界�
 
 非敏感 vars 默认值：`ENVIRONMENT=production`、`SKIP_TURNSTILE=false`、`SECURE_COOKIE=true`，以及确定性名称 `laigequnhao`、`laigequnhao-prod`、`laigequnhao-assets-prod`。`R2_PUBLIC_BASE_URL` 仅在使用独立资源域名时提供，默认由同源 Worker 生成资源 URL。
 
-必须由项目所有者在 Worker **Settings → Variables and Secrets** 中人工准备的 Runtime secrets：`ADMIN_PASSWORD`、`SESSION_SECRET`、`LIKE_PEPPER`、`TURNSTILE_SECRET_KEY`。这些名称由 `wrangler.jsonc` 的 `secrets.required` 声明，官方 `wrangler deploy` 会在 Worker 缺少任一项时失败；仓库不再维护自定义 presence flag，也不把值注入 Workers Builds Build secret。`ANALYTICS_TOKEN` 仅在启用管理分析时需要，缺失时单独标记分析不可用。`SESSION_SECRET` 和 `LIKE_PEPPER` 可以由所有者在密码管理器中随机生成；`ADMIN_PASSWORD` 由所有者设定；`TURNSTILE_SECRET_KEY` 必须来自生产 Turnstile 站点。Secret 不由普通 deploy 自动生成、写入日志或保存进证据。
+基础 Worker 发布不依赖 Runtime secrets。项目所有者在 Worker **Settings → Variables and Secrets** 中按需配置 `ADMIN_PASSWORD`、`SESSION_SECRET`、`LIKE_PEPPER`、`TURNSTILE_SECRET_KEY`；前端通过 Workers Builds 的普通 Build variable `VITE_TURNSTILE_SITE_KEY` 配置公开 Sitekey。缺少管理员/会话、点赞或 Turnstile 配置时，服务端返回明确的 `DEPENDENCY_UNAVAILABLE`“尚未配置”错误，不使用默认 Secret；Secret 不由普通 deploy 自动生成、写入日志或保存进证据。
 
 管理员初始化顺序：确认管理员密码已替换、会话密钥和 pepper 为随机值、Secure Cookie 开启、Turnstile 配对完成、D1 migration 完成、管理员首次登录和 CSRF 成功、R2 上传/读取成功。即使这些基础项通过，Turnstile 投稿前端仍按 A1 单独验收，不能报告全站完成。
 

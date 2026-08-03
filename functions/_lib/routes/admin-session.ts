@@ -8,7 +8,8 @@ import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createAuthService } from "../services/auth-service";
 import { createRateLimitRepository } from "../repositories/rate-limit-repository";
 import { authRequired, csrfProtection } from "../middleware/auth";
-import type { Env } from "../env";
+import { dependencyUnavailable } from "../api-error";
+import { getAdminAuthSecrets, type Env } from "../env";
 
 type Vars = { requestId: string; sessionId: string };
 export const adminSessionRoute = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -25,6 +26,17 @@ function setSessionCookie(c: { env: Env }, value: string, maxAge: number) {
 /** POST /admin/session — 登录 */
 adminSessionRoute.post("/session", async (c) => {
   const requestId = c.get("requestId");
+  const adminSecrets = getAdminAuthSecrets(c.env);
+  if (!adminSecrets) {
+    return c.json(
+      dependencyUnavailable(
+        requestId,
+        "管理员功能尚未配置：请设置 ADMIN_PASSWORD 和 SESSION_SECRET。",
+      ),
+      503,
+    );
+  }
+
   const body = await c.req.json<unknown>();
   const parsed = loginRequestSchema.safeParse(body);
 
@@ -39,7 +51,11 @@ adminSessionRoute.post("/session", async (c) => {
     );
   }
 
-  const auth = createAuthService(c.env);
+  const auth = createAuthService({
+    ...adminSecrets,
+    LOGIN_MAX_ATTEMPTS: c.env.LOGIN_MAX_ATTEMPTS,
+    LOGIN_WINDOW_MINUTES: c.env.LOGIN_WINDOW_MINUTES,
+  });
 
   // 限流检查
   const clientKey = c.req.header("CF-Connecting-IP") ?? "unknown";
@@ -92,7 +108,21 @@ adminSessionRoute.post("/session", async (c) => {
 adminSessionRoute.get("/session", authRequired(), async (c) => {
   const requestId = c.get("requestId");
   const sessionId = c.get("sessionId");
-  const auth = createAuthService(c.env);
+  const adminSecrets = getAdminAuthSecrets(c.env);
+  if (!adminSecrets) {
+    return c.json(
+      dependencyUnavailable(
+        requestId,
+        "管理员功能尚未配置：请设置 ADMIN_PASSWORD 和 SESSION_SECRET。",
+      ),
+      503,
+    );
+  }
+  const auth = createAuthService({
+    ...adminSecrets,
+    LOGIN_MAX_ATTEMPTS: c.env.LOGIN_MAX_ATTEMPTS,
+    LOGIN_WINDOW_MINUTES: c.env.LOGIN_WINDOW_MINUTES,
+  });
   const csrfToken = await auth.deriveCsrfToken(sessionId);
   const expiresAt = new Date(Date.now() + SESSION_DURATION * 1000).toISOString();
 

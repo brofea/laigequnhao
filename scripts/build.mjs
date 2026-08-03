@@ -22,8 +22,8 @@ function run(command, args, env = process.env) {
 await run("pnpm", ["exec", "vue-tsc", "--build", "--force"]);
 
 // The Vite plugin may materialize local .dev.vars beside its preview Worker
-// config. Runtime secrets are configured on the deployed Worker and validated
-// by Wrangler at deploy time, so remove that generated file from the artifact.
+// config. Runtime secrets are configured on the deployed Worker, so remove
+// that generated file from the artifact and never copy local values into it.
 await run("pnpm", ["exec", "vite", "build"], {
   ...process.env,
   CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false",

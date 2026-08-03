@@ -10,6 +10,7 @@ function apiFetch(
   path: string,
   headers?: Record<string, string>,
   body?: unknown,
+  runtimeEnv: Env = env,
 ): Promise<Response> {
   const req = new Request(`http://localhost${path}`, {
     method,
@@ -20,7 +21,7 @@ function apiFetch(
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  return app.fetch(req, env);
+  return app.fetch(req, runtimeEnv);
 }
 
 describe("POST /api/v1/submissions", () => {
@@ -31,6 +32,18 @@ describe("POST /api/v1/submissions", () => {
     groupNumber: "123456",
     turnstileToken: "test-skip",
   };
+
+  it("returns DEPENDENCY_UNAVAILABLE when TURNSTILE_SECRET_KEY is missing", async () => {
+    const response = await apiFetch("POST", "/api/v1/submissions", {}, validBody, {
+      ...env,
+      TURNSTILE_SECRET_KEY: undefined,
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "DEPENDENCY_UNAVAILABLE" },
+    });
+  });
 
   it("accepts valid submission (Turnstile skipped in local)", async () => {
     const response = await apiFetch("POST", "/api/v1/submissions", {}, validBody);

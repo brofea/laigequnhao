@@ -5,6 +5,7 @@ import { createGroupRepository } from "../repositories/group-repository";
 import { createRateLimitRepository } from "../repositories/rate-limit-repository";
 import { createSubmissionService } from "../services/submission-service";
 import { createTurnstileAdapter } from "../adapters/turnstile-adapter";
+import { dependencyUnavailable } from "../api-error";
 import type { Env } from "../env";
 
 type Vars = { requestId: string };
@@ -12,6 +13,17 @@ export const submissionsRoute = new Hono<{ Bindings: Env; Variables: Vars }>();
 
 submissionsRoute.post("/", async (c) => {
   const requestId = c.get("requestId");
+
+  const turnstile = createTurnstileAdapter(
+    c.env.TURNSTILE_SECRET_KEY,
+    c.env.SKIP_TURNSTILE === "true",
+  );
+  if (!turnstile.configured) {
+    return c.json(
+      dependencyUnavailable(requestId, "投稿功能尚未配置：请设置 TURNSTILE_SECRET_KEY。"),
+      503,
+    );
+  }
 
   // 解析 body
   const body = await c.req.json<unknown>();
@@ -34,10 +46,6 @@ submissionsRoute.post("/", async (c) => {
   const input = parseResult.data;
 
   // Turnstile 验证
-  const turnstile = createTurnstileAdapter(
-    c.env.TURNSTILE_SECRET_KEY,
-    c.env.SKIP_TURNSTILE === "true",
-  );
   const passed = await turnstile.verify(input.turnstileToken);
   if (!passed) {
     return c.json(

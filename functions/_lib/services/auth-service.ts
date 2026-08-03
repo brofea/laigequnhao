@@ -2,6 +2,13 @@
 
 const SESSION_DURATION = 8 * 60 * 60; // 8 小时
 
+export interface AuthServiceEnv {
+  ADMIN_PASSWORD: string;
+  SESSION_SECRET: string;
+  LOGIN_MAX_ATTEMPTS?: string;
+  LOGIN_WINDOW_MINUTES?: string;
+}
+
 /** Web Crypto HMAC-SHA256 */
 async function hmac(key: string, data: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -27,12 +34,7 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-export function createAuthService(env: {
-  ADMIN_PASSWORD: string;
-  SESSION_SECRET: string;
-  LOGIN_MAX_ATTEMPTS?: string;
-  LOGIN_WINDOW_MINUTES?: string;
-}) {
+export function createAuthService(env: AuthServiceEnv) {
   const loginMaxAttempts = env.LOGIN_MAX_ATTEMPTS ? parseInt(env.LOGIN_MAX_ATTEMPTS) : 5;
   const loginWindowMs = env.LOGIN_WINDOW_MINUTES
     ? parseInt(env.LOGIN_WINDOW_MINUTES) * 60 * 1000

@@ -136,7 +136,7 @@ Worker main
 
 Workers Builds 的 Build settings 固定为 `pnpm build` 和 `pnpm deploy`。Workers Builds API token 是 Dashboard 的 Build setting，不属于项目 Build secret；若自动生成 token 不含 D1 edit 权限，所有者必须改用/创建至少拥有 Workers Scripts edit、D1 edit、R2 edit 的账号 token。本项目没有必填 Build variable 或 Build secret；`NODE_VERSION=22` 只是可选 Build variable。`ENVIRONMENT=production`、`SKIP_TURNSTILE=false`、`SECURE_COOKIE=true` 由生成的 Worker Runtime config 提供，确定性 Worker/D1/R2 名称由 `pnpm deploy` 的默认值提供。`R2_PUBLIC_BASE_URL` 仅在使用独立资源域名时配置；默认采用同源 Worker asset URL。
 
-首次成功部署前，项目所有者必须在 Cloudflare Worker 的 **Settings → Variables and Secrets** 中提供 Runtime secrets：`ADMIN_PASSWORD`、`SESSION_SECRET`、`LIKE_PEPPER`、`TURNSTILE_SECRET_KEY`。这些名称由 `wrangler.jsonc` 的 `secrets.required` 声明，官方 `wrangler deploy` 会在 Worker 缺少任一项时失败；不再使用自定义 `CF_SECRETS_CONFIGURED` presence flag。`SESSION_SECRET` 和 `LIKE_PEPPER` 可安全随机生成，`ADMIN_PASSWORD` 由所有者设定，`TURNSTILE_SECRET_KEY` 必须来自生产 Turnstile 站点。`ANALYTICS_TOKEN` 为管理分析功能的可选 Runtime secret，缺失时只标记分析不可用。Secret 值不得进入 Git、Build secret、命令行参数、构建日志或验收证据，普通 `pnpm deploy` 不自动生成或打印 Secret。
+首次基础部署不要求 Runtime secrets，`wrangler.jsonc` 不再使用 `secrets.required`，`pnpm deploy` 不得在资源预配、migration 或基础 Worker 发布前后因缺 Secret 阻断。运行时按功能安全降级：管理员/会话依赖 `ADMIN_PASSWORD` 与 `SESSION_SECRET`，点赞依赖 `LIKE_PEPPER`，投稿依赖 Turnstile 的前端 Sitekey 和后端 `TURNSTILE_SECRET_KEY`。缺少配置时返回明确的 `DEPENDENCY_UNAVAILABLE`/“尚未配置”错误，不使用不安全默认 Secret，也不自动生成无法由部署者保存的生产 Secret。`SESSION_SECRET` 和 `LIKE_PEPPER` 可安全随机生成，`ADMIN_PASSWORD` 由所有者设定，`TURNSTILE_SECRET_KEY` 必须来自生产 Turnstile widget；前端公开 Sitekey 通过 Workers Builds Build variable `VITE_TURNSTILE_SITE_KEY` 注入。`ANALYTICS_TOKEN` 为管理分析功能的可选 Runtime secret，缺失时只标记分析不可用。Secret 值不得进入 Git、Build secret、命令行参数、构建日志或验收证据，普通 `pnpm deploy` 不自动生成或打印 Secret。
 
 管理员初始化清单：确认 `ADMIN_PASSWORD` 已替换默认值、确认 `SESSION_SECRET`/`LIKE_PEPPER` 为随机值、确认 `SECURE_COOKIE=true`、确认 Turnstile 站点/Secret 配对、完成一次管理员登录并验证 CSRF、确认远程 D1 migrations 已完成、确认 R2 binding 可读写。管理员初始化不通过时，deploy 结果只能标为“基础资源已部署，业务未完成”，不得笼统标记完成。
 
@@ -197,7 +197,7 @@ Workers Builds 的 Build settings 固定为 `pnpm build` 和 `pnpm deploy`。Wor
 
 ### B1. Workers Builds 首次/后续端到端验收
 
-- [ ] 由项目所有者在真实 Fork 仓库上通过 Workers & Pages → Create application → Import repository 配置 Build command `pnpm build`、Deploy command `pnpm deploy` 并 Save and Deploy；缺失 Runtime secret 的失败尝试不计入验收。
+- [ ] 由项目所有者在真实 Fork 仓库上通过 Workers & Pages → Create application → Import repository 配置 Build command `pnpm build`、Deploy command `pnpm deploy` 并 Save and Deploy；首次基础部署不要求先配置 Runtime secrets，也不以失败构建作为正常步骤。
 - [ ] 首次部署在 Workers Builds 非交互环境中使用确定性默认名称自动创建或复用 Worker、D1、R2，自动完成 bindings、migrations 和 `wrangler deploy`；不要求 clone、本地命令或手工 binding。
 - [ ] 在全新或隔离 Cloudflare 账号/资源命名空间完成第一次成功的 Workers Builds，记录资源创建、migration、Worker 上线和七项 post-deploy smoke；fake Wrangler 不得作为唯一证据。
 - [ ] 对仓库提交第二次变更后再次由 Cloudflare Dashboard 触发 Workers Builds，证明复用相同 Worker/D1/R2，仅应用新增 migrations，不重复创建资源、不 seed、不 clean；不得用本地两次 `pnpm deploy` 替代。
@@ -213,7 +213,7 @@ Workers Builds 的 Build settings 固定为 `pnpm build` 和 `pnpm deploy`。Wor
 
 ### C1. 配置与初始化
 
-- [ ] 首次部署所需 vars、Secrets、Cloudflare API 权限、管理员初始化步骤和缺失 Secret 的功能影响有清单。
+- [ ] 首次部署所需 Build settings、Build variable、Runtime variable、Runtime secret、Cloudflare API 权限、管理员初始化步骤和缺失 Secret 的功能影响有清单；Turnstile Sitekey 与 Secret key 的来源和配置位置明确。
 - [ ] 部署后七项基础能力逐项通过 smoke；缺失 Turnstile 或 Analytics 等可选/必要 Secret 时，结果准确标记为部分完成并说明不可用功能。
 
 ### D. 质量与兼容

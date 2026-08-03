@@ -321,7 +321,7 @@ function openAdminCreateDialog() {
   };
 }
 
-async function submitPublicGroup(next: DemoGroup) {
+async function submitPublicGroup(next: DemoGroup, turnstileToken: string) {
   const groupNumber = next.joinMethods.find((method) => method.type === "number")?.value;
   const url = next.joinMethods.find((method) => method.type === "link")?.value;
   const result = await submitGroup({
@@ -333,7 +333,7 @@ async function submitPublicGroup(next: DemoGroup) {
     tags: next.tags.length ? next.tags : undefined,
     description: next.description || undefined,
     contact: next.contact?.trim() || undefined,
-    turnstileToken: "placeholder",
+    turnstileToken,
   });
   if (!result.ok) {
     showToast(result.error.message, "warning");
@@ -487,7 +487,10 @@ function confirmPurgeGroup() {
   if (!group) return;
   purgeConfirmGroup.value = null;
   void adminDirectory.purge(group.id).then((ok) => {
-    showToast(ok ? `已永久删除“${group.title}”` : "永久删除失败，请稍后重试", ok ? "success" : "warning");
+    showToast(
+      ok ? `已永久删除“${group.title}”` : "永久删除失败，请稍后重试",
+      ok ? "success" : "warning",
+    );
   });
 }
 
@@ -837,10 +840,13 @@ function removeScrollListener() {
           >
             <span v-for="index in 4" :key="index" class="app-skeleton-card"></span>
           </div>
-          <div v-else-if="publicDirectory.error.value" class="app-alert app-alert--danger" role="alert">
+          <div
+            v-else-if="publicDirectory.error.value"
+            class="app-alert app-alert--danger"
+            role="alert"
+          >
             <Icon name="warning" size="19" /><span
-              ><strong>加载失败</strong
-              ><small>{{ publicDirectory.error.value }}</small></span
+              ><strong>加载失败</strong><small>{{ publicDirectory.error.value }}</small></span
             ><Button variant="quiet" size="sm" @click="publicDirectory.retry()">重试</Button>
           </div>
           <div v-else-if="filteredGroups.length === 0" class="app-empty">
@@ -1038,9 +1044,7 @@ function removeScrollListener() {
             }}</span
             ><span
               ><strong>{{ method.label }}</strong
-              ><small>{{
-                method.type === "qr" ? "扫描下方二维码" : method.value
-              }}</small></span
+              ><small>{{ method.type === "qr" ? "扫描下方二维码" : method.value }}</small></span
             ><Button
               v-if="method.type === 'qr'"
               variant="quiet"

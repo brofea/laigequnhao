@@ -10,10 +10,10 @@ export interface Env {
   /** R2 自定义域名（用于生成公开 URL，不返回 r2.dev） */
   R2_PUBLIC_BASE_URL?: string;
   /** 环境变量 / Secrets */
-  ADMIN_PASSWORD: string;
-  SESSION_SECRET: string;
-  LIKE_PEPPER: string;
-  TURNSTILE_SECRET_KEY: string;
+  ADMIN_PASSWORD?: string;
+  SESSION_SECRET?: string;
+  LIKE_PEPPER?: string;
+  TURNSTILE_SECRET_KEY?: string;
   /** 本地开发跳过 Turnstile 验证 */
   SKIP_TURNSTILE?: string;
   /** 本地开发用固定 pepper（测试确定性 hash） */
@@ -26,4 +26,36 @@ export interface Env {
   LOGIN_MAX_ATTEMPTS?: string;
   /** 登录限流窗口（分钟，默认 15） */
   LOGIN_WINDOW_MINUTES?: string;
+}
+
+export interface AdminAuthSecrets {
+  ADMIN_PASSWORD: string;
+  SESSION_SECRET: string;
+}
+
+/** Secret 配置只能由部署者提供；空值和未绑定值都视为未配置。 */
+export function isConfiguredSecret(value: string | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/** 窄化管理员认证所需的 Secret，不提供任何默认值。 */
+export function getAdminAuthSecrets(
+  env: Pick<Env, "ADMIN_PASSWORD" | "SESSION_SECRET">,
+): AdminAuthSecrets | undefined {
+  if (!isConfiguredSecret(env.ADMIN_PASSWORD) || !isConfiguredSecret(env.SESSION_SECRET)) {
+    return undefined;
+  }
+
+  return {
+    ADMIN_PASSWORD: env.ADMIN_PASSWORD,
+    SESSION_SECRET: env.SESSION_SECRET,
+  };
+}
+
+/** 点赞必须配置正式 pepper；测试/本地覆盖只能替换已配置的正式值。 */
+export function getLikePepper(
+  env: Pick<Env, "LIKE_PEPPER" | "DEV_LIKE_PEPPER">,
+): string | undefined {
+  if (!isConfiguredSecret(env.LIKE_PEPPER)) return undefined;
+  return isConfiguredSecret(env.DEV_LIKE_PEPPER) ? env.DEV_LIKE_PEPPER : env.LIKE_PEPPER;
 }

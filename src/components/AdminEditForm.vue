@@ -11,6 +11,7 @@ import Badge from "./Badge.vue";
 import Button from "./Button.vue";
 import Icon from "./Icon.vue";
 import Select from "./Select.vue";
+import TurnstileWidget from "./TurnstileWidget.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -29,7 +30,7 @@ const props = withDefaults(
   },
 );
 const emit = defineEmits<{
-  save: [group: DemoGroup];
+  save: [group: DemoGroup, turnstileToken: string];
   cancel: [];
   delete: [];
   remove: [];
@@ -56,6 +57,8 @@ const newJoinMethodType = ref<JoinMethod["type"]>("link");
 const dirty = ref(false);
 const avatarPreview = ref<string | null>(null);
 const uploadMessage = ref("");
+const turnstileToken = ref("");
+const turnstileError = ref("");
 const uploading = ref(false);
 const logoR2Key = ref<string | null>(props.group.logoR2Key ?? null);
 const avatarInput = ref<HTMLInputElement | null>(null);
@@ -191,11 +194,26 @@ function removeAvatar() {
   uploadMessage.value = "已移除头像，保存后生效。";
 }
 
+function updateTurnstileToken(token: string) {
+  turnstileToken.value = token;
+  turnstileError.value = "";
+}
+
+function updateTurnstileError(message: string) {
+  turnstileToken.value = "";
+  turnstileError.value = message;
+}
+
 function openAvatarPicker() {
   avatarInput.value?.click();
 }
 
 function save() {
+  if (props.publicMode && !turnstileToken.value) {
+    turnstileError.value ||= "请先完成安全验证后再提交。";
+    return;
+  }
+
   const next: DemoGroup = {
     ...props.group,
     title: draft.title,
@@ -208,7 +226,7 @@ function save() {
     logoR2Key: logoR2Key.value,
     contact: props.publicMode ? draft.contact : props.group.contact,
   };
-  emit("save", next);
+  emit("save", next, turnstileToken.value);
 }
 </script>
 
@@ -434,6 +452,18 @@ function save() {
           <input v-model="draft.contact" type="text" placeholder="邮箱、QQ 或微信号" />
         </span>
       </label>
+    </section>
+
+    <section v-if="props.publicMode" class="admin-edit-section">
+      <div class="admin-edit-section__heading">
+        <div>
+          <p class="eyebrow">Security check</p>
+          <h3>安全验证</h3>
+        </div>
+        <span class="table-muted">用于防止自动提交</span>
+      </div>
+      <TurnstileWidget @token="updateTurnstileToken" @error="updateTurnstileError" />
+      <p v-if="turnstileError" class="app-field__help" role="alert">{{ turnstileError }}</p>
     </section>
 
     <div class="admin-edit-form__footer">

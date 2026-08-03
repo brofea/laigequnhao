@@ -19,6 +19,7 @@
 | [目录结构](./directory-structure.md) | Function、service、repository 边界 |
 | [数据库规范](./database-guidelines.md) | D1 schema、查询、migration 和不变量 |
 | [错误处理](./error-handling.md) | 稳定错误分类和部分失败 |
+| [部署规范](./deployment-guidelines.md) | Workers Builds、资源编排、运行时配置和功能降级 |
 | [日志规范](./logging-guidelines.md) | 结构化日志和脱敏 |
 | [质量规范](./quality-guidelines.md) | 安全和测试门禁 |
 
