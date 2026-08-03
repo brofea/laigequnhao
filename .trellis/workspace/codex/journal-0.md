@@ -236,3 +236,36 @@ T06 完成全量验收：Unit 82 / Workers 104 / E2E 68（新增 public/admin/a1
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 图片上传链路修复与任务归档
+
+**Date**: 2026-08-03
+**Task**: 图片上传链路修复与任务归档
+**Branch**: `main`
+
+### Summary
+
+完成浏览器图片压缩、管理员上传、公开投稿单请求 WebP 上传、后端 workerd 校验、二维码扫码验收与 R2 补偿清理；通过核心测试并归档 fix-image-upload-bugs 任务。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9ebf5fb` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
