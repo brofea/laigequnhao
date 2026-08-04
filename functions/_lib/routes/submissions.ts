@@ -13,7 +13,6 @@ import {
   SubmissionDependencyError,
   type ValidatedSubmissionLogo,
 } from "../services/submission-service";
-import { createTurnstileAdapter } from "../adapters/turnstile-adapter";
 import { createR2Adapter } from "../adapters/r2-adapter";
 import { validateWebpUpload } from "../services/image-validation";
 import { dependencyUnavailable } from "../api-error";
@@ -138,18 +137,6 @@ async function parseRequest(
     });
   }
 
-  const separateToken = formData.get("turnstileToken");
-  if (separateToken !== null) {
-    if (typeof separateToken !== "string") {
-      return validationError(requestId, "Turnstile token is invalid.");
-    }
-    const embeddedToken = payload.turnstileToken;
-    if (embeddedToken !== undefined && embeddedToken !== separateToken) {
-      return validationError(requestId, "Turnstile token is ambiguous.");
-    }
-    payload.turnstileToken = separateToken;
-  }
-
   const purpose = formData.get("filePurpose");
   if (purpose !== null && (typeof purpose !== "string" || purpose !== "logo")) {
     return validationError(requestId, "Only logo images are accepted.", {
@@ -213,17 +200,6 @@ function imageValidationError(requestId: string, error: unknown): Response {
 submissionsRoute.post("/", async (c) => {
   const requestId = c.get("requestId");
 
-  const turnstile = createTurnstileAdapter(
-    c.env.TURNSTILE_SECRET_KEY,
-    c.env.SKIP_TURNSTILE === "true",
-  );
-  if (!turnstile.configured) {
-    return c.json(
-      dependencyUnavailable(requestId, "投稿功能尚未配置：请设置 TURNSTILE_SECRET_KEY。"),
-      503,
-    );
-  }
-
   const parsedRequest = await parseRequest(c.req.raw, requestId);
   if (parsedRequest instanceof Response) return parsedRequest;
 
@@ -244,23 +220,6 @@ submissionsRoute.post("/", async (c) => {
   }
 
   const input = parseResult.data;
-
-  try {
-    // Turnstile must pass before the final file is handed to the shared validator.
-    const passed = await turnstile.verify(input.turnstileToken);
-    if (!passed) {
-      return c.json(
-        apiErrorSchema.parse({
-          ok: false,
-          error: { code: "DEPENDENCY_UNAVAILABLE", message: "Turnstile verification failed." },
-          requestId,
-        }),
-        503,
-      );
-    }
-  } catch {
-    return c.json(dependencyUnavailable(requestId, "Turnstile verification unavailable."), 503);
-  }
 
   let logo: ValidatedSubmissionLogo | undefined;
   if (parsedRequest.logoBytes) {

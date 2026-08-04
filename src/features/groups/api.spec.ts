@@ -32,7 +32,6 @@ describe("submitGroup 图片接线", () => {
       if (typeof payload !== "string") throw new Error("payload 必须是 JSON 字符串");
       expect(JSON.parse(payload)).toMatchObject({
         title: "测试群",
-        turnstileToken: "turnstile-token",
       });
       expect(form.get("filePurpose")).toBe("logo");
       const file = form.get("file");
@@ -54,7 +53,6 @@ describe("submitGroup 图片接线", () => {
         kind: "interest",
         platform: "微信群",
         groupNumber: "123456",
-        turnstileToken: "turnstile-token",
       },
       new Blob(["final webp"], { type: "image/webp" }),
     );
@@ -85,7 +83,6 @@ describe("submitGroup 图片接线", () => {
       kind: "interest",
       platform: "微信群",
       groupNumber: "123456",
-      turnstileToken: "turnstile-token",
     });
 
     expect(result).toMatchObject({ ok: true, data: receipt.data });

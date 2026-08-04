@@ -54,8 +54,8 @@ app.get("/api/v1/assets/:key{.+}", async (c) => {
     return c.notFound();
   }
 
-  const contentType = object.httpMetadata?.contentType ?? "image/webp";
-  c.header("Content-Type", contentType);
+  // 资源上传契约只允许 WebP；不要把可变的 R2 元数据直接暴露为响应类型。
+  c.header("Content-Type", "image/webp");
   c.header("Cache-Control", "public, max-age=31536000, immutable");
   c.header("X-Content-Type-Options", "nosniff");
   return c.body(object.body);

@@ -21,7 +21,6 @@
     },
   ],
   "vars": {
-    "SKIP_TURNSTILE": "true",
     "SECURE_COOKIE": "true",
   },
 }

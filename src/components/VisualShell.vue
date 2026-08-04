@@ -12,6 +12,12 @@ import { toDemoGroup, toDemoBoardAdmin, toDemoBoardPublic } from "@/features/gro
 import { useAdminGroups } from "@/features/admin/composables/useAdminGroups";
 import { useAdminBoards } from "@/features/admin/composables/useAdminBoards";
 import { fetchAdminGroupsPage } from "@/features/admin/api";
+import {
+  purgePendingAdminImages,
+  stagePendingAdminImages,
+  type PendingAdminImages,
+  type StagedAdminImages,
+} from "@/features/admin/pending-images";
 import siteConfig from "../../site.config";
 import AdminTable from "./AdminTable.vue";
 import Badge from "./Badge.vue";
@@ -68,7 +74,10 @@ const selectedBoardAddGroupId = ref<string | null>(null);
 const boardListVersion = ref(0);
 const adminGroupPool = ref<DemoGroup[]>([]);
 const publicSubmitGroup = ref<DemoGroup | null>(null);
+const publicSubmitBusy = ref(false);
 const adminCreateGroup = ref<DemoGroup | null>(null);
+const adminCreateSaveBusy = ref(false);
+const adminSaveBusy = ref(false);
 const adminQuery = ref("");
 const adminFilter = ref("全部状态");
 const showRecycleBin = ref(false);
@@ -312,6 +321,7 @@ function openPublicSubmitDialog() {
 }
 
 function closePublicSubmitDialog() {
+  if (publicSubmitBusy.value) return;
   publicSubmitGroup.value = null;
 }
 
@@ -332,29 +342,36 @@ function openAdminCreateDialog() {
   };
 }
 
-async function submitPublicGroup(next: DemoGroup, turnstileToken: string, logoBlob?: Blob) {
-  const groupNumber = next.joinMethods.find((method) => method.type === "number")?.value;
-  const url = next.joinMethods.find((method) => method.type === "link")?.value;
-  const result = await submitGroup(
-    {
-      title: next.title,
-      kind: next.kind === "工具" ? "official" : "interest",
-      platform: next.platform,
-      groupNumber: groupNumber || undefined,
-      url: url || undefined,
-      tags: next.tags.length ? next.tags : undefined,
-      description: next.description || undefined,
-      contact: next.contact?.trim() || undefined,
-      turnstileToken,
-    },
-    logoBlob,
-  );
-  if (!result.ok) {
-    showToast(result.error.message, "warning");
-    return;
+async function submitPublicGroup(next: DemoGroup, pendingImages: PendingAdminImages) {
+  if (publicSubmitBusy.value) return;
+  publicSubmitBusy.value = true;
+  try {
+    const groupNumber = next.joinMethods.find((method) => method.type === "number")?.value;
+    const url = next.joinMethods.find((method) => method.type === "link")?.value;
+    const result = await submitGroup(
+      {
+        title: next.title,
+        kind: next.kind === "工具" ? "official" : "interest",
+        platform: next.platform,
+        groupNumber: groupNumber || undefined,
+        url: url || undefined,
+        tags: next.tags.length ? next.tags : undefined,
+        description: next.description || undefined,
+        contact: next.contact?.trim() || undefined,
+      },
+      pendingImages.logo,
+    );
+    if (!result.ok) {
+      showToast(result.error.message, "warning");
+      return;
+    }
+    publicSubmitGroup.value = null;
+    showToast("提交成功，等待审核", "success");
+  } catch {
+    showToast("提交失败，请稍后重试", "warning");
+  } finally {
+    publicSubmitBusy.value = false;
   }
-  publicSubmitGroup.value = null;
-  showToast("提交成功，等待审核", "success");
 }
 
 const themeOptions: ThemePreference[] = ["system", "light", "dark"];
@@ -552,25 +569,61 @@ function toAdminPayload(
   return version === undefined ? payload : { ...payload, version };
 }
 
-async function saveAdminGroup(next: DemoGroup) {
+function applyStagedAdminImages(next: DemoGroup, staged: { ok: true; data: StagedAdminImages }) {
+  return {
+    ...next,
+    logoR2Key: staged.data.logo?.r2Key ?? next.logoR2Key,
+    joinMethods: next.joinMethods.map((method) => {
+      const asset = method.type === "qr" ? staged.data.qr[method.id] : undefined;
+      return asset
+        ? { ...method, assetId: asset.id, value: asset.publicUrl, imagePreviewUrl: asset.publicUrl }
+        : method;
+    }),
+  };
+}
+
+async function saveAdminGroup(next: DemoGroup, pendingImages: PendingAdminImages) {
+  if (adminSaveBusy.value) return;
+  adminSaveBusy.value = true;
   const current = adminDirectory.groups.value.find((item) => item.id === next.id);
-  if (!current) return;
-  const result = await adminDirectory.updateGroup(
-    next.id,
-    toAdminPayload(next, current.version) as import("@shared/contracts/group").GroupUpdateInput,
-  );
-  if (!result.ok) {
-    showToast(
-      result.versionConflict ? "群组已被其他会话修改，请刷新后重试" : "保存失败，请检查表单内容",
-      "warning",
+  const csrfToken = props.csrfToken ?? "";
+  let stagedIds: string[] = [];
+  try {
+    if (!current) return;
+    const staged = await stagePendingAdminImages(pendingImages, csrfToken);
+    if (!staged.ok) {
+      showToast(staged.error.message, "warning");
+      return;
+    }
+    stagedIds = staged.data.stagedIds;
+    const committed = applyStagedAdminImages(next, staged);
+    const result = await adminDirectory.updateGroup(
+      next.id,
+      toAdminPayload(
+        committed,
+        current.version,
+      ) as import("@shared/contracts/group").GroupUpdateInput,
     );
-    return;
+    if (!result.ok) {
+      await purgePendingAdminImages(staged.data.stagedIds, csrfToken);
+      stagedIds = [];
+      showToast(
+        result.versionConflict ? "群组已被其他会话修改，请刷新后重试" : "保存失败，请检查表单内容",
+        "warning",
+      );
+      return;
+    }
+    closeAdminGroupEdit();
+    showToast("群组修改已保存");
+    // 板块成员表标题来自服务端快照，保存后刷新以同步标题/状态
+    void adminBoards.load();
+    void loadAdminGroupPool();
+  } catch {
+    if (stagedIds.length) await purgePendingAdminImages(stagedIds, csrfToken);
+    showToast("保存失败，请稍后重试", "warning");
+  } finally {
+    adminSaveBusy.value = false;
   }
-  closeAdminGroupEdit();
-  showToast("群组修改已保存");
-  // 板块成员表标题来自服务端快照，保存后刷新以同步标题/状态
-  void adminBoards.load();
-  void loadAdminGroupPool();
 }
 
 function deleteAdminGroup(group: DemoGroup) {
@@ -593,16 +646,36 @@ async function removeGroupFromBoard() {
   showToast(`已将“${group?.title ?? "该群组"}”移出板块`, "success");
 }
 
-async function saveAdminCreateGroup(next: DemoGroup) {
-  const result = await adminDirectory.createGroup(
-    toAdminPayload(next) as import("@shared/contracts/group").GroupCreateInput,
-  );
-  if (!result.ok) {
-    showToast("保存失败，请检查表单内容", "warning");
-    return;
+async function saveAdminCreateGroup(next: DemoGroup, pendingImages: PendingAdminImages) {
+  if (adminCreateSaveBusy.value) return;
+  adminCreateSaveBusy.value = true;
+  const csrfToken = props.csrfToken ?? "";
+  let stagedIds: string[] = [];
+  try {
+    const staged = await stagePendingAdminImages(pendingImages, csrfToken);
+    if (!staged.ok) {
+      showToast(staged.error.message, "warning");
+      return;
+    }
+    stagedIds = staged.data.stagedIds;
+    const committed = applyStagedAdminImages(next, staged);
+    const result = await adminDirectory.createGroup(
+      toAdminPayload(committed) as import("@shared/contracts/group").GroupCreateInput,
+    );
+    if (!result.ok) {
+      await purgePendingAdminImages(staged.data.stagedIds, csrfToken);
+      stagedIds = [];
+      showToast("保存失败，请检查表单内容", "warning");
+      return;
+    }
+    adminCreateGroup.value = null;
+    showToast("新群组已保存");
+  } catch {
+    if (stagedIds.length) await purgePendingAdminImages(stagedIds, csrfToken);
+    showToast("保存失败，请稍后重试", "warning");
+  } finally {
+    adminCreateSaveBusy.value = false;
   }
-  adminCreateGroup.value = null;
-  showToast("新群组已保存");
 }
 
 /** 板块编辑保存 → 真实 PATCH（description 无服务端字段，仅提交标题/启停） */
@@ -1124,6 +1197,7 @@ function removeScrollListener() {
         :group="publicSubmitGroup"
         :deletable="false"
         public-mode
+        :busy="publicSubmitBusy"
         @save="submitPublicGroup"
         @cancel="closePublicSubmitDialog"
         @toast="showToast($event, 'info')"
@@ -1141,7 +1215,7 @@ function removeScrollListener() {
       <AdminEditForm
         :group="adminCreateGroup"
         :deletable="false"
-        :csrf-token="props.csrfToken ?? ''"
+        :busy="adminCreateSaveBusy"
         @save="saveAdminCreateGroup"
         @cancel="adminCreateGroup = null"
         @toast="showToast($event, 'info')"
@@ -1160,7 +1234,7 @@ function removeScrollListener() {
         :group="selectedAdminGroup"
         :deletable="!selectedAdminGroupContext"
         :removable="Boolean(selectedAdminGroupContext)"
-        :csrf-token="props.csrfToken ?? ''"
+        :busy="adminSaveBusy"
         @save="saveAdminGroup"
         @cancel="closeAdminGroupEdit"
         @delete="deleteAdminGroup(selectedAdminGroup)"

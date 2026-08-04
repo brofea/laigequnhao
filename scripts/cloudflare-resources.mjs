@@ -157,7 +157,6 @@ export async function writeGeneratedConfig(baseConfigPath, resources) {
   base.r2_buckets = [{ binding: "R2", bucket_name: resources.r2Name }];
   base.vars = {
     ENVIRONMENT: "production",
-    SKIP_TURNSTILE: "false",
     SECURE_COOKIE: "true",
   };
   delete base.env;

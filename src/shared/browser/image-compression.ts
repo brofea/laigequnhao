@@ -54,6 +54,9 @@ export const imageCompressionPolicies: Readonly<
 
 const SUPPORTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const SUPPORTED_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
+const HEIC_MIME_TYPES = new Set(["image/heic", "image/heif"]);
+const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
+const WEBP_MIME_TYPE = "image/webp";
 
 export type ImageCompressionErrorCode =
   | "SOURCE_TOO_LARGE"
@@ -136,6 +139,17 @@ export function validateImageSource(file: Blob, policy: ImageCompressionPolicy):
   const mimeType = file.type.trim().toLocaleLowerCase();
   const extension = fileExtension(file);
   if (
+    HEIC_MIME_TYPES.has(mimeType) ||
+    mimeType.includes("heic") ||
+    mimeType.includes("heif") ||
+    (extension !== null && HEIC_EXTENSIONS.has(extension))
+  ) {
+    throw new ImageCompressionError(
+      "UNSUPPORTED_FORMAT",
+      "不支持 HEIC，请转换为 PNG/JPEG/WebP 后重试。",
+    );
+  }
+  if (
     !SUPPORTED_MIME_TYPES.has(mimeType) &&
     !(mimeType === "" && extension !== null && SUPPORTED_EXTENSIONS.has(extension))
   ) {
@@ -160,12 +174,18 @@ async function decodeWithImageBitmap(file: Blob): Promise<DecodedImage> {
   const createBitmap = canCreateImageBitmap();
   if (!createBitmap) throw new Error("createImageBitmap is unavailable");
   const bitmap = await createBitmap(file);
+  const close = typeof bitmap.close === "function" ? bitmap.close.bind(bitmap) : undefined;
   return {
     source: bitmap,
     width: bitmap.width,
     height: bitmap.height,
     close: () => {
-      bitmap.close();
+      if (!close) return;
+      try {
+        close();
+      } catch {
+        // 某些 WebKit 版本的 close 可能在解码器已释放后再次调用时抛错。
+      }
     },
   };
 }
@@ -236,28 +256,108 @@ function createCanvas(
   return { canvas, context };
 }
 
-function encodeCanvas(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+function encodeUnsupported(): ImageCompressionError {
+  return new ImageCompressionError("ENCODE_UNSUPPORTED", "当前浏览器不支持 WebP 编码。");
+}
+
+function hasWebpSignature(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  );
+}
+
+function readBlobBytes(blob: Blob): Promise<Uint8Array> {
+  if (typeof blob.arrayBuffer === "function") {
+    return blob.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+  }
+  if (typeof FileReader !== "function") return Promise.reject(new Error("Blob reader unavailable"));
+
   return new Promise((resolve, reject) => {
-    if (typeof canvas.toBlob !== "function") {
-      reject(new ImageCompressionError("ENCODE_UNSUPPORTED", "当前浏览器不支持 WebP 编码。"));
-      return;
-    }
-    try {
-      canvas.toBlob(
-        (blob) => {
-          if (!blob || blob.type !== "image/webp") {
-            reject(new ImageCompressionError("ENCODE_UNSUPPORTED", "当前浏览器不支持 WebP 编码。"));
-            return;
-          }
-          resolve(blob);
-        },
-        "image/webp",
-        quality / 100,
-      );
-    } catch {
-      reject(new ImageCompressionError("ENCODE_UNSUPPORTED", "当前浏览器不支持 WebP 编码。"));
-    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (!(reader.result instanceof ArrayBuffer)) {
+        reject(new Error("Blob reader returned an invalid result"));
+        return;
+      }
+      resolve(new Uint8Array(reader.result));
+    };
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("Blob read failed"));
+    };
+    reader.readAsArrayBuffer(blob);
   });
+}
+
+async function isActualWebpBlob(blob: Blob | null): Promise<boolean> {
+  if (!blob || blob.type.trim().toLocaleLowerCase() !== WEBP_MIME_TYPE) return false;
+  try {
+    return hasWebpSignature(await readBlobBytes(blob));
+  } catch {
+    return false;
+  }
+}
+
+function dataUrlToWebpBlob(dataUrl: string): Blob | null {
+  const comma = dataUrl.indexOf(",");
+  if (comma < 0 || dataUrl.slice(0, 5).toLocaleLowerCase() !== "data:") return null;
+
+  const metadata = dataUrl.slice(5, comma).split(";");
+  const mediaType = metadata[0]?.trim().toLocaleLowerCase();
+  if (mediaType !== WEBP_MIME_TYPE) return null;
+
+  const payload = dataUrl.slice(comma + 1);
+  try {
+    let bytes: Uint8Array;
+    if (metadata.slice(1).some((value) => value.trim().toLocaleLowerCase() === "base64")) {
+      const binary = atob(payload);
+      bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    } else {
+      const decoded = decodeURIComponent(payload);
+      bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+    }
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    return new Blob([buffer], { type: WEBP_MIME_TYPE });
+  } catch {
+    return null;
+  }
+}
+
+async function encodeCanvasWithDataUrl(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  if (typeof canvas.toDataURL !== "function") throw encodeUnsupported();
+  try {
+    const dataUrl = canvas.toDataURL(WEBP_MIME_TYPE, quality / 100);
+    const blob = dataUrlToWebpBlob(dataUrl);
+    if (!blob || !(await isActualWebpBlob(blob))) throw encodeUnsupported();
+    return blob;
+  } catch (error) {
+    if (error instanceof ImageCompressionError) throw error;
+    throw encodeUnsupported();
+  }
+}
+
+async function encodeCanvas(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  let blob: Blob | null = null;
+  if (typeof canvas.toBlob === "function") {
+    try {
+      blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, WEBP_MIME_TYPE, quality / 100);
+      });
+    } catch {
+      blob = null;
+    }
+  }
+
+  if (blob && (await isActualWebpBlob(blob))) return blob;
+  return encodeCanvasWithDataUrl(canvas, quality);
 }
 
 export function revokeImagePreview(previewUrl: string | null | undefined): void {
@@ -314,13 +414,17 @@ export async function compressImage(
   const policy = getImageCompressionPolicy(purpose);
   validateImageSource(file, policy);
   const decoded = await decodeImage(file);
-  const dimensions = calculateTargetDimensions(decoded.width, decoded.height, policy.maxDimension);
-  const { canvas, context } = createCanvas(
-    dimensions.width,
-    dimensions.height,
-    policy.preserveAlpha,
-  );
   try {
+    const dimensions = calculateTargetDimensions(
+      decoded.width,
+      decoded.height,
+      policy.maxDimension,
+    );
+    const { canvas, context } = createCanvas(
+      dimensions.width,
+      dimensions.height,
+      policy.preserveAlpha,
+    );
     context.clearRect(0, 0, dimensions.width, dimensions.height);
     if (!policy.preserveAlpha) {
       context.fillStyle = "#fff";

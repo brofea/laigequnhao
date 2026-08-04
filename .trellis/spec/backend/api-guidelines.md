@@ -42,7 +42,7 @@
 | 方法 | 路径 | 契约 |
 |---|---|---|
 | `GET` | `/groups` | 仅已发布群聊的游标页；query 为 `q`、`cursor`、`limit` |
-| `POST` | `/submissions` | 访客纯文本提交及 Turnstile token |
+| `POST` | `/submissions` | 访客纯文本提交或带最终 WebP 的 multipart 投稿 |
 | `PUT` | `/groups/:id/like` | 幂等创建当前浏览器的点赞 |
 | `DELETE` | `/groups/:id/like` | 幂等移除当前浏览器的点赞 |
 
@@ -50,7 +50,7 @@
 
 公开群聊 DTO 可以包含 ID、标题、描述、性质 `kind`、平台、标签、公开状态、Logo URL/元数据、当前阶段允许公开使用的加群方式、点赞数，以及获准展示的时间戳。禁止包含提交者联系方式、审核备注、软删除字段、R2 对象 key、投票者 hash 或内部版本号。
 
-访客提交必须包含标题、性质 `kind`、已配置的平台，以及至少一个群号或 HTTPS URL。可以包含 1–5 个可选标签、描述、备注和私密联系方式。无图片时使用 JSON；带头像时使用一次性的 `multipart/form-data`，只允许附带一个最终压缩后的 Logo WebP，并与投稿表单一起完成 Turnstile 验证和写入。公开投稿不得调用 staged/adopt 或其他临时图片上传接口。
+访客提交必须包含标题、性质 `kind`、已配置的平台，以及至少一个群号或 HTTPS URL。可以包含 1–5 个可选标签、描述、备注和私密联系方式。无图片时使用 JSON；带头像时使用一次性的 `multipart/form-data`，只允许附带一个最终压缩后的 Logo WebP，并与投稿表单一起完成校验和写入。公开投稿不得调用 staged/adopt 或其他临时图片上传接口；服务端投稿限流仍必须执行。
 
 点赞路由通过 `X-Device-Id` header 接收由浏览器生成并持久化的 UUID。缺失或格式无效时返回 `VALIDATION_FAILED`。持久化前，使用 Secret pepper 对规范化后的设备 ID 做 hash。成功的 PUT/DELETE 返回权威点赞数和最终 `liked` 状态；不得把设备 ID 或 hash 放入响应。
 
@@ -229,8 +229,8 @@ emit("update:assetId", clientKey, result.id, result.publicUrl);
 
 ### 2. Signatures
 
-- 无图片：`POST /api/v1/submissions` 使用 JSON，包含投稿 payload 和 Turnstile token。
-- 带图片：同一路径使用 `multipart/form-data`，包含 `payload` JSON、`file`（或 `logo`）以及可选的 `filePurpose=logo`/独立 Turnstile token；服务端统一验证后才写入。
+- 无图片：`POST /api/v1/submissions` 使用 JSON，包含投稿 payload。
+- 带图片：同一路径使用 `multipart/form-data`，包含 `payload` JSON、`file`（或 `logo`）以及可选的 `filePurpose=logo`；服务端统一验证后才写入。
 - 服务端生成内部 R2 key，写入 Logo 对象后以同一 D1 batch 创建 ready asset 引用和投稿群组。
 
 ### 3. Contracts
@@ -245,12 +245,12 @@ emit("update:assetId", clientKey, result.id, result.publicUrl);
 - 请求体或最终文件超限 → `PAYLOAD_TOO_LARGE`（413）。
 - 非 WebP、RIFF 结构无效或无法完整解码 → `UNSUPPORTED_MEDIA_TYPE`（415）。
 - 宽高或总像素超限 → `VALIDATION_FAILED`（400）。
-- Turnstile、R2 或 D1 不可用 → `DEPENDENCY_UNAVAILABLE`（503），不得留下可公开采用的半成品。
+- R2 或 D1 不可用 → `DEPENDENCY_UNAVAILABLE`（503），不得留下可公开采用的半成品。
 - 补偿删除失败 → 保留安全错误响应，结构化记录并进入 `delete_failed` 清理队列。
 
 ### 5. Good / Base / Bad Cases
 
-- Good：用户选择 5 MB 以内原图，浏览器本地得到目标 WebP，最终请求一次完成 Turnstile、R2 和 D1 写入。
+- Good：用户选择 5 MB 以内原图，浏览器本地得到目标 WebP，最终请求一次完成限流、图片校验、R2 和 D1 写入。
 - Base：压缩结果仍超限时按质量阶梯递减；仍无法满足上限则保留本地预览并提示用户调整图片。
 - Bad：先公开上传临时 key、信任前端尺寸/字节声明，或 D1 失败后不删除 R2 对象。
 
@@ -281,7 +281,7 @@ await api.postForm("/submissions", form);
 - 登录请求必须检查同源 `Origin`。登录成功后，服务端从会话 nonce 派生 CSRF token；`POST /admin/session` 和 `GET /admin/session` 在响应数据中返回该 token。
 - 除登录外，不安全的管理员方法必须同时检查同源 `Origin` 和 `X-CSRF-Token`。该 header 必须与当前会话以常量时间比较校验；退出登录也适用。CSRF token 不得持久化到本地存储。
 - 登录失败使用通用响应；默认按保护隐私的客户端分桶，每 15 分钟最多尝试 5 次。
-- 公开提交必须通过 Turnstile；按客户端分桶，每小时最多成功提交 1 次。
+- 公开提交按客户端分桶，每小时最多成功提交 1 次；限制必须在服务端执行。
 - 点赞使用幂等语义、投票者唯一约束，并默认按客户端分桶限制为每 10 分钟最多 30 次变更。
 - 限制必须在服务端执行，且返回 `Retry-After`。
 

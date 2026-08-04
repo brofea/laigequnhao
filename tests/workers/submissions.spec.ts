@@ -43,8 +43,6 @@ function multipartFetch(
 ): Promise<Response> {
   const form = new FormData();
   form.append("payload", JSON.stringify(payload));
-  // Keep the token at its own multipart field to cover the public wire format.
-  form.append("turnstileToken", "test-skip");
   if (options.logo) {
     form.append("logo", new Blob([options.logo], { type: "image/webp" }), "logo.webp");
   }
@@ -87,22 +85,9 @@ describe("POST /api/v1/submissions", () => {
     kind: "interest" as const,
     platform: "qq",
     groupNumber: "123456",
-    turnstileToken: "test-skip",
   };
 
-  it("returns DEPENDENCY_UNAVAILABLE when TURNSTILE_SECRET_KEY is missing", async () => {
-    const response = await apiFetch("POST", "/api/v1/submissions", {}, validBody, {
-      ...env,
-      TURNSTILE_SECRET_KEY: undefined,
-    });
-    expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({
-      ok: false,
-      error: { code: "DEPENDENCY_UNAVAILABLE" },
-    });
-  });
-
-  it("accepts valid submission (Turnstile skipped in local)", async () => {
+  it("accepts valid submission", async () => {
     const response = await apiFetch("POST", "/api/v1/submissions", {}, validBody);
     const json = (await response.json()) as {
       ok: boolean;
@@ -157,7 +142,6 @@ describe("POST /api/v1/submissions", () => {
     const response = await multipartFetch(
       {
         ...validBody,
-        turnstileToken: undefined,
         assetId: "client-value-must-not-be-trusted",
         r2Key: "client-value-must-not-be-trusted",
         width: 9999,
@@ -221,10 +205,7 @@ describe("POST /api/v1/submissions", () => {
   });
 
   it("keeps no-image multipart submissions compatible", async () => {
-    const response = await multipartFetch(
-      { ...validBody, turnstileToken: undefined },
-      { ip: crypto.randomUUID() },
-    );
+    const response = await multipartFetch({ ...validBody }, { ip: crypto.randomUUID() });
     expect(response.status).toBe(201);
   });
 
@@ -324,7 +305,6 @@ describe("POST /api/v1/submissions", () => {
       kind: "interest",
       platform: "qq",
       groupNumber: "123456",
-      turnstileToken: "test-skip",
     };
     const logo: ValidatedSubmissionLogo = { bytes: WEBP_1X1, width: 1, height: 1 };
 
@@ -380,7 +360,6 @@ describe("POST /api/v1/submissions · configurable rate limit", () => {
     kind: "interest" as const,
     platform: "qq",
     groupNumber: "654321",
-    turnstileToken: "test-skip",
   };
 
   it("allows up to the configured number per IP, then blocks with RATE_LIMITED", async () => {

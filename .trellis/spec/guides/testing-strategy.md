@@ -47,7 +47,7 @@
 
 - 公开 `GroupCard`：平台和性质徽标、Logo 兜底、图片懒加载属性；不得渲染已下架标记或任何已下架群组。管理端状态标记另由管理员组件测试覆盖
 - 复制/点赞控件：键盘操作、乐观更新成功、失败回滚、实时反馈
-- 提交对话框：必填字段、1–5 个标签、不安全 URL、没有文件控件、Turnstile 失败
+- 提交对话框：必填字段、1–5 个标签、不安全 URL、无图/带图提交、图片处理失败和限流错误
 - 管理员认证：会话过期和通用登录失败
 - 管理员群聊表单：四种状态、版本冲突、软删除、恢复和永久删除确认
 - 图片工具：透明 PNG 预览、二维码白底预览、质量阶梯，以及超过 80/400 KB 时禁用上传
@@ -57,7 +57,7 @@
 
 ## Worker 集成测试
 
-使用 Cloudflare Vitest integration 在 `workerd` 中运行生产 `worker/index.ts` 的 API 测试。每个测试文件都在隔离的本地 D1 中应用真实 SQL migration。配置隔离的 R2 binding，只 stub Turnstile/Analytics 网络响应。
+使用 Cloudflare Vitest integration 在 `workerd` 中运行生产 `worker/index.ts` 的 API 测试。每个测试文件都在隔离的本地 D1 中应用真实 SQL migration。配置隔离的 R2 binding；只有仍存在的外部 Analytics 边界允许 stub。
 
 质量门禁必须使用 `@cloudflare/vitest-pool-workers` 的隔离存储，不得通过
 `getPlatformProxy()` 复用工作区 `.wrangler/state`。setup 应使用
@@ -69,7 +69,7 @@
 
 - 公开列表、搜索、板块成员和详情绝不返回待审核、已拒绝、已下架或软删除群聊
 - 游标、query、固定纪元和轮换时间窗一致性
-- 纯文本提交校验、Turnstile 和限流
+- 纯文本和 multipart 提交校验、图片校验与限流
 - `X-Device-Id` 校验、幂等点赞/取消点赞和投票者唯一约束
 - 缓存点赞数始终等于点赞行聚合值
 - 登录成功/失败/限流、Cookie 篡改、过期、退出登录、Origin，以及会话绑定 `X-CSRF-Token` 的缺失、错误和成功场景

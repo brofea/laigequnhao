@@ -29,8 +29,6 @@ export default defineWorkersConfig(async () => {
               SESSION_SECRET: "test-session-secret",
               LIKE_PEPPER: "test-like-pepper",
               DEV_LIKE_PEPPER: "test-like-pepper",
-              TURNSTILE_SECRET_KEY: "test-turnstile-secret",
-              SKIP_TURNSTILE: "true",
               SECURE_COOKIE: "true",
               LOGIN_MAX_ATTEMPTS: "100",
               LOGIN_WINDOW_MINUTES: "5",

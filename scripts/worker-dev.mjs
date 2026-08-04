@@ -28,7 +28,7 @@ await writeFile(
         { binding: "DB", database_name: "lgqh-dev", migrations_dir: "../../migrations" },
       ],
       r2_buckets: [{ binding: "R2", bucket_name: "lgqh-dev" }],
-      vars: { ENVIRONMENT: "local", SKIP_TURNSTILE: "true", SECURE_COOKIE: "false" },
+      vars: { ENVIRONMENT: "local", SECURE_COOKIE: "false" },
     },
     null,
     2,

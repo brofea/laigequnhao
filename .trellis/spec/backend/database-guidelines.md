@@ -149,7 +149,7 @@ delete_pending/delete_failed → (人工 cleanup 重试) → D1 行移除 / 保�
 
 - 在公开投影中使用 `SELECT *`
 - 根据请求输入动态生成表名或列名
-- 存储原始 IP、密码、会话 token、Turnstile token 或 Analytics token
+- 存储原始 IP、密码、会话 token 或 Analytics token
 - 在 D1 中存储图片 blob
 - 每张群聊卡片产生 N+1 查询
 - 没有不变量测试就假设缓存的 `like_count` 始终正确

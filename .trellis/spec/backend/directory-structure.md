@@ -32,7 +32,7 @@ tests/
 - `middleware/`：请求 ID、认证、CSRF/Origin、限流、日志和错误映射
 - `services/`：领域流程和多资源操作状态
 - `repositories/`：参数化 D1 查询和显式行映射
-- `adapters/`：R2、Turnstile、Cloudflare Analytics、时钟和 hash
+- `adapters/`：R2、Cloudflare Analytics、时钟和 hash
 - `observability/`：结构化日志 helper 和脱敏
 - 根目录 `shared/`：客户端和服务端均可导入、与运行时无关的契约
 

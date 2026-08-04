@@ -113,6 +113,35 @@ export const assetUploadLimitsSchema = z.union([
   }),
 ]);
 
+// ─── 公开资源 URL ────────────────────────────────────────
+
+const ASSET_ROUTE_PREFIX = "/api/v1/assets/";
+
+/**
+ * 资源 URL 可以来自自定义 HTTP(S) 域名，也可以是当前 Worker 的同源路由。
+ * 同源路径只允许资源路由本身，避免把任意相对路径或不安全协议写入 DTO。
+ */
+export const assetPublicUrlSchema = z.string().refine(
+  (value) => {
+    if (value.startsWith(ASSET_ROUTE_PREFIX)) {
+      return value.length > ASSET_ROUTE_PREFIX.length && !/[?#]/.test(value);
+    }
+
+    try {
+      const url = new URL(value);
+      return (
+        (url.protocol === "http:" || url.protocol === "https:") &&
+        url.hostname.length > 0 &&
+        url.username.length === 0 &&
+        url.password.length === 0
+      );
+    } catch {
+      return false;
+    }
+  },
+  { message: "资源 URL 必须是 HTTP(S) 地址或 /api/v1/assets/ 同源路径。" },
+);
+
 // ─── 资源信息（上传响应） ──────────────────────────────────
 
 export const assetInfoSchema = z.object({
@@ -124,7 +153,7 @@ export const assetInfoSchema = z.object({
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   status: z.enum(["staged", "ready", "delete_pending", "delete_failed"]),
-  publicUrl: z.string().url(),
+  publicUrl: assetPublicUrlSchema,
 });
 export type AssetInfo = z.infer<typeof assetInfoSchema>;
 
@@ -142,7 +171,7 @@ export type AdminAssetDto = z.infer<typeof adminAssetDtoSchema>;
 // ─── 公开资源展示信息 ─────────────────────────────────────
 
 export const publicAssetMetaSchema = z.object({
-  url: z.string(),
+  url: assetPublicUrlSchema,
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   byteLength: z.number().int().positive(),

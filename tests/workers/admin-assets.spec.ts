@@ -174,13 +174,64 @@ describe("POST /api/v1/admin/assets", () => {
     expect(response.status).toBe(201);
     const json = (await response.json()) as {
       ok: boolean;
-      data: { id: string; r2Key: string; width: number; height: number; byteLength: number };
+      data: {
+        id: string;
+        r2Key: string;
+        publicUrl: string;
+        width: number;
+        height: number;
+        byteLength: number;
+      };
     };
     expect(json.ok).toBe(true);
     expect(json.data).toMatchObject({ width: 1, height: 1, byteLength: WEBP_1X1.byteLength });
+    expect(json.data.publicUrl).toBe(`https://assets.test.invalid/${json.data.r2Key}`);
     const object = await env.R2.head(json.data.r2Key);
     expect(object).not.toBeNull();
     expect(object?.httpMetadata?.contentType).toBe("image/webp");
+  });
+
+  it("returns a same-origin public URL and serves its complete R2 response when no base URL is configured", async () => {
+    const envWithoutPublicBaseUrl = { ...env, R2_PUBLIC_BASE_URL: undefined } as Env;
+    const formData = new FormData();
+    formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "logo.webp");
+    formData.append("purpose", "logo");
+
+    const uploadResponse = await app.fetch(
+      new Request("http://localhost/api/v1/admin/assets", {
+        method: "POST",
+        headers: authHeaders,
+        body: formData,
+      }),
+      envWithoutPublicBaseUrl,
+    );
+
+    expect(uploadResponse.status).toBe(201);
+    const uploadJson = (await uploadResponse.json()) as {
+      ok: boolean;
+      data: { publicUrl: string; r2Key: string };
+    };
+    expect(uploadJson.ok).toBe(true);
+    expect(uploadJson.data.publicUrl).toBe(`/api/v1/assets/${uploadJson.data.r2Key}`);
+
+    const assetResponse = await app.fetch(
+      new Request(`http://localhost${uploadJson.data.publicUrl}`),
+      envWithoutPublicBaseUrl,
+    );
+    expect(assetResponse.status).toBe(200);
+    expect(new Uint8Array(await assetResponse.arrayBuffer())).toEqual(WEBP_1X1);
+    expect(assetResponse.headers.get("Content-Type")).toBe("image/webp");
+    expect(assetResponse.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
+    expect(assetResponse.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  });
+
+  it("returns 404 for a missing public asset", async () => {
+    const response = await app.fetch(
+      new Request("http://localhost/api/v1/assets/logo/missing.webp"),
+      env,
+    );
+
+    expect(response.status).toBe(404);
   });
 });
 

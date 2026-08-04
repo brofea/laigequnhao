@@ -16,7 +16,7 @@
 | `PAYLOAD_TOO_LARGE` | 413 | 超过 multipart 请求总上限或 Logo/二维码最终文件硬上限 |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | 最终上传文件不是有效 WebP |
 | `RATE_LIMITED` | 429 | 超出服务端限制 |
-| `DEPENDENCY_UNAVAILABLE` | 503 | D1、R2、Turnstile 或 Analytics 不可用 |
+| `DEPENDENCY_UNAVAILABLE` | 503 | D1、R2 或 Analytics 不可用 |
 | `INTERNAL_ERROR` | 500 | 未预期错误的安全兜底 |
 
 前端文案可以对错误码做本地化。API 消息只是安全的兜底内容，不是主要 UI 契约。
@@ -37,7 +37,7 @@
 
 - 读取期间 D1/R2 失败时，该操作返回依赖错误。
 - 仪表盘数据源相互隔离：每个组件返回数据或自己的不可用标记。
-- Turnstile 超时时，访客提交按失败关闭处理。
+- 投稿不依赖外部验证服务；D1/R2 失败时按失败关闭处理并执行资源补偿。
 - Cloudflare Analytics 失败不应隐藏 D1 业务指标。
 - 永久删除期间 R2/D1 部分失败时保留重试状态，绝不报告完全成功。
 - 图片上传先限制请求体和实际文件字节，再读取 WebP 头部尺寸、检查宽高/总像素，最后才完整解码；R2 已写入但 D1/投稿创建失败时必须补偿删除，补偿删除失败要记录 request ID、资源 key 和错误，并保留 `delete_failed` 清理状态供后续重试。

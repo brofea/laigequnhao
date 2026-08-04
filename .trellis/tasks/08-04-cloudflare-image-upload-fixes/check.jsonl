@@ -1,0 +1,7 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核图片从浏览器 Blob 到 R2 字节、公开 URL、DTO 和 HTML img 的完整往返，检查每个边界的错误和 null 处理。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"质量检查需覆盖 WebKit 压缩边界、保存前零上传、R2 fetch 响应体、multipart 投稿和真实 Cloudflare smoke。"}
+{"file":".trellis/spec/backend/api-guidelines.md","reason":"检查同源资源 URL、公开资源缓存、响应信封和 Turnstile 删除后的 `/api/v1` 兼容性。"}
+{"file":".trellis/spec/backend/deployment-guidelines.md","reason":"检查生产生成配置不再包含 Turnstile key/vars，R2 与 Worker 路由在 Cloudflare 上保持可用。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"检查 WebP 安全边界、R2 binding、资源生命周期、错误映射和 Workers 测试完整性。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"检查 pending image、FormData、同源 URL 和 API 响应没有未经校验的类型断言或组件内重复契约。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"检查 Safari/Chrome 移动端失败态、对象 URL 清理、表单可用性、图片展示和 E2E 覆盖。"}

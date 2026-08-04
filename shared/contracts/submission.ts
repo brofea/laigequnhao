@@ -63,8 +63,6 @@ export const submissionRequestSchema = z
     notes: z.string().max(1000).optional(),
     /** 提交者联系方式（仅管理员可见） */
     contact: z.string().max(200).optional(),
-    /** Turnstile token */
-    turnstileToken: z.string().min(1),
   })
   .refine((data) => data.groupNumber || data.url, {
     message: "至少需要群号或 HTTPS 链接",

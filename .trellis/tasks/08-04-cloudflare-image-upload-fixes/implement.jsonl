@@ -1,0 +1,9 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"图片 URL、Blob、FormData、D1/R2 资源状态和公开 DTO 横跨前端、API、service、repository 与 Worker 读取路由，实施前需要按跨层数据流定义边界。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"头像与二维码、管理员与公开投稿、R2 URL 与资源 DTO 需要复用同一策略和 helper，避免再次产生分叉校验。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"本任务涉及浏览器图片决策、Vue 表单行为、Worker R2 响应体、multipart 和 Cloudflare smoke，需按分层测试门禁实施。"}
+{"file":".trellis/spec/backend/api-guidelines.md","reason":"共享 URL 契约、投稿 multipart、响应信封、缓存和公开/管理员投影均属于 API 边界变更。"}
+{"file":".trellis/spec/backend/deployment-guidelines.md","reason":"生产默认同源 R2 URL、Worker Static Assets/API 分流和删除 Turnstile 配置会改变部署运行时契约。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"R2 内容类型、WebP 校验、资源安全、日志脱敏和 Workers 集成测试是后端质量门禁。"}
+{"file":".trellis/spec/frontend/architecture.md","reason":"pending Blob 状态、表单容器、API 客户端和共享契约必须遵循前端分层依赖方向。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"新增 pending image 类型、同源 URL schema 和 submission payload 必须保持严格 TypeScript 与运行时校验。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"WebKit 图片失败态、预览清理、表单错误和移动端 E2E 是前端质量要求。"}

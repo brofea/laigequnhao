@@ -13,9 +13,6 @@ export interface Env {
   ADMIN_PASSWORD?: string;
   SESSION_SECRET?: string;
   LIKE_PEPPER?: string;
-  TURNSTILE_SECRET_KEY?: string;
-  /** 本地开发跳过 Turnstile 验证 */
-  SKIP_TURNSTILE?: string;
   /** 本地开发用固定 pepper（测试确定性 hash） */
   DEV_LIKE_PEPPER?: string;
   /** Cloudflare Analytics 只读 Token */

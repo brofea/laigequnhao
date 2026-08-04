@@ -34,7 +34,7 @@
 
 ## 脱敏
 
-绝不记录密码、密码 hash、会话/CSRF Cookie、Authorization header、Secret、Turnstile token、Analytics token、原始设备 ID、投票者 hash、原始 IP、提交者联系方式、包含访客数据的完整 URL 或图片字节。
+绝不记录密码、密码 hash、会话/CSRF Cookie、Authorization header、Secret、Analytics token、原始设备 ID、投票者 hash、原始 IP、提交者联系方式、包含访客数据的完整 URL 或图片字节。
 
 Logger 负责中央 denylist/redactor。调用方仍必须只传入最少上下文，不能把脱敏功能当成任意记录数据的许可。
 

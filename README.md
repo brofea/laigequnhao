@@ -30,7 +30,7 @@
 | 后端     | Cloudflare Workers + Hono + Workers Static Assets        |
 | 数据库   | Cloudflare D1 (SQLite)                                   |
 | 图片存储 | Cloudflare R2                                            |
-| 安全     | 管理员 HMAC 会话 + CSRF 保护 + Turnstile                 |
+| 安全     | 管理员 HMAC 会话 + CSRF 保护 + 服务端投稿限流            |
 | 测试     | Vitest + Vue Test Utils + Workers Vitest + Playwright    |
 | 构建     | pnpm + ESLint + Prettier + vue-tsc                       |
 
@@ -126,7 +126,7 @@ Cloudflare Cron，应继续复用同一清理服务，并保留 D1/R2 失败可�
 
 完成后，Workers Builds 会安装依赖、构建前端、自动创建或复用 Worker `laigequnhao`、D1 `laigequnhao-prod` 和 R2 `laigequnhao-assets-prod`，执行 migrations，并发布网站
 
-此时访问 URL 应该能看见无群聊的网站首页，但点赞和投稿功能尚未启用，管理端页面也不可用。请继续阅读下一节配置 Runtime secret 以启用
+此时访问 URL 应该能看见无群聊的网站首页，但点赞和管理功能尚未启用。请继续阅读下一节配置 Runtime secret 以启用
 
 ### 配置密码与密钥
 
@@ -134,23 +134,13 @@ Cloudflare Cron，应继续复用同一清理服务，并保留 D1/R2 失败可�
 
 1. 使用 [1Password 随机密码生成器](https://1password.com/zh-cn/password-generator) 生成两串至少 32 位的随机字符串密码
 
-2. 回到 **Workers & Pages** 页面，在详情页找到 **Settings → Variables and Secrets**，添加四个 Type 为 `Secret` 的变量，Variable name 和 Value 如下：
+2. 回到 **Workers & Pages** 页面，在详情页找到 **Settings → Variables and Secrets**，添加三个 Type 为 `Secret` 的变量，Variable name 和 Value 如下：
 
 - `ADMIN_PASSWORD`：自定管理员登录密码
 - `SESSION_SECRET`：随机生成字符串，更新后会使所有现有管理员会话失效
 - `LIKE_PEPPER`：随机生成字符串
 
 3. 点击 Deploy 按钮的副选项 **Save version**，复制详情页的 URL，继续阅读下一节
-
-### 创建 Turnstile Widget
-
-Cloudflare Turnstile Widget 用于识别机器人并保护网站安全，按照如下步骤完成配置
-
-1. 在 Cloudflare Dashboard 搜索 **Turnstile → Add widget manually**。
-2. 填写 widget 名称如 `lgqh-production`，填入 URL，不要填写 `https://`、端口或路径
-3. 创建后记录 **Sitekey** 和 **Secret key**
-4. 回到 Worker 的 **Settings → Builds → Build variables and secrets**，添加变量 `VITE_TURNSTILE_SITE_KEY`，值为 **Sitekey**
-5. 回到 Worker 的 **Settings → Variables and Secrets**，添加 Secret 类变量 `TURNSTILE_SECRET_KEY`，值为 **Secret key**，点击 **Deploy** 重新构建
 
 ### 验证部署
 
@@ -159,7 +149,7 @@ Cloudflare Turnstile Widget 用于识别机器人并保护网站安全，按照�
 1. 首页能打开，管理页面 `https://<你的Worker域名>/admin` 可登录
 2. 打开 `https://<你的Worker域名>/api/v1/health` 可返回 `"status":"healthy"`
 3. 添加一个群，首页点赞可正常记录
-4. 打开首页的“添加新群”，底部的安全验证工作正常
+4. 打开首页的“添加新群”，提交一个纯文本群组并看到受理回执
 
 日常更新只需向连接的 `main` 分支推送代码，Workers 会自动构建部署。若要修改密码或密钥，请在 **Settings → Variables and Secrets** 中更新并点击 **Deploy** 重新构建
 

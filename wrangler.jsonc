@@ -32,7 +32,6 @@
   ],
   "vars": {
     "ENVIRONMENT": "local",
-    "SKIP_TURNSTILE": "true",
     "SECURE_COOKIE": "false",
     "SUBMISSION_LIMIT_PER_HOUR": "1",
   },
@@ -54,7 +53,6 @@
       ],
       "vars": {
         "ENVIRONMENT": "preview",
-        "SKIP_TURNSTILE": "true",
         "SECURE_COOKIE": "true",
         "SUBMISSION_LIMIT_PER_HOUR": "1",
       },
@@ -75,7 +73,6 @@
       ],
       "vars": {
         "ENVIRONMENT": "production",
-        "SKIP_TURNSTILE": "false",
         "SECURE_COOKIE": "true",
         "SUBMISSION_LIMIT_PER_HOUR": "1",
       },
