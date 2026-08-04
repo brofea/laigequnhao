@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-0.md`
-- **Total Sessions**: 8
-- **Last Active**: 2026-08-03
+- **Total Sessions**: 9
+- **Last Active**: 2026-08-05
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-0.md` | ~271 | Active |
+| `journal-0.md` | ~304 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-08-05 | 补齐数据库交互按钮反馈 | `ddcf6ce` | `fix/button-feedback` |
 | 8 | 2026-08-03 | 图片上传链路修复与任务归档 | `9ebf5fb` | `main` |
 | 7 | 2026-08-02 | T06 系统加固与发布验收 + 人工核验前端调整 | `4ab429a` | `main` |
 | 6 | 2026-08-02 | T06 系统加固与发布验收 + 人工核验前端调整 | `cb5db91` | `main` |
