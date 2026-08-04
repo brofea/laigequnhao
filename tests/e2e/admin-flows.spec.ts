@@ -194,7 +194,19 @@ test("回收站 UI：恢复与永久删除按钮可用", async ({ page }) => {
   await trashRow2.getByRole("button", { name: "永久删除" }).click();
   const purgeDialog = page.locator('[data-dialog="purge-confirm-dialog"]');
   await expect(purgeDialog).toBeVisible();
+  let releasePurge: (() => void) | undefined;
+  const purgeGate = new Promise<void>((resolve) => {
+    releasePurge = resolve;
+  });
+  await page.route(`${API}/admin/trash/groups/${groupId}`, async (route) => {
+    await purgeGate;
+    await route.continue();
+  });
   await purgeDialog.getByRole("button", { name: "确认永久删除" }).click();
+  await expect(purgeDialog).toBeVisible();
+  await expect(purgeDialog).toHaveAttribute("aria-busy", "true");
+  await expect(purgeDialog.getByRole("button", { name: "确认永久删除" })).toBeDisabled();
+  releasePurge?.();
   await expect(trashRow2).toHaveCount(0);
 
   const { status: detailStatus } = await api(page, "GET", `/groups/${groupId}`);
@@ -222,7 +234,10 @@ test("版本冲突以 Toast 警告呈现且不覆盖", async ({ page }) => {
   expect(status).toBe(200);
 
   const row = page.locator(".admin-table tbody tr").filter({ hasText: title });
-  await row.getByRole("button", { name: /编辑|更多操作/ }).first().click();
+  await row
+    .getByRole("button", { name: /编辑|更多操作/ })
+    .first()
+    .click();
   const dialog = page.locator('[data-dialog="admin-edit-dialog"]');
   await expect(dialog).toBeVisible();
   await dialog.getByLabel("群组标题").fill(`${title}-本地`);
@@ -258,7 +273,13 @@ test("板块启停影响公开端可见性", async ({ page }) => {
   const auth = await loginViaApi(page);
   const title = `启停板块群-${String(Date.now())}`;
   const groupId = await seedPublishedGroup(page, auth, title);
-  const { status, data } = await api(page, "POST", "/admin/boards", { title: `启停板块-${String(Date.now())}` }, auth);
+  const { status, data } = await api(
+    page,
+    "POST",
+    "/admin/boards",
+    { title: `启停板块-${String(Date.now())}` },
+    auth,
+  );
   expect(status).toBe(201);
   const boards = (data as { data: { boards: Array<{ id: string; title: string }> } }).data.boards;
   const lastBoard = boards[boards.length - 1];
@@ -275,7 +296,10 @@ test("板块启停影响公开端可见性", async ({ page }) => {
   await expect(panel.getByText(title)).toBeVisible();
 
   // 关闭板块（板块 header 的编辑按钮，与成员行"编辑"区分）
-  await panel.locator(".board-panel__actions").getByRole("button", { name: `编辑 ${boardTitle}` }).click();
+  await panel
+    .locator(".board-panel__actions")
+    .getByRole("button", { name: `编辑 ${boardTitle}` })
+    .click();
   const boardDialog = page.locator('[data-dialog="board-edit-dialog"]');
   await boardDialog.getByLabel("状态").click();
   await boardDialog.getByRole("option", { name: "未启用" }).click();
@@ -284,7 +308,9 @@ test("板块启停影响公开端可见性", async ({ page }) => {
 
   // 公开端不再显示该板块标题
   await page.goto("/");
-  await expect(page.locator(`[aria-labelledby^="board-"]`).filter({ hasText: boardTitle })).toHaveCount(0);
+  await expect(
+    page.locator(`[aria-labelledby^="board-"]`).filter({ hasText: boardTitle }),
+  ).toHaveCount(0);
   // 管理端仍可编辑（未启用板块保留成员）
   await gotoAdmin(page, auth);
   await page.getByRole("button", { name: "板块管理" }).click();

@@ -4,7 +4,13 @@ import type { DemoGroup } from "../data/fixtures";
 import Badge from "./Badge.vue";
 import Icon from "./Icon.vue";
 
-const props = defineProps<{ group: DemoGroup }>();
+const props = withDefaults(
+  defineProps<{
+    group: DemoGroup;
+    likeLoading?: boolean;
+  }>(),
+  { likeLoading: false },
+);
 
 const emit = defineEmits<{
   open: [group: DemoGroup];
@@ -21,6 +27,11 @@ watch(
 
 function onAvatarError() {
   avatarFailed.value = true;
+}
+
+function requestLike() {
+  if (props.likeLoading) return;
+  emit("like", props.group);
 }
 </script>
 
@@ -74,9 +85,12 @@ function onAvatarError() {
             ? `取消赞，当前 ${props.group.likes} 个赞`
             : `点赞，当前 ${props.group.likes} 个赞`
         "
-        @click.stop="emit('like', props.group)"
+        :aria-busy="props.likeLoading || undefined"
+        :disabled="props.likeLoading"
+        @click.stop="requestLike"
       >
-        <Icon name="heart" size="16" />
+        <span v-if="props.likeLoading" class="app-button__spinner" aria-hidden="true"></span>
+        <Icon v-else name="heart" size="16" />
         <span>{{ props.group.likes }}</span>
       </button>
     </span>

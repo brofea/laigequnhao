@@ -47,6 +47,43 @@ Props 是只读输入。组件应发出用户意图事件；子组件不得修�
 
 每个异步区块都必须定义加载、空、错误、过期和成功状态。单个组件失败时，不得用一个全局错误替换整个管理员仪表盘。
 
+### 异步操作反馈契约
+
+用户主动触发的网络写操作（例如 `POST`、`PATCH`、`DELETE` 或 multipart 上传）必须先提供即时 Pending 反馈，并在 Pending 期间防止同一资源/动作重复提交。Pending 必须按资源或动作隔离，不能用一个全局 busy 锁住整个页面；成功或失败后都必须清理 Pending。
+
+失败必须明确提示。可用安全的 inline 错误或 `app-toasts` warning/danger Toast；不得静默失败，也不得在失败路径显示成功反馈。
+
+成功反馈按操作结果在当前界面的可见程度分级：
+
+| 情况 | 必需反馈 | 示例 |
+|---|---|---|
+| 成功结果当前界面不明显、操作具有破坏性，或成功后关闭 Dialog | Pending + 成功 Toast | 保存、删除、恢复、永久删除、编辑板块、移出板块 |
+| 成功后列表/详情立即出现可识别的结果 | Pending + 界面结果，不重复弹成功 Toast | 板块内添加群组 |
+| 高频、低风险且适合立即反映的操作 | 乐观更新 + 失败 Toast；仍需防止同一动作重入 | 点赞/取消点赞 |
+| 成功后需要用户继续看到受理结果的流程 | Pending + 持久成功页面或状态；不能只依赖短暂 Toast | 公开投稿 |
+| 无网络或瞬间完成的浏览器操作 | 可用成功 Toast；不需要数据库 Pending | 复制链接、复制群号 |
+
+普通数据库操作不得因为“有 Toast”而省略 Pending；也不得因为“有界面变化”而省略失败提示。读取请求使用字段/列表级 loading 和错误状态，通常不弹成功 Toast。
+
+**正确的成功/失败分支：**
+
+```ts
+pending.value = true;
+try {
+  const result = await saveResource();
+  if (!result.ok) {
+    showToast(result.error.message, "warning");
+    return;
+  }
+  applyServerResult(result.data);
+  showToast("保存成功"); // 仅当结果不明显、破坏性或 Dialog 将关闭时
+} finally {
+  pending.value = false;
+}
+```
+
+**错误模式：** 点击后立即关闭 Dialog，后台失败只恢复按钮；或所有写操作无差别弹成功 Toast。前者让用户无法重试，后者会让界面已有明确结果的普通操作产生噪音。
+
 ## 禁止做法
 
 - 在展示组件中直接调用原始 `fetch`、本地存储或 canvas

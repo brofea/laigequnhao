@@ -1,12 +1,24 @@
 <script setup lang="ts">
-import { reactive } from "vue";
+import { computed, reactive } from "vue";
 import type { DemoBoard } from "../data/fixtures";
 import Button from "./Button.vue";
 import Select from "./Select.vue";
 
-const props = withDefaults(defineProps<{ board: DemoBoard; createMode?: boolean }>(), {
-  createMode: false,
-});
+const props = withDefaults(
+  defineProps<{
+    board: DemoBoard;
+    createMode?: boolean;
+    /** 保存/创建板块时的异步状态。 */
+    busy?: boolean;
+    /** 禁止表单交互，但不表示正在等待网络响应。 */
+    disabled?: boolean;
+  }>(),
+  {
+    createMode: false,
+    busy: false,
+    disabled: false,
+  },
+);
 const emit = defineEmits<{
   save: [board: DemoBoard];
   cancel: [];
@@ -23,7 +35,10 @@ const enabledOptions = [
   { value: "disabled", label: "未启用" },
 ];
 
+const isDisabled = computed(() => props.disabled || props.busy);
+
 function save() {
+  if (isDisabled.value) return;
   emit("save", {
     ...props.board,
     title: draft.title,
@@ -34,7 +49,7 @@ function save() {
 </script>
 
 <template>
-  <form class="board-edit-form" @submit.prevent="save">
+  <form class="board-edit-form" :aria-busy="props.busy || undefined" @submit.prevent="save">
     <div class="board-edit-form__intro">
       <p class="eyebrow">Board details</p>
       <p>
@@ -48,23 +63,42 @@ function save() {
     <label class="admin-edit-field">
       <span>板块标题</span>
       <span class="admin-edit-field__control">
-        <input v-model="draft.title" type="text" maxlength="60" required />
+        <input v-model="draft.title" type="text" maxlength="60" required :disabled="isDisabled" />
       </span>
     </label>
     <label class="admin-edit-field">
       <span>板块描述</span>
       <span class="admin-edit-field__control admin-edit-field__control--textarea">
-        <textarea v-model="draft.description" rows="4" maxlength="200"></textarea>
+        <textarea
+          v-model="draft.description"
+          rows="4"
+          maxlength="200"
+          :disabled="isDisabled"
+        ></textarea>
       </span>
       <small>{{ draft.description.length }}/200</small>
     </label>
-    <Select v-model="draft.enabled" label="状态" :options="enabledOptions" />
+    <Select
+      v-model="draft.enabled"
+      label="状态"
+      :options="enabledOptions"
+      :loading="props.busy"
+      :disabled="isDisabled"
+    />
     <div class="board-edit-form__summary">
       <span>当前成员</span><strong>{{ props.board.members.length }} 个群组</strong>
     </div>
     <div class="admin-edit-form__footer">
-      <Button variant="quiet" type="button" @click="emit('cancel')">取消</Button>
-      <Button variant="normal" type="submit" icon="check">
+      <Button variant="quiet" type="button" :disabled="isDisabled" @click="emit('cancel')">
+        取消
+      </Button>
+      <Button
+        variant="normal"
+        type="submit"
+        icon="check"
+        :loading="props.busy"
+        :disabled="props.disabled"
+      >
         {{ props.createMode ? "创建板块" : "保存板块" }}
       </Button>
     </div>
