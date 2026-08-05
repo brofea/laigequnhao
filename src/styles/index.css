@@ -401,6 +401,22 @@ h3 {
 .app-button--sm.app-button--icon-only {
   width: 34px;
 }
+
+.app-button__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transform: translateY(1px);
+}
+
+.like-button .app-icon {
+  transform: translateY(0.5px);
+}
+
+.dialog-like-button .app-icon {
+  transform: translateY(2px);
+}
+
 .app-button__spinner,
 .app-field__spinner {
   width: 15px;

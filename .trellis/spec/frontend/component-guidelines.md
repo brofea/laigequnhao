@@ -34,6 +34,12 @@ Props 是只读输入。组件应发出用户意图事件；子组件不得修�
 
 禁止根据未经校验的运行时字符串动态拼接 Tailwind 类名。必须将有类型约束的 variant 映射为完整、静态的类名字符串。
 
+### Button 组件 slot 内图标对齐契约
+
+共享 `Button` 的默认 slot 内容被包在 `.app-button__label`（inline 元素）内。`Icon.vue` 的 `.app-icon` SVG 没有 vertical-align 规则，若 label 不是 flex 容器，inline SVG 会按文本基线对齐，图标与文字视觉中心错位（如点赞按钮的心形图标与数字不在同一水平线，2026-08 回归记录）。`.app-button__label` 必须保持 `display: inline-flex; align-items: center`，禁止移除或改为纯 inline。
+
+点赞按钮（`.like-button`）的光学微调（用户验收意见，2026-08）：icon 与数字的间距来自 label 的 `gap` 契约（当前 3px），不要在 `.like-button` 上重复设置 gap；label 内容整体 `translateY(1px)`，卡片 icon 再 `translateY(0.5px)`，Dialog 底部点赞按钮（`.dialog-like-button`）icon 单独 `translateY(2px)`。
+
 ## 无障碍
 
 - 适当使用原生 button、link、form、label 和 `<dialog>`。

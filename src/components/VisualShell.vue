@@ -1345,6 +1345,7 @@ function removeScrollListener() {
       <template #footer
         ><Button
           variant="quiet"
+          class="dialog-like-button"
           icon="heart"
           :aria-pressed="selectedGroup.liked"
           :loading="isPending(`like:${selectedGroup.id}`)"
