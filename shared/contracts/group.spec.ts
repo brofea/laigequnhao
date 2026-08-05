@@ -54,7 +54,7 @@ describe("publicGroupDtoSchema", () => {
 
   it("拒绝包含 logoR2Key 的 DTO", () => {
     expect(() =>
-      publicGroupDtoSchema.parse({ ...validPublicGroup, logoR2Key: "logos/abc.webp" }),
+      publicGroupDtoSchema.parse({ ...validPublicGroup, logoR2Key: "logos/abc.png" }),
     ).toThrow();
   });
 });
@@ -66,7 +66,7 @@ describe("adminGroupDtoSchema", () => {
     auditNotes: "已审核通过",
     deletedAt: null,
     deleteProgress: null,
-    logoR2Key: "logos/abc.webp",
+    logoR2Key: "logos/abc.png",
     version: 3,
     lastPublishedAt: null,
   };

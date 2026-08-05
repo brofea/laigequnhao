@@ -6,12 +6,12 @@
  * 前提: 先启动 pnpm dev（默认通过单地址 localhost:5173 访问 Worker API）
  * 若单独运行 pnpm worker:dev，请设置 SEED_API_BASE=http://127.0.0.1:8788/api/v1。
  *
- * 下载 → 压缩（logo 128px/80KB, QR 1024px/400KB）→ 通过 API 上传 R2 → 写 D1
+ * 下载 → 压缩（logo 128px/128KB, QR 1024px/1MB）→ 通过 API 上传 R2 → 写 D1
  *
  * 群组分布: 100已发布 + 10待审核 + 10已下架 + 10已拒绝 + 10回收站(状态=已拒绝) = 140
  * 所有140个群都有头像（logo压缩）
  * 每种加群方式独立50%概率出现，但每组至少一种
- * 有qr_code的群，二维码图片与头像同源，压缩参数不同（仅这些群额外压缩QR版本）
+ * 有qr_code的群，二维码图片与头像同源，尺寸策略不同（仅这些群额外压缩QR版本）
  */
 import { execSync } from "node:child_process";
 import { writeFileSync, readFileSync } from "node:fs";
@@ -107,16 +107,10 @@ export async function assertApiReachable(apiBase = API_BASE, fetchImpl = fetch) 
 
 // ─── 压缩参数（与 shared/contracts/asset.ts 同步）─────────
 const LOGO_MAX_DIM = 128;
-const LOGO_MAX_BYTES = 80 * 1024;
-const LOGO_START_Q = 85;
-const LOGO_MIN_Q = 45;
-const LOGO_Q_STEP = 20;
+const LOGO_MAX_BYTES = 128 * 1024;
 
 const QR_MAX_DIM = 1024;
-const QR_MAX_BYTES = 400 * 1024;
-const QR_START_Q = 95;
-const QR_MIN_Q = 55;
-const QR_Q_STEP = 10;
+const QR_MAX_BYTES = 1024 * 1024;
 
 // ─── 读取 .dev.vars ───────────────────────────────────────
 function readAdminPassword() {
@@ -214,27 +208,12 @@ const DESCRIPTIONS = [
 ];
 const KINDS = ["official", "interest"];
 
-// ─── 图片压缩（sharp，质量递减）────────────────────────────
+// ─── 图片压缩（sharp，单次 PNG 编码）────────────────────────
 async function compressToSize(buf, w, h, opts) {
-  let best = null;
-  let q = opts.startQuality;
-  while (q >= opts.minQuality) {
-    const pipeline = sharp(buf).resize(w, h);
-    if (!opts.preserveAlpha) pipeline.flatten({ background: "#ffffff" });
-    const webp = await pipeline.webp({ quality: q, alphaQuality: 100 }).toBuffer();
-    if (webp.length <= opts.maxBytes) {
-      best = webp;
-      break;
-    }
-    q -= opts.qualityStep;
-  }
-  if (!best) {
-    const pipeline = sharp(buf).resize(w, h);
-    if (!opts.preserveAlpha) pipeline.flatten({ background: "#ffffff" });
-    const webp = await pipeline.webp({ quality: opts.minQuality, alphaQuality: 100 }).toBuffer();
-    if (webp.length <= opts.maxBytes) best = webp;
-  }
-  return best;
+  const pipeline = sharp(buf).resize(w, h);
+  if (!opts.preserveAlpha) pipeline.flatten({ background: "#ffffff" });
+  const png = await pipeline.png().toBuffer();
+  return png.length <= opts.maxBytes ? png : null;
 }
 
 // ─── 下载 + 处理图片（全部下载并压缩logo；QR压缩在后续按需进行）───
@@ -259,15 +238,12 @@ async function downloadAndProcess(count) {
       const ow = meta.width,
         oh = meta.height;
 
-      // Logo 版本: 128px, 80KB, alpha, 85→45
+      // Logo 版本: 128px, 128KB, 保留 alpha，单次 PNG 编码
       const lw =
         Math.max(ow, oh) > LOGO_MAX_DIM ? Math.round((ow * LOGO_MAX_DIM) / Math.max(ow, oh)) : ow;
       const lh =
         Math.max(ow, oh) > LOGO_MAX_DIM ? Math.round((oh * LOGO_MAX_DIM) / Math.max(ow, oh)) : oh;
       const logoBuf = await compressToSize(buf, lw, lh, {
-        startQuality: LOGO_START_Q,
-        minQuality: LOGO_MIN_Q,
-        qualityStep: LOGO_Q_STEP,
         maxBytes: LOGO_MAX_BYTES,
         preserveAlpha: true,
       });
@@ -297,9 +273,6 @@ async function compressQR(sourceBuf) {
   const qw = Math.max(ow, oh) > QR_MAX_DIM ? Math.round((ow * QR_MAX_DIM) / Math.max(ow, oh)) : ow;
   const qh = Math.max(ow, oh) > QR_MAX_DIM ? Math.round((oh * QR_MAX_DIM) / Math.max(ow, oh)) : oh;
   return await compressToSize(sourceBuf, qw, qh, {
-    startQuality: QR_START_Q,
-    minQuality: QR_MIN_Q,
-    qualityStep: QR_Q_STEP,
     maxBytes: QR_MAX_BYTES,
     preserveAlpha: false,
   });
@@ -373,9 +346,9 @@ async function authenticate() {
 
 // ─── API 上传 ─────────────────────────────────────────────
 async function uploadViaApi(buffer, purpose) {
-  const b = Buffer.isBuffer(buffer) ? new Blob([buffer], { type: "image/webp" }) : buffer;
+  const b = Buffer.isBuffer(buffer) ? new Blob([buffer], { type: "image/png" }) : buffer;
   const form = new FormData();
-  form.append("file", b, `${purpose}.webp`);
+  form.append("file", b, `${purpose}.png`);
   form.append("purpose", purpose);
   const headers = { "X-CSRF-Token": csrfToken };
   if (sessionCookie) headers["Cookie"] = sessionCookie;
@@ -467,7 +440,7 @@ async function uploadAll(images, groups) {
 /** 幂等写入 asset：空库插入，已存在（staged，来自上传接口）则原地升级为 ready */
 function assetUpsertSql(a, purpose, t) {
   return (
-    `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', '${purpose}', 'image/webp', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}') ` +
+    `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', '${purpose}', 'image/png', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}') ` +
     `ON CONFLICT(id) DO UPDATE SET r2_key = excluded.r2_key, purpose = excluded.purpose, content_type = excluded.content_type, byte_length = excluded.byte_length, width = excluded.width, height = excluded.height, status = excluded.status, ref_count = 0, updated_at = excluded.updated_at;`
   );
 }

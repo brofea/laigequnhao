@@ -5,11 +5,11 @@ import {
   type AssetPurpose,
 } from "@shared/contracts/asset";
 
-const RIFF_HEADER_BYTES = 12;
-const CHUNK_HEADER_BYTES = 8;
-const VP8X_DIMENSION_BYTES = 10;
-const VP8L_HEADER_BYTES = 5;
-const VP8_FRAME_HEADER_BYTES = 10;
+const PNG_SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_SIGNATURE_BYTES = PNG_SIGNATURE.byteLength;
+const PNG_CHUNK_HEADER_BYTES = 8;
+const PNG_CHUNK_TRAILER_BYTES = 4;
+const PNG_IHDR_BYTES = 13;
 
 type ImageValidationErrorCode =
   "VALIDATION_FAILED" | "PAYLOAD_TOO_LARGE" | "UNSUPPORTED_MEDIA_TYPE";
@@ -25,9 +25,12 @@ export class ImageValidationError extends Error {
   }
 }
 
-export interface ParsedWebp {
+export interface ParsedPng {
   width: number;
   height: number;
+  bitDepth: number;
+  colorType: number;
+  /** PNG 颜色类型或 tRNS 表明文件可能包含 alpha。 */
   hasAlpha: boolean;
 }
 
@@ -52,12 +55,12 @@ function invalid(message: string): never {
   throw new ImageValidationError("VALIDATION_FAILED", 400, message);
 }
 
-function readUint32LittleEndian(bytes: Uint8Array, offset: number): number {
+function readUint32BigEndian(bytes: Uint8Array, offset: number): number {
   return (
-    (bytes[offset]! |
-      (bytes[offset + 1]! << 8) |
-      (bytes[offset + 2]! << 16) |
-      (bytes[offset + 3]! << 24)) >>>
+    ((bytes[offset]! << 24) |
+      (bytes[offset + 1]! << 16) |
+      (bytes[offset + 2]! << 8) |
+      bytes[offset + 3]!) >>>
     0
   );
 }
@@ -71,180 +74,196 @@ function chunkName(bytes: Uint8Array, offset: number): string {
   );
 }
 
-function isRiffWebp(bytes: Uint8Array): boolean {
-  return (
-    bytes.length >= RIFF_HEADER_BYTES &&
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
-  );
+function isPng(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < PNG_SIGNATURE_BYTES) return false;
+  for (let index = 0; index < PNG_SIGNATURE_BYTES; index++) {
+    if (bytes[index] !== PNG_SIGNATURE[index]) return false;
+  }
+  return true;
+}
+
+function isCriticalChunk(name: string): boolean {
+  const first = name.charCodeAt(0);
+  return first >= 0x41 && first <= 0x5a;
+}
+
+function isSupportedBitDepth(colorType: number, bitDepth: number): boolean {
+  switch (colorType) {
+    case 0:
+      return [1, 2, 4, 8, 16].includes(bitDepth);
+    case 2:
+      return bitDepth === 8 || bitDepth === 16;
+    case 3:
+      return [1, 2, 4, 8].includes(bitDepth);
+    case 4:
+      return bitDepth === 8 || bitDepth === 16;
+    case 6:
+      return bitDepth === 8 || bitDepth === 16;
+    default:
+      return false;
+  }
 }
 
 /**
- * Parse the RIFF chunk table and the dimensions encoded by the image chunk.
- * This deliberately does not decode pixels; callers apply policy limits first.
+ * Parse PNG signature, chunk boundaries, IHDR and the required image chunks.
+ * Pixel bytes are intentionally not trusted until Photon has decoded them.
  */
-export function parseWebpStructure(bytes: Uint8Array): ParsedWebp {
-  if (!isRiffWebp(bytes)) {
-    unsupported("文件不是有效的 RIFF WebP。");
+export function parsePngStructure(bytes: Uint8Array): ParsedPng {
+  if (!isPng(bytes)) {
+    unsupported("文件不是有效的 PNG。");
   }
 
-  if (bytes.length < RIFF_HEADER_BYTES + CHUNK_HEADER_BYTES) {
-    unsupported("WebP 文件缺少图像 chunk。");
-  }
+  let offset = PNG_SIGNATURE_BYTES;
+  let sawIhdr = false;
+  let sawIdat = false;
+  let sawIend = false;
+  let sawPlte = false;
+  let sawTrns = false;
+  let parsed: ParsedPng | undefined;
 
-  const riffPayloadLength = readUint32LittleEndian(bytes, 4);
-  if (riffPayloadLength !== bytes.length - 8) {
-    unsupported("WebP RIFF 长度与实际文件长度不一致。");
-  }
-
-  const riffEnd = bytes.length;
-  let offset = RIFF_HEADER_BYTES;
-  let imageChunk: "VP8 " | "VP8L" | null = null;
-  let canvasDimensions: { width: number; height: number } | null = null;
-  let imageDimensions: { width: number; height: number } | null = null;
-  let hasAlpha = false;
-
-  while (offset < riffEnd) {
-    if (offset + CHUNK_HEADER_BYTES > riffEnd) {
-      unsupported("WebP chunk header 被截断。");
+  while (offset < bytes.byteLength) {
+    if (offset + PNG_CHUNK_HEADER_BYTES > bytes.byteLength) {
+      unsupported("PNG chunk header 被截断。");
     }
 
-    const name = chunkName(bytes, offset);
-    const chunkLength = readUint32LittleEndian(bytes, offset + 4);
-    const dataOffset = offset + CHUNK_HEADER_BYTES;
+    const chunkLength = readUint32BigEndian(bytes, offset);
+    const name = chunkName(bytes, offset + 4);
+    const dataOffset = offset + PNG_CHUNK_HEADER_BYTES;
     const dataEnd = dataOffset + chunkLength;
-    if (dataEnd < dataOffset || dataEnd > riffEnd) {
-      unsupported("WebP chunk 长度无效或超出文件范围。");
+    const chunkEnd = dataEnd + PNG_CHUNK_TRAILER_BYTES;
+    if (
+      !Number.isSafeInteger(dataEnd) ||
+      !Number.isSafeInteger(chunkEnd) ||
+      dataEnd < dataOffset ||
+      chunkEnd < dataEnd ||
+      chunkEnd > bytes.byteLength
+    ) {
+      unsupported("PNG chunk 长度无效或超出文件范围。");
     }
 
-    if (name === "VP8X") {
-      if (chunkLength < VP8X_DIMENSION_BYTES || canvasDimensions || imageDimensions) {
-        unsupported("WebP VP8X chunk 无效。");
+    if (sawIend) {
+      unsupported("PNG IEND 后存在多余数据。");
+    }
+
+    if (!sawIhdr && name !== "IHDR") {
+      unsupported("PNG 必须以 IHDR chunk 开始。");
+    }
+
+    if (name === "IHDR") {
+      if (sawIhdr || chunkLength !== PNG_IHDR_BYTES) {
+        unsupported("PNG IHDR chunk 无效。");
       }
 
-      const width =
-        1 +
-        (bytes[dataOffset + 4]! | (bytes[dataOffset + 5]! << 8) | (bytes[dataOffset + 6]! << 16));
-      const height =
-        1 +
-        (bytes[dataOffset + 7]! | (bytes[dataOffset + 8]! << 8) | (bytes[dataOffset + 9]! << 16));
-      canvasDimensions = { width, height };
-      hasAlpha = (bytes[dataOffset]! & 0x10) !== 0;
-    } else if (name === "VP8L") {
-      if (chunkLength < VP8L_HEADER_BYTES || imageChunk) {
-        unsupported("WebP VP8L chunk 无效。");
+      const width = readUint32BigEndian(bytes, dataOffset);
+      const height = readUint32BigEndian(bytes, dataOffset + 4);
+      const bitDepth = bytes[dataOffset + 8]!;
+      const colorType = bytes[dataOffset + 9]!;
+      const compressionMethod = bytes[dataOffset + 10]!;
+      const filterMethod = bytes[dataOffset + 11]!;
+      const interlaceMethod = bytes[dataOffset + 12]!;
+
+      if (width < 1 || height < 1) {
+        invalid("PNG 图像尺寸无效。");
       }
-      if (bytes[dataOffset] !== 0x2f) {
-        unsupported("WebP VP8L 签名无效。");
+      if (!isSupportedBitDepth(colorType, bitDepth)) {
+        unsupported("PNG bit depth 或 color type 无效。");
+      }
+      if (compressionMethod !== 0 || filterMethod !== 0 || ![0, 1].includes(interlaceMethod)) {
+        unsupported("PNG IHDR 压缩、过滤或交错方式无效。");
       }
 
-      const bits = readUint32LittleEndian(bytes, dataOffset + 1);
-      imageDimensions = {
-        width: (bits & 0x3fff) + 1,
-        height: ((bits >>> 14) & 0x3fff) + 1,
+      parsed = {
+        width,
+        height,
+        bitDepth,
+        colorType,
+        hasAlpha: colorType === 4 || colorType === 6,
       };
-      hasAlpha ||= (bits & 0x10000000) !== 0;
-      imageChunk = "VP8L";
-    } else if (name === "VP8 ") {
-      if (chunkLength < VP8_FRAME_HEADER_BYTES || imageChunk) {
-        unsupported("WebP VP8 chunk 无效。");
+      sawIhdr = true;
+    } else if (name === "PLTE") {
+      if (sawPlte || sawIdat || chunkLength === 0 || chunkLength % 3 !== 0 || chunkLength > 768) {
+        unsupported("PNG PLTE chunk 无效。");
       }
-
-      // A valid lossy WebP key frame contains the VP8 start code 0x9d012a.
-      if (
-        bytes[dataOffset + 3] !== 0x9d ||
-        bytes[dataOffset + 4] !== 0x01 ||
-        bytes[dataOffset + 5] !== 0x2a
-      ) {
-        unsupported("WebP VP8 帧签名无效。");
+      sawPlte = true;
+    } else if (name === "tRNS") {
+      if (sawTrns || sawIdat || parsed?.colorType === 4 || parsed?.colorType === 6) {
+        unsupported("PNG tRNS chunk 无效。");
       }
-
-      const width = (bytes[dataOffset + 6]! | (bytes[dataOffset + 7]! << 8)) & 0x3fff;
-      const height = (bytes[dataOffset + 8]! | (bytes[dataOffset + 9]! << 8)) & 0x3fff;
-      imageDimensions = { width, height };
-      imageChunk = "VP8 ";
+      sawTrns = true;
+    } else if (name === "IDAT") {
+      if (!parsed || chunkLength === 0) {
+        unsupported("PNG IDAT chunk 无效。");
+      }
+      sawIdat = true;
+    } else if (name === "IEND") {
+      if (chunkLength !== 0 || !parsed || !sawIdat) {
+        unsupported("PNG IEND chunk 无效或图像数据缺失。");
+      }
+      sawIend = true;
+    } else if (isCriticalChunk(name)) {
+      unsupported("PNG 包含不支持的关键 chunk。");
     }
 
-    const paddedEnd = dataEnd + (chunkLength & 1);
-    if (paddedEnd > riffEnd) {
-      unsupported("WebP chunk padding 被截断。");
-    }
-    offset = paddedEnd;
+    offset = chunkEnd;
   }
 
-  if (offset !== riffEnd || !imageChunk || !imageDimensions) {
-    unsupported("WebP 缺少可识别的图像 chunk。");
+  if (!parsed || !sawIdat || !sawIend || offset !== bytes.byteLength) {
+    unsupported("PNG 缺少完整的 IHDR、IDAT 或 IEND chunk。");
   }
-  const dimensions = canvasDimensions ?? imageDimensions;
-  if (
-    canvasDimensions &&
-    (canvasDimensions.width !== imageDimensions.width ||
-      canvasDimensions.height !== imageDimensions.height)
-  ) {
-    unsupported("WebP VP8X 画布尺寸与图像尺寸不一致。");
-  }
-  if (
-    !Number.isSafeInteger(dimensions.width) ||
-    !Number.isSafeInteger(dimensions.height) ||
-    dimensions.width < 1 ||
-    dimensions.height < 1
-  ) {
-    invalid("WebP 图像尺寸无效。");
+  if (parsed.colorType === 3 && !sawPlte) {
+    unsupported("索引色 PNG 缺少 PLTE chunk。");
   }
 
-  return { ...dimensions, hasAlpha };
+  return { ...parsed, hasAlpha: parsed.hasAlpha || sawTrns };
 }
 
-function assertPolicyLimits(purpose: AssetPurpose, parsed: ParsedWebp) {
+function assertPolicyLimits(purpose: AssetPurpose, parsed: ParsedPng) {
   const policy = getAssetPolicy(purpose);
   if (parsed.width > policy.maxDimension || parsed.height > policy.maxDimension) {
     invalid(`图片最长边不得超过 ${policy.maxDimension} 像素。`);
   }
 
-  const pixelCount = parsed.width * parsed.height;
-  if (!Number.isSafeInteger(pixelCount) || pixelCount > policy.maxPixels) {
+  if (parsed.width > policy.maxPixels / parsed.height) {
     invalid(`图片总像素不得超过 ${policy.maxPixels}。`);
   }
 }
 
-function decodeAndVerify(bytes: Uint8Array, parsed: ParsedWebp) {
+function decodeAndVerify(bytes: Uint8Array, parsed: ParsedPng, purpose: AssetPurpose) {
   let image: PhotonImage | undefined;
   try {
     image = PhotonImage.new_from_byteslice(bytes);
     const width = image.get_width();
     const height = image.get_height();
     if (width !== parsed.width || height !== parsed.height) {
-      unsupported("WebP 声明尺寸与解码尺寸不一致。");
+      unsupported("PNG 声明尺寸与解码尺寸不一致。");
     }
 
     const pixels = image.get_raw_pixels();
     const expectedPixelBytes = width * height * 4;
     if (pixels.byteLength !== expectedPixelBytes) {
-      unsupported("WebP 解码结果不完整。");
+      unsupported("PNG 解码结果不完整。");
     }
 
-    // QR flattening is performed by the browser adapter. The server still
-    // decodes the bytes before storing them, but accepts legacy WebP assets
-    // whose encoder metadata reports alpha inconsistently.
+    if (purpose === "qr_code") {
+      for (let offset = 3; offset < pixels.byteLength; offset += 4) {
+        if (pixels[offset] !== 0xff) {
+          invalid("二维码 PNG 必须是不透明的。");
+        }
+      }
+    }
   } catch (error) {
     if (error instanceof ImageValidationError) throw error;
-    unsupported("WebP 完整解码失败。");
+    unsupported("PNG 完整解码失败。");
   } finally {
     image?.free();
   }
 }
 
 /**
- * Validate an actual final WebP file. The order is intentional:
- * request/file bytes -> RIFF/chunk/dimensions -> purpose limits -> full decode.
+ * Validate an actual final PNG file. The order is intentional:
+ * request/file bytes -> PNG structure/dimensions -> purpose limits -> full decode.
  */
-export function validateWebpUpload(bytes: Uint8Array, purpose: AssetPurpose): ValidatedImageUpload {
+export function validatePngUpload(bytes: Uint8Array, purpose: AssetPurpose): ValidatedImageUpload {
   if (bytes.byteLength === 0) {
     invalid("文件不能为空。");
   }
@@ -254,9 +273,9 @@ export function validateWebpUpload(bytes: Uint8Array, purpose: AssetPurpose): Va
     tooLarge(`文件大小超过 ${policy.maxBytes} 字节限制。`);
   }
 
-  const parsed = parseWebpStructure(bytes);
+  const parsed = parsePngStructure(bytes);
   assertPolicyLimits(purpose, parsed);
-  decodeAndVerify(bytes, parsed);
+  decodeAndVerify(bytes, parsed, purpose);
 
   return {
     bytes,

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+/* eslint-disable @typescript-eslint/unbound-method */
 import jsQR from "jsqr";
 import sharp from "sharp";
 import {
@@ -6,7 +7,6 @@ import {
   detectQrCode,
   compressImage,
   getImageCompressionPolicy,
-  getQualitySteps,
   revokeImagePreview,
   validateImageSource,
 } from "./image-compression";
@@ -14,23 +14,9 @@ import {
 const REAL_QR_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAIAAAACAAQMAAAD58POIAAAABlBMVEX///8AAABVwtN+AAAACXBI" +
   "WXMAAA7EAAAOxAGVKw4bAAABEUlEQVRIia2Vsa3DMAxEL3ChMiNok3gxITbgxaxNNIJKF4H4j3TwE6T1sbCF5+KM45ECfmsxs46cBkrmcUhAAW69ZMz2ytR4akC22oFUXcq6ECyWzFYxmBoePOmA+7E0q1T5GHQRROcoUPt3Ky+CqMkOtu8raBcBVapZOx6Y+LivIuAvDy4BRCBceEVwwU9DAmiFu5Aq6eGdU4CSj7lPHtzNSIcEMF773RqFCk6TBaD4X2/NfMRsuEESQBVacSOyPcZDAnzDcCQ8bR0SEOUjxjikAQ045xaxtc/OCUBsGO7W3e0+TRaAWLCN02Bvg3SA8do8vUMJqLIC8//dcBG8b8JY3QMaEJ1zFQ7vZ42rwW/9AcnxGospmPkqAAAAAElFTkSuQmCC";
-
-const WEBP_1X1 = Uint8Array.from([
-  0x52, 0x49, 0x46, 0x46, 0x20, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x4c,
-  0x13, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x00, 0x00, 0x10, 0x07, 0x10, 0x11, 0x11, 0x88, 0x88, 0xfe,
-  0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-]);
-
-function createTestWebpBlob(size: number): Blob {
-  const bytes = new Uint8Array(Math.max(size, WEBP_1X1.byteLength));
-  bytes.set(WEBP_1X1);
-  return new Blob([bytes], { type: "image/webp" });
-}
-
-function createDataUrl(contentType: string, bytes = WEBP_1X1): string {
-  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
-  return `data:${contentType};base64,${btoa(binary)}`;
-}
+const VALID_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 function decodeBase64(value: string): ArrayBuffer {
   const binary = atob(value);
@@ -38,7 +24,38 @@ function decodeBase64(value: string): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-function createMockCanvas(sizeForQuality: (quality: number) => number) {
+function createValidPngBytes(size?: number): Uint8Array {
+  const source = new Uint8Array(decodeBase64(VALID_PNG_BASE64));
+  const bytes = new Uint8Array(Math.max(size ?? 0, source.byteLength));
+  bytes.set(source);
+  return bytes;
+}
+
+function createPngBlob(size?: number, type = "image/png"): Blob {
+  const bytes = createValidPngBytes(size);
+  const blobBytes = new Uint8Array(bytes.byteLength);
+  blobBytes.set(bytes);
+  return new Blob([blobBytes.buffer], { type });
+}
+
+function readBlobBytes(blob: Blob): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (!(reader.result instanceof ArrayBuffer)) {
+        reject(new Error("Blob reader returned an invalid result"));
+        return;
+      }
+      resolve(new Uint8Array(reader.result));
+    };
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("Blob read failed"));
+    };
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+function createMockCanvas(output: Blob | null | (() => Blob | null)) {
   const context = {
     clearRect: vi.fn(),
     drawImage: vi.fn(),
@@ -49,17 +66,26 @@ function createMockCanvas(sizeForQuality: (quality: number) => number) {
     width: 0,
     height: 0,
     getContext: vi.fn(() => context),
-    toBlob: vi.fn((callback: BlobCallback, _type?: string, quality?: number) => {
-      const size = sizeForQuality(quality ?? 0);
-      callback(createTestWebpBlob(size));
+    toBlob: vi.fn((callback: BlobCallback, _type?: string) => {
+      callback(typeof output === "function" ? output() : output);
     }),
   } as unknown as HTMLCanvasElement;
   return { canvas, context };
 }
 
+function stubBitmap(width = 128, height = 128) {
+  const bitmap = { width, height, close: vi.fn() } as unknown as ImageBitmap;
+  vi.stubGlobal(
+    "createImageBitmap",
+    vi.fn(() => Promise.resolve(bitmap)),
+  );
+  return bitmap;
+}
+
 describe("image compression browser adapter", () => {
   let createObjectUrl: ReturnType<typeof vi.fn>;
   let revokeObjectUrl: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     createObjectUrl = vi.fn((_: Blob) => `blob:test-${String(createObjectUrl.mock.calls.length)}`);
     revokeObjectUrl = vi.fn();
@@ -112,59 +138,60 @@ describe("image compression browser adapter", () => {
     }).toThrow("原图不能超过 5MB");
   });
 
-  it("按最长边等比缩放，并补齐质量递减的最低质量", () => {
+  it("按最长边等比缩放，不再暴露质量阶梯", () => {
     expect(calculateTargetDimensions(4000, 2000, 128)).toEqual({ width: 128, height: 64 });
     expect(calculateTargetDimensions(80, 40, 128)).toEqual({ width: 80, height: 40 });
-    expect(getQualitySteps(getImageCompressionPolicy("logo"))).toEqual([85, 65, 45]);
-    expect(getQualitySteps(getImageCompressionPolicy("qr_code"))).toEqual([95, 85, 75, 65, 55]);
+    expect(getImageCompressionPolicy("logo")).not.toHaveProperty("startQuality");
+    expect(getImageCompressionPolicy("qr_code")).not.toHaveProperty("qualityStep");
   });
 
-  it("logo 使用透明 canvas，结果为有限大小的 WebP 并生成可清理预览", async () => {
-    const bitmap = { width: 400, height: 200, close: vi.fn() } as unknown as ImageBitmap;
-    vi.stubGlobal(
-      "createImageBitmap",
-      vi.fn(() => Promise.resolve(bitmap)),
-    );
-    const { canvas, context } = createMockCanvas(() => 100);
+  it("logo 使用 alpha canvas，单次编码为带 PNG 签名的结果并生成可清理预览", async () => {
+    const bitmap = stubBitmap(400, 200);
+    const output = createPngBlob(100);
+    const { canvas, context } = createMockCanvas(output);
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
 
     const result = await compressImage(
       new File(["png"], "logo.png", { type: "image/png" }),
       "logo",
     );
+    const bytes = await readBlobBytes(result.blob);
 
     expect(result).toMatchObject({
       width: 128,
       height: 64,
-      byteLength: 100,
+      byteLength: output.size,
       purpose: "logo",
       previewUrl: "blob:test-1",
+      blob: { type: "image/png" },
     });
+    expect(Array.from(bytes.slice(0, 8))).toEqual(PNG_SIGNATURE);
     expect(canvas.width).toBe(128);
     expect(canvas.height).toBe(64);
-    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(canvas.toBlob).toHaveBeenCalledOnce();
+    expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/png");
+    expect(canvas.getContext).toHaveBeenCalledWith("2d", { alpha: true });
     expect(context.fillRect).not.toHaveBeenCalled();
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(context.drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 128, 64);
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(bitmap.close).toHaveBeenCalledOnce();
 
     revokeImagePreview(result.previewUrl);
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:test-1");
   });
 
-  it("ImageBitmap 缺少 close 时仍能完成压缩", async () => {
+  it("ImageBitmap 缺少 close 时仍能完成 PNG 压缩", async () => {
     const bitmap = { width: 400, height: 200 } as unknown as ImageBitmap;
     vi.stubGlobal(
       "createImageBitmap",
       vi.fn(() => Promise.resolve(bitmap)),
     );
-    const { canvas } = createMockCanvas(() => 100);
+    const output = createPngBlob(100);
+    const { canvas } = createMockCanvas(output);
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
 
     await expect(
       compressImage(new File(["png"], "logo.png", { type: "image/png" }), "logo"),
-    ).resolves.toMatchObject({ byteLength: 100, previewUrl: "blob:test-1" });
+    ).resolves.toMatchObject({ byteLength: output.size, previewUrl: "blob:test-1" });
   });
 
   it("createImageBitmap 失败时回退 HTMLImageElement，并清理输入 object URL", async () => {
@@ -185,7 +212,8 @@ describe("image compression browser adapter", () => {
       }
     }
     vi.stubGlobal("Image", TestImage);
-    const { canvas, context } = createMockCanvas(() => 100);
+    const output = createPngBlob(100);
+    const { canvas, context } = createMockCanvas(output);
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
 
     const result = await compressImage(
@@ -195,7 +223,6 @@ describe("image compression browser adapter", () => {
 
     expect(result.width).toBe(128);
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:test-1");
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(context.drawImage).toHaveBeenCalledWith(expect.any(TestImage), 0, 0, 128, 64);
   });
 
@@ -221,17 +248,11 @@ describe("image compression browser adapter", () => {
     expect(createObjectUrl).toHaveBeenCalledOnce();
   });
 
-  it("二维码先铺纯白底，并在质量递减后通过目标大小", async () => {
-    const bitmap = { width: 2000, height: 1000, close: vi.fn() } as unknown as ImageBitmap;
-    vi.stubGlobal(
-      "createImageBitmap",
-      vi.fn(() => Promise.resolve(bitmap)),
-    );
-    const qualities: number[] = [];
-    const { canvas, context } = createMockCanvas((quality) => {
-      qualities.push(quality);
-      return quality > 0.9 ? 500 * 1024 : 100;
-    });
+  it("二维码使用不透明 canvas 铺纯白底，并且只编码一次", async () => {
+    const bitmap = stubBitmap(2000, 1000);
+    const policy = getImageCompressionPolicy("qr_code");
+    const output = createPngBlob(policy.maxBytes);
+    const { canvas, context } = createMockCanvas(output);
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
 
     const result = await compressImage(
@@ -241,40 +262,35 @@ describe("image compression browser adapter", () => {
 
     expect(result.width).toBe(1024);
     expect(result.height).toBe(512);
-    expect(qualities).toEqual([0.95, 0.85]);
+    expect(result.blob.type).toBe("image/png");
+    expect(result.byteLength).toBe(policy.maxBytes);
+    expect(canvas.toBlob).toHaveBeenCalledOnce();
+    expect(canvas.getContext).toHaveBeenCalledWith("2d", { alpha: false });
     expect(context.fillStyle).toBe("#fff");
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(context.fillRect).toHaveBeenCalledWith(0, 0, 1024, 512);
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(context.drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 1024, 512);
   });
 
-  it("压缩后的真实 WebP 仍可被扫码器识别", async () => {
+  it("真实 PNG 二维码经过白底编码后仍可被扫码器识别且没有透明像素", async () => {
     const sourcePng = Buffer.from(decodeBase64(REAL_QR_PNG_BASE64));
-    const bitmap = { width: 128, height: 128, close: vi.fn() } as unknown as ImageBitmap;
-    vi.stubGlobal(
-      "createImageBitmap",
-      vi.fn(() => Promise.resolve(bitmap)),
-    );
-
+    stubBitmap();
     const context = {
       clearRect: vi.fn(),
       drawImage: vi.fn(),
       fillRect: vi.fn(),
       fillStyle: "",
     } as unknown as CanvasRenderingContext2D;
-    let encodedWebp: Buffer | undefined;
+    let encodedPng: Buffer | undefined;
     const canvas = {
       width: 128,
       height: 128,
       getContext: vi.fn(() => context),
-      toBlob: vi.fn(async (callback: BlobCallback, _type?: string, quality?: number) => {
-        const encoded = await sharp(sourcePng)
-          .flatten({ background: "#fff" })
-          .webp({ quality: Math.round((quality ?? 1) * 100) })
-          .toBuffer();
-        encodedWebp = encoded;
-        callback(new Blob([encoded], { type: "image/webp" }));
+      toBlob: vi.fn(async (callback: BlobCallback, type?: string) => {
+        expect(type).toBe("image/png");
+        encodedPng = await sharp(sourcePng).flatten({ background: "#fff" }).png().toBuffer();
+        const blobBytes = new Uint8Array(encodedPng.byteLength);
+        blobBytes.set(encodedPng);
+        callback(new Blob([blobBytes.buffer], { type: "image/png" }));
       }),
     } as unknown as HTMLCanvasElement;
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
@@ -284,10 +300,10 @@ describe("image compression browser adapter", () => {
       "qr_code",
     );
     expect(result.byteLength).toBeLessThanOrEqual(getImageCompressionPolicy("qr_code").maxBytes);
-    const webp = encodedWebp;
-    expect(webp).toBeDefined();
-    if (!webp) throw new Error("测试未产生 WebP 编码结果。");
-    const { data, info } = await sharp(webp)
+    expect(encodedPng).toBeDefined();
+    if (!encodedPng) throw new Error("测试未产生 PNG 编码结果。");
+
+    const { data, info } = await sharp(encodedPng)
       .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
@@ -300,86 +316,58 @@ describe("image compression browser adapter", () => {
     }
   });
 
-  it.each(["空 Blob", "错误 MIME", "抛出异常"])(
-    "toBlob %s 时回退到真实 WebP 的 toDataURL",
+  it.each(["空 Blob", "错误 MIME", "错误签名"])(
+    "toBlob %s 时失败且不调用 data URL fallback",
     async (failureMode) => {
-      const bitmap = { width: 128, height: 128, close: vi.fn() } as unknown as ImageBitmap;
-      vi.stubGlobal(
-        "createImageBitmap",
-        vi.fn(() => Promise.resolve(bitmap)),
-      );
-      const { canvas } = createMockCanvas(() => 100);
-      const toDataUrl = vi.fn(() => createDataUrl("image/webp"));
+      const bitmap = stubBitmap();
+      const blob =
+        failureMode === "空 Blob"
+          ? null
+          : failureMode === "错误 MIME"
+            ? createPngBlob(undefined, "image/jpeg")
+            : new Blob([new Uint8Array(16)], { type: "image/png" });
+      const { canvas } = createMockCanvas(blob);
+      const toDataUrl = vi.fn();
       Object.defineProperty(canvas, "toDataURL", {
         configurable: true,
         value: toDataUrl,
       });
-      const toBlob = vi.spyOn(canvas, "toBlob");
-      if (failureMode === "空 Blob") {
-        toBlob.mockImplementation((callback) => {
-          callback(null);
-        });
-      } else if (failureMode === "错误 MIME") {
-        toBlob.mockImplementation((callback) => {
-          callback(new Blob([WEBP_1X1], { type: "image/png" }));
-        });
-      } else {
-        toBlob.mockImplementation(() => {
-          throw new Error("toBlob failed");
-        });
-      }
       vi.spyOn(document, "createElement").mockReturnValue(canvas);
 
-      const result = await compressImage(
-        new File(["png"], "logo.png", { type: "image/png" }),
-        "logo",
-      );
-
-      expect(result.blob.type).toBe("image/webp");
-      expect(result.byteLength).toBe(WEBP_1X1.byteLength);
-      expect(toDataUrl).toHaveBeenCalledWith("image/webp", 0.85);
+      await expect(
+        compressImage(new File(["png"], "logo.png", { type: "image/png" }), "logo"),
+      ).rejects.toMatchObject({ code: "ENCODE_UNSUPPORTED" });
+      expect(canvas.toBlob).toHaveBeenCalledOnce();
+      expect(toDataUrl).not.toHaveBeenCalled();
+      expect(createObjectUrl).not.toHaveBeenCalled();
+      expect(bitmap.close).toHaveBeenCalledOnce();
     },
   );
 
-  it.each([
-    { label: "PNG MIME", dataUrl: createDataUrl("image/png") },
-    {
-      label: "WebP MIME 但 PNG 字节",
-      dataUrl: createDataUrl("image/webp", Uint8Array.from([0x89, 0x50, 0x4e, 0x47])),
-    },
-  ])("拒绝 toDataURL 的 $label 伪装结果", async ({ dataUrl }) => {
-    const bitmap = { width: 128, height: 128, close: vi.fn() } as unknown as ImageBitmap;
-    vi.stubGlobal(
-      "createImageBitmap",
-      vi.fn(() => Promise.resolve(bitmap)),
-    );
-    const { canvas } = createMockCanvas(() => 100);
-    vi.spyOn(canvas, "toBlob").mockImplementation((callback) => {
-      callback(null);
-    });
-    Object.defineProperty(canvas, "toDataURL", {
-      configurable: true,
-      value: vi.fn(() => dataUrl),
-    });
+  it("PNG 单次编码超过头像上限时失败且不生成预览", async () => {
+    const bitmap = stubBitmap(200, 200);
+    const policy = getImageCompressionPolicy("logo");
+    const { canvas } = createMockCanvas(createPngBlob(policy.maxBytes + 1));
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
 
     await expect(
-      compressImage(new File(["png"], "logo.png", { type: "image/png" }), "logo"),
-    ).rejects.toMatchObject({ code: "ENCODE_UNSUPPORTED" });
+      compressImage(new File(["x"], "logo.jpg", { type: "image/jpeg" }), "logo"),
+    ).rejects.toMatchObject({ code: "OUTPUT_TOO_LARGE" });
+    expect(canvas.toBlob).toHaveBeenCalledOnce();
     expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(bitmap.close).toHaveBeenCalledOnce();
   });
 
-  it("压缩后的最低质量仍超限时给出可见错误且不生成预览", async () => {
-    const bitmap = { width: 200, height: 200, close: vi.fn() } as unknown as ImageBitmap;
-    vi.stubGlobal(
-      "createImageBitmap",
-      vi.fn(() => Promise.resolve(bitmap)),
-    );
-    const { canvas } = createMockCanvas(() => 500 * 1024);
+  it("PNG 单次编码超过二维码上限时失败且不生成预览", async () => {
+    stubBitmap(2000, 1000);
+    const policy = getImageCompressionPolicy("qr_code");
+    const { canvas } = createMockCanvas(createPngBlob(policy.maxBytes + 1));
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
 
-    const promise = compressImage(new File(["x"], "logo.jpg", { type: "image/jpeg" }), "logo");
-    await expect(promise).rejects.toMatchObject({ code: "OUTPUT_TOO_LARGE" });
+    await expect(
+      compressImage(new File(["x"], "qr.png", { type: "image/png" }), "qr_code"),
+    ).rejects.toMatchObject({ code: "OUTPUT_TOO_LARGE" });
+    expect(canvas.toBlob).toHaveBeenCalledOnce();
     expect(createObjectUrl).not.toHaveBeenCalled();
   });
 

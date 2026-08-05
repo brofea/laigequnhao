@@ -8,11 +8,7 @@ import {
 } from "../data/fixtures";
 import { fetchPublicConfig } from "@/features/groups/api";
 import type { PendingAdminImages } from "@/features/admin/pending-images";
-import {
-  compressImage,
-  ImageCompressionError,
-  revokeImagePreview,
-} from "@/shared/browser/image-compression";
+import { compressImage, revokeImagePreview } from "@/shared/browser/image-compression";
 import { useDelayedLoading } from "@/shared/composables/useDelayedLoading";
 import Badge from "./Badge.vue";
 import Button from "./Button.vue";
@@ -279,15 +275,25 @@ async function readImage(event: Event, method?: JoinMethod) {
       avatarRemoved.value = false;
       uploadMessage.value = "头像已准备好，保存时上传。";
     }
-  } catch (error) {
-    if (error instanceof ImageCompressionError) {
-      uploadMessage.value = error.message;
+  } catch {
+    if (!isCurrentImageRequest(requestKey, requestVersion)) return;
+
+    if (method) {
+      pendingQrBlobs.delete(method.id);
+      replaceJoinPreview(method, undefined);
     } else {
-      uploadMessage.value = "图片处理失败，请换一张图片重试。";
+      pendingLogoBlob.value = null;
+      replaceAvatarPreview(null);
     }
+
+    const toastMessage = method ? "图像压缩失败，请考虑裁剪图像" : "图像压缩失败";
+    uploadMessage.value = toastMessage;
+    emit("toast", toastMessage);
   } finally {
-    uploading.value = false;
-    if (activeUploadKey.value === requestKey) activeUploadKey.value = null;
+    if (isCurrentImageRequest(requestKey, requestVersion)) {
+      uploading.value = false;
+      if (activeUploadKey.value === requestKey) activeUploadKey.value = null;
+    }
   }
 }
 
@@ -394,7 +400,11 @@ function save() {
         <div>
           <strong>群组头像</strong>
           <p>
-            {{ props.publicMode ? "可上传图片作为群组头像。" : "支持替换、移除或保留缺失占位。" }}
+            {{
+              props.publicMode
+                ? "原图支持 PNG、JPEG 或 WebP，提交时转为 PNG（最大 128KB）。"
+                : "原图支持 PNG、JPEG 或 WebP，保存时转为 PNG（最大 128KB）。"
+            }}
           </p>
         </div>
         <div class="admin-edit-inline-actions">
@@ -414,7 +424,7 @@ function save() {
             ref="avatarInput"
             class="app-sr-only"
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
             aria-label="上传群组头像"
             @change="readImage"
           />
@@ -556,7 +566,7 @@ function save() {
               >
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/webp"
+                  accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
                   :disabled="uploading || isDisabled"
                   :aria-label="`上传${method.label}`"
                   @change="readImage($event, method)"
@@ -565,7 +575,7 @@ function save() {
                 <Icon v-else name="upload" size="16" />
                 <span class="app-button__label">上传图片</span>
               </label>
-              <small>最大上传 5MB 图片，支持多种格式。</small>
+              <small>原图支持 PNG、JPEG 或 WebP，保存时转为 PNG，最大 1MB。</small>
             </div>
             <p v-else class="table-muted">公开投稿不支持二维码上传。</p>
           </template>
@@ -659,8 +669,10 @@ function save() {
         :disabled="props.disabled || isBusy"
         :aria-busy="isBusy ? 'true' : undefined"
         @click="cancel"
-        >取消</Button
-      ><Button
+      >
+        取消
+      </Button>
+      <Button
         variant="normal"
         type="submit"
         icon="check"

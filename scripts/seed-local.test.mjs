@@ -78,24 +78,24 @@ function sampleSeedInputs() {
   const qrCodes = new Array(groups.length).fill(null);
   logos[0] = {
     id: "00000000-0000-4000-8000-000000000001",
-    r2Key: "logo/00000000-0000-4000-8000-000000000001.webp",
-    publicUrl: "http://localhost:8787/logo/00000000-0000-4000-8000-000000000001.webp",
+    r2Key: "logo/00000000-0000-4000-8000-000000000001.png",
+    publicUrl: "http://localhost:8787/logo/00000000-0000-4000-8000-000000000001.png",
     width: 128,
     height: 128,
     byteLength: 1000,
   };
   logos[1] = {
     id: "00000000-0000-4000-8000-000000000002",
-    r2Key: "logo/00000000-0000-4000-8000-000000000002.webp",
-    publicUrl: "http://localhost:8787/logo/00000000-0000-4000-8000-000000000002.webp",
+    r2Key: "logo/00000000-0000-4000-8000-000000000002.png",
+    publicUrl: "http://localhost:8787/logo/00000000-0000-4000-8000-000000000002.png",
     width: 128,
     height: 96,
     byteLength: 900,
   };
   qrCodes[0] = {
     id: "00000000-0000-4000-8000-000000000003",
-    r2Key: "qr_code/00000000-0000-4000-8000-000000000003.webp",
-    publicUrl: "http://localhost:8787/qr_code/00000000-0000-4000-8000-000000000003.webp",
+    r2Key: "qr_code/00000000-0000-4000-8000-000000000003.png",
+    publicUrl: "http://localhost:8787/qr_code/00000000-0000-4000-8000-000000000003.png",
     width: 1024,
     height: 576,
     byteLength: 200000,
@@ -117,9 +117,9 @@ test("生成 SQL 中 assets 写入为幂等 upsert，且不抛主键冲突", () 
   stagedDb.exec(SCHEMA_SQL);
   stagedDb.exec(
     "INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, created_at, updated_at) VALUES " +
-      "('00000000-0000-4000-8000-000000000001', 'logo/00000000-0000-4000-8000-000000000001.webp', 'logo', 'image/webp', 1000, 128, 128, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'), " +
-      "('00000000-0000-4000-8000-000000000002', 'logo/00000000-0000-4000-8000-000000000002.webp', 'logo', 'image/webp', 900, 128, 96, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'), " +
-      "('00000000-0000-4000-8000-000000000003', 'qr_code/00000000-0000-4000-8000-000000000003.webp', 'qr_code', 'image/webp', 200000, 1024, 576, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+      "('00000000-0000-4000-8000-000000000001', 'logo/00000000-0000-4000-8000-000000000001.png', 'logo', 'image/png', 1000, 128, 128, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'), " +
+      "('00000000-0000-4000-8000-000000000002', 'logo/00000000-0000-4000-8000-000000000002.png', 'logo', 'image/png', 900, 128, 96, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'), " +
+      "('00000000-0000-4000-8000-000000000003', 'qr_code/00000000-0000-4000-8000-000000000003.png', 'qr_code', 'image/png', 200000, 1024, 576, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
   );
   stagedDb.exec(sql);
   const assets = stagedDb.prepare("SELECT id, status, ref_count FROM assets ORDER BY id").all();

@@ -1,0 +1,5 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"PNG 会同时改变前端压缩、共享契约、Worker 校验、R2/D1 元数据、投稿和 seed，需要按跨层数据流检查契约一致性。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"图片用途限制、Content-Type、文件名和错误映射在多层重复，实施前需要确认唯一策略源和 helper 复用边界。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端压缩失败 toast、预览 URL 清理、组件状态和测试必须符合前端质量规范。"}
+{"file":".trellis/spec/backend/api-guidelines.md","reason":"管理员资源上传、公开投稿和资源读取的 PNG MIME、错误信封和请求体限制必须符合 API 契约。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"D1 assets 的 Content-Type 默认值、预发布清空、R2/D1 资源生命周期和迁移边界需要按数据库规范执行。"}

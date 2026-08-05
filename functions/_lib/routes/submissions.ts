@@ -5,6 +5,7 @@ import {
   SUBMISSION_LOGO_FORM_FIELD,
   SUBMISSION_MULTIPART_MAX_BYTES,
 } from "@shared/contracts/submission";
+import { ASSET_CONTENT_TYPE } from "@shared/contracts/asset";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createGroupRepository } from "../repositories/group-repository";
 import { createRateLimitRepository } from "../repositories/rate-limit-repository";
@@ -14,7 +15,7 @@ import {
   type ValidatedSubmissionLogo,
 } from "../services/submission-service";
 import { createR2Adapter } from "../adapters/r2-adapter";
-import { validateWebpUpload } from "../services/image-validation";
+import { ImageValidationError, validatePngUpload } from "../services/image-validation";
 import { dependencyUnavailable } from "../api-error";
 import { getSubmissionLimitPerHour } from "../env";
 import type { Env } from "../env";
@@ -25,6 +26,7 @@ export const submissionsRoute = new Hono<{ Bindings: Env; Variables: Vars }>();
 type ParsedSubmission = {
   payload: unknown;
   logoBytes?: Uint8Array;
+  logoContentType?: string;
 };
 
 function validationError(
@@ -155,6 +157,7 @@ async function parseRequest(
   }
 
   let logoBytes: Uint8Array | undefined;
+  let logoContentType: string | undefined;
   if (fileEntries.length === 1) {
     const [field, value] = fileEntries[0]!;
     if (field !== SUBMISSION_LOGO_FORM_FIELD && field !== "file") {
@@ -163,10 +166,11 @@ async function parseRequest(
       });
     }
 
+    logoContentType = value.type.toLowerCase();
     logoBytes = new Uint8Array(await value.arrayBuffer());
   }
 
-  return { payload, logoBytes };
+  return { payload, logoBytes, logoContentType };
 }
 
 function imageValidationError(requestId: string, error: unknown): Response {
@@ -184,7 +188,7 @@ function imageValidationError(requestId: string, error: unknown): Response {
           code: code === "UNSUPPORTED_MEDIA_TYPE" ? "UNSUPPORTED_MEDIA_TYPE" : "VALIDATION_FAILED",
           message:
             code === "UNSUPPORTED_MEDIA_TYPE"
-              ? "Logo must be a valid WebP image."
+              ? "Logo must be a valid PNG image."
               : "Logo image metadata is invalid.",
         },
         requestId,
@@ -224,7 +228,14 @@ submissionsRoute.post("/", async (c) => {
   let logo: ValidatedSubmissionLogo | undefined;
   if (parsedRequest.logoBytes) {
     try {
-      const validated = validateWebpUpload(parsedRequest.logoBytes, "logo");
+      if (parsedRequest.logoContentType !== ASSET_CONTENT_TYPE) {
+        throw new ImageValidationError(
+          "UNSUPPORTED_MEDIA_TYPE",
+          415,
+          "Logo 文件 MIME 类型必须是 image/png。",
+        );
+      }
+      const validated = validatePngUpload(parsedRequest.logoBytes, "logo");
       logo = {
         bytes: validated.bytes,
         width: validated.width,

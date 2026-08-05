@@ -1,6 +1,6 @@
 import { createR2Adapter, type R2Adapter } from "../adapters/r2-adapter";
 import type { Env } from "../env";
-import type { AdminAssetDto, AssetInfo } from "@shared/contracts/asset";
+import { ASSET_CONTENT_TYPE, type AdminAssetDto, type AssetInfo } from "@shared/contracts/asset";
 import type { ValidatedImageUpload } from "./image-validation";
 
 // ─── 内部行类型 ──────────────────────────────────────────
@@ -27,7 +27,7 @@ function mapToAdminDto(row: AssetRow, publicUrl: string): AdminAssetDto {
     id: row.id,
     purpose: row.purpose as AdminAssetDto["purpose"],
     r2Key: row.r2_key,
-    contentType: "image/webp" as const,
+    contentType: ASSET_CONTENT_TYPE,
     byteLength: row.byte_length,
     width: row.width,
     height: row.height,
@@ -109,14 +109,14 @@ export function createAssetService(
 
       const byteLength = bytes.byteLength;
       const id = crypto.randomUUID();
-      const key = `${uploadPurpose}/${id}.webp`;
+      const key = `${uploadPurpose}/${id}.png`;
 
       // 1. 先写 D1 staged 行，避免出现无法追踪的 R2 孤儿。
       try {
         await db
           .prepare(
             `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status)
-             VALUES (?, ?, ?, 'image/webp', ?, ?, ?, 'staged')`,
+             VALUES (?, ?, ?, 'image/png', ?, ?, ?, 'staged')`,
           )
           .bind(id, key, uploadPurpose, byteLength, width, height)
           .run();
@@ -128,7 +128,7 @@ export function createAssetService(
       try {
         // Copy the view so a caller cannot accidentally upload bytes outside
         // the validated Uint8Array slice.
-        await r2Adapter.upload(key, bytes.slice().buffer);
+        await r2Adapter.upload(key, bytes.slice().buffer, ASSET_CONTENT_TYPE);
       } catch {
         try {
           await db
@@ -153,7 +153,7 @@ export function createAssetService(
         id,
         purpose: uploadPurpose,
         r2Key: key,
-        contentType: "image/webp" as const,
+        contentType: ASSET_CONTENT_TYPE,
         byteLength,
         width,
         height,

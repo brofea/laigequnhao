@@ -7,7 +7,7 @@
 - 仅挂载在 `/api/v1` 下、由 Worker `fetch` 入口承载的 Hono 应用
 - 与前端共享的 Zod schema
 - 直接使用 D1 预处理语句和有序 SQL migration
-- 通过 R2 binding 存储最终 WebP 资源
+- 通过 R2 binding 存储最终 PNG 资源
 - Web Crypto 和 Web Standard API
 - Cloudflare Workers Vitest 集成
 

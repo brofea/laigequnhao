@@ -11,7 +11,7 @@ import {
  * 公开投稿 multipart 请求的硬上限。
  *
  * 这是请求封装（JSON、边界和单张最终文件）的上限，不是原图选择上限；
- * 最终 WebP 的用途专属上限仍由图片校验器和资源契约分别执行。
+ * 最终 PNG 的用途专属上限仍由图片校验器和资源契约分别执行。
  */
 export const SUBMISSION_MULTIPART_MAX_BYTES = ASSET_UPLOAD_REQUEST_MAX_BYTES;
 

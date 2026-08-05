@@ -77,7 +77,7 @@ export function createSubmissionService(
       }
 
       const resourceId = crypto.randomUUID();
-      const resourceKey = `logo/submission/${resourceId}.webp`;
+      const resourceKey = `logo/submission/${resourceId}.png`;
       // Copy the view before handing it to R2 so a validator-backed subarray can
       // never upload bytes outside the validated file range.
       const uploadBytes = logo.bytes.slice();
@@ -92,7 +92,7 @@ export function createSubmissionService(
       };
 
       try {
-        await r2Adapter.upload(resourceKey, uploadBytes.buffer as ArrayBuffer, "image/webp");
+        await r2Adapter.upload(resourceKey, uploadBytes.buffer as ArrayBuffer, "image/png");
       } catch {
         throw new SubmissionDependencyError("R2_WRITE_FAILED");
       }

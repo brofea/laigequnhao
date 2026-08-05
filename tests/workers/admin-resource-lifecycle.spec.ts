@@ -287,12 +287,12 @@ describe("QR resource lifecycle", () => {
 
   it("counts only successful retry cleanup when R2 initially fails", async () => {
     const id = crypto.randomUUID();
-    const r2Key = `qr_code/${id}.webp`;
+    const r2Key = `qr_code/${id}.png`;
     await env.R2.put(r2Key, new Uint8Array([1, 2, 3]));
     await env.DB.prepare(
       `INSERT INTO assets
          (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count)
-       VALUES (?, ?, 'qr_code', 'image/webp', 3, 1, 1, 'delete_failed', 0)`,
+       VALUES (?, ?, 'qr_code', 'image/png', 3, 1, 1, 'delete_failed', 0)`,
     )
       .bind(id, r2Key)
       .run();

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import app from "../../functions/_lib/app";
 import type { AdminGroupDto } from "../../shared/contracts/group";
-import { WEBP_1X1 } from "./fixtures";
+import { PNG_1X1 } from "./fixtures";
 
 export interface UploadedAsset {
   id: string;
@@ -59,7 +59,7 @@ export function apiFetch(
 
 export async function uploadQrAsset(authHeaders: Record<string, string>): Promise<UploadedAsset> {
   const formData = new FormData();
-  formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "qr.webp");
+  formData.append("file", new Blob([PNG_1X1], { type: "image/png" }), "qr.png");
   formData.append("purpose", "qr_code");
   const response = await apiFetch(authHeaders, "POST", "/api/v1/admin/assets", formData);
   const json = (await response.json()) as { ok: boolean; data: UploadedAsset };

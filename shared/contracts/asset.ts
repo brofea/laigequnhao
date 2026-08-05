@@ -7,30 +7,27 @@ export type AssetPurpose = z.infer<typeof assetPurposeSchema>;
 export const ASSET_SOURCE_MAX_BYTES = 5 * 1024 * 1024;
 
 /** 管理资源 multipart 请求的总字节上限，必须大于二维码最终字节上限及表单边界开销。 */
-export const ASSET_UPLOAD_REQUEST_MAX_BYTES = 512 * 1024;
+export const ASSET_UPLOAD_REQUEST_MAX_BYTES = 1_200 * 1024;
+
+/** 所有最终上传资源的固定 MIME 类型。 */
+export const ASSET_CONTENT_TYPE = "image/png" as const;
 
 export const ASSET_POLICIES = {
   logo: {
     purpose: "logo",
-    maxBytes: 80 * 1024,
+    maxBytes: 128 * 1024,
     maxDimension: 128,
     maxPixels: 128 * 128,
     preserveAlpha: true,
     opaque: false,
-    startQuality: 85,
-    minQuality: 45,
-    qualityStep: 20,
   },
   qr_code: {
     purpose: "qr_code",
-    maxBytes: 400 * 1024,
+    maxBytes: 1024 * 1024,
     maxDimension: 1024,
     maxPixels: 1024 * 1024,
     preserveAlpha: false,
     opaque: true,
-    startQuality: 95,
-    minQuality: 55,
-    qualityStep: 10,
   },
 } as const satisfies Record<
   AssetPurpose,
@@ -41,9 +38,6 @@ export const ASSET_POLICIES = {
     maxPixels: number;
     preserveAlpha: boolean;
     opaque: boolean;
-    startQuality: number;
-    minQuality: number;
-    qualityStep: number;
   }
 >;
 
@@ -54,9 +48,6 @@ export const assetPurposePolicySchema = z.object({
   maxPixels: z.number().int().positive(),
   preserveAlpha: z.boolean(),
   opaque: z.boolean(),
-  startQuality: z.number().int().min(1).max(100),
-  minQuality: z.number().int().min(1).max(100),
-  qualityStep: z.number().int().positive(),
 });
 
 export type AssetPurposePolicy = (typeof ASSET_POLICIES)[AssetPurpose];
@@ -69,7 +60,7 @@ export function getAssetPolicy(purpose: AssetPurpose): AssetPurposePolicy {
 
 export const assetUploadMetaSchema = z.object({
   purpose: assetPurposeSchema,
-  contentType: z.literal("image/webp"),
+  contentType: z.literal(ASSET_CONTENT_TYPE),
   byteLength: z.number().int().positive(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
@@ -82,9 +73,6 @@ export const LOGO_CODE_MAX_BYTES = ASSET_SOURCE_MAX_BYTES;
 export const LOGO_MAX_BYTES = ASSET_POLICIES.logo.maxBytes;
 export const LOGO_MAX_DIMENSION = ASSET_POLICIES.logo.maxDimension;
 export const LOGO_MAX_PIXELS = ASSET_POLICIES.logo.maxPixels;
-export const LOGO_START_QUALITY = ASSET_POLICIES.logo.startQuality;
-export const LOGO_MIN_QUALITY = ASSET_POLICIES.logo.minQuality;
-export const LOGO_QUALITY_STEP = ASSET_POLICIES.logo.qualityStep;
 
 // ─── 二维码上传限制和压缩参数 ───────────────────────────────────────
 
@@ -92,9 +80,6 @@ export const QR_CODE_MAX_BYTES = ASSET_SOURCE_MAX_BYTES;
 export const QR_CODE_TARGET_BYTES = ASSET_POLICIES.qr_code.maxBytes;
 export const QR_CODE_MAX_DIMENSION = ASSET_POLICIES.qr_code.maxDimension;
 export const QR_CODE_MAX_PIXELS = ASSET_POLICIES.qr_code.maxPixels;
-export const QR_START_QUALITY = ASSET_POLICIES.qr_code.startQuality;
-export const QR_MIN_QUALITY = ASSET_POLICIES.qr_code.minQuality;
-export const QR_QUALITY_STEP = ASSET_POLICIES.qr_code.qualityStep;
 
 export const assetUploadLimitsSchema = z.union([
   z.object({
@@ -148,7 +133,7 @@ export const assetInfoSchema = z.object({
   id: z.string().uuid(),
   purpose: assetPurposeSchema,
   r2Key: z.string(),
-  contentType: z.literal("image/webp"),
+  contentType: z.literal(ASSET_CONTENT_TYPE),
   byteLength: z.number().int().positive(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
