@@ -83,6 +83,12 @@ test("筛选和排序变化回到第一页并同步 URL", async ({ page }) => {
   }
   await gotoAdmin(page, auth);
 
+  await expect(page.getByRole("searchbox", { name: "管理端搜索" })).toBeVisible();
+  await expect(page.locator(".admin-toolbar .app-field__spinner")).toHaveCount(0);
+  await expect(
+    page.getByRole("combobox", { name: "状态" }).locator(".app-field__spinner"),
+  ).toHaveCount(0);
+
   await page.getByRole("button", { name: "下一页" }).click();
   await expect(page).toHaveURL(/page=2/);
 
@@ -91,6 +97,10 @@ test("筛选和排序变化回到第一页并同步 URL", async ({ page }) => {
   await page.getByRole("option", { name: "已发布" }).click();
   await expect(page).toHaveURL(/page=1/);
   await expect(page.locator(".admin-summary")).toContainText("第 1 /");
+  await expect(page.locator(".admin-toolbar .app-field__spinner")).toHaveCount(0);
+  await expect(
+    page.getByRole("combobox", { name: "状态" }).locator(".app-field__spinner"),
+  ).toHaveCount(0);
 
   // 修改排序 → 回第一页
   await page.getByRole("button", { name: "标题" }).first().click();
@@ -244,6 +254,9 @@ test("版本冲突以 Toast 警告呈现且不覆盖", async ({ page }) => {
   await dialog.getByRole("button", { name: "保存修改" }).click();
 
   await expect(page.getByText("群组已被其他会话修改，请刷新后重试")).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("群组标题")).toHaveValue(`${title}-本地`);
+  await expect(dialog.getByRole("button", { name: "保存修改" })).toBeEnabled();
   const { status: verifyStatus, data } = await api(page, "GET", `/admin/${groupId}`);
   expect(verifyStatus).toBe(200);
   expect((data as { data: { title: string } }).data.title).toBe(title);

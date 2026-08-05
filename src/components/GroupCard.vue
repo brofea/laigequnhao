@@ -2,7 +2,9 @@
 import { ref, watch } from "vue";
 import type { DemoGroup } from "../data/fixtures";
 import Badge from "./Badge.vue";
+import Button from "./Button.vue";
 import Icon from "./Icon.vue";
+import Spinner from "./Spinner.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -75,24 +77,25 @@ function requestLike() {
           ># {{ tag }}</span
         >
       </span>
-      <button
+      <Button
         class="like-button"
         :class="{ 'like-button--active': props.group.liked }"
-        type="button"
         :aria-pressed="props.group.liked"
         :aria-label="
           props.group.liked
             ? `取消赞，当前 ${props.group.likes} 个赞`
             : `点赞，当前 ${props.group.likes} 个赞`
         "
-        :aria-busy="props.likeLoading || undefined"
-        :disabled="props.likeLoading"
+        :loading="props.likeLoading"
         @click.stop="requestLike"
       >
-        <span v-if="props.likeLoading" class="app-button__spinner" aria-hidden="true"></span>
-        <Icon v-else name="heart" size="16" />
+        <template #loading>
+          <Icon name="heart" size="16" />
+          <Spinner />
+        </template>
+        <Icon name="heart" size="16" />
         <span>{{ props.group.likes }}</span>
-      </button>
+      </Button>
     </span>
   </article>
 </template>

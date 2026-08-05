@@ -2,7 +2,6 @@
 import { computed, ref } from "vue";
 import type { DemoBoard, DemoGroup } from "../data/fixtures";
 import Button from "./Button.vue";
-import Icon from "./Icon.vue";
 import Input from "./Input.vue";
 
 const props = defineProps<{
@@ -46,7 +45,9 @@ function isFormBusy() {
 }
 
 function isActionDisabled(groupId?: string) {
-  return Boolean(props.disabled || props.busy || (props.addingGroupId && groupId));
+  return Boolean(
+    props.disabled || props.busy || (props.addingGroupId && groupId && !isAdding(groupId)),
+  );
 }
 
 function addLabel(title: string) {
@@ -78,7 +79,7 @@ function cancel() {
       @clear="query = ''"
     />
     <div v-if="normalizedQuery" class="board-group-search-results" role="listbox">
-      <button
+      <Button
         v-for="group in results"
         :key="group.id"
         class="board-group-search-result"
@@ -86,7 +87,10 @@ function cancel() {
         role="option"
         :aria-label="addLabel(group.title)"
         :disabled="isActionDisabled(group.id)"
-        :aria-busy="isAdding(group.id) || undefined"
+        variant="normal"
+        size="sm"
+        icon="plus"
+        :loading="isAdding(group.id)"
         @click="addGroup(group)"
       >
         <span
@@ -106,9 +110,7 @@ function cancel() {
           <span v-else>!</span>
         </span>
         <strong>{{ group.title }}</strong>
-        <span v-if="isAdding(group.id)" class="app-button__spinner" aria-hidden="true"></span>
-        <Icon v-else name="plus" size="16" />
-      </button>
+      </Button>
       <div v-if="!results.length" class="app-empty app-empty--compact">
         <strong>没有匹配的群组</strong><span>换一个群组名称再试试。</span>
       </div>
@@ -119,6 +121,7 @@ function cancel() {
         variant="quiet"
         type="button"
         :disabled="isFormBusy() || props.disabled"
+        :aria-busy="isFormBusy() ? 'true' : undefined"
         @click="cancel"
       >
         取消

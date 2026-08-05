@@ -105,15 +105,14 @@ onBeforeUnmount(() => {
       @click="toggle"
       @keydown="onKeydown"
     >
-      <span v-if="props.loading" class="app-field__spinner" aria-hidden="true"></span>
       <Icon
-        v-else-if="props.triggerIcon"
+        v-if="props.triggerIcon"
         class="app-select__trigger-icon"
         :name="props.triggerIcon"
         size="16"
       />
       <span>{{ selectedLabel() }}</span>
-      <Icon v-if="!props.loading" name="chevron-down" size="16" />
+      <Icon name="chevron-down" size="16" />
     </button>
     <div v-if="open" class="app-select__menu" role="listbox" :aria-label="props.label">
       <button

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { groupStatusLabels, groupStatusTones, type DemoGroup } from "../data/fixtures";
 import Badge from "./Badge.vue";
+import Button from "./Button.vue";
 import Icon from "./Icon.vue";
 
 export type AdminSortField = "title" | "status" | "tags" | "kind" | "likes" | "platform";
@@ -72,7 +73,11 @@ function isGroupBusy(groupId: string) {
 }
 
 function isDisabled(groupId?: string) {
-  return props.disabled || tableBusy() || (groupId ? isGroupBusy(groupId) : false);
+  return props.disabled || (groupId ? isGroupBusy(groupId) : false);
+}
+
+function isActionDisabled(groupId: string, action: AdminTableAction) {
+  return props.disabled || (isGroupBusy(groupId) && !isPending(groupId, action));
 }
 
 function sort(field: AdminSortField) {
@@ -120,11 +125,12 @@ function runAction(action: AdminTableAction, group: DemoGroup) {
             :class="column.className"
             :aria-sort="ariaSort(column.field)"
           >
-            <button
+            <Button
               type="button"
+              variant="quiet"
+              size="sm"
               class="admin-table__sort-button"
-              :disabled="isDisabled()"
-              :aria-busy="tableBusy() || undefined"
+              :disabled="props.disabled"
               @click="sort(column.field)"
             >
               <span>{{ column.label }}</span>
@@ -145,13 +151,17 @@ function runAction(action: AdminTableAction, group: DemoGroup) {
                     ? "升序"
                     : "降序"
               }}</span>
-            </button>
+            </Button>
           </th>
           <th scope="col" class="admin-table__actions">操作</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="group in props.groups" :key="group.id">
+        <tr
+          v-for="group in props.groups"
+          :key="group.id"
+          :aria-busy="isGroupBusy(group.id) || undefined"
+        >
           <th scope="row" class="admin-table__title">
             <span class="admin-table__name">{{ group.title }}</span
             ><span class="admin-table__subline">{{ group.id }}</span>
@@ -169,35 +179,31 @@ function runAction(action: AdminTableAction, group: DemoGroup) {
           <td class="admin-table__platform">{{ group.platform }}</td>
           <td class="admin-table__actions">
             <template v-if="props.recycleBin">
-              <button
+              <Button
                 class="table-link-button table-link-button--success"
                 type="button"
-                :disabled="isDisabled(group.id)"
-                :aria-busy="isPending(group.id, 'restore') || undefined"
+                variant="quiet"
+                size="sm"
+                :disabled="isActionDisabled(group.id, 'restore')"
+                :loading="isPending(group.id, 'restore')"
                 @click="runAction('restore', group)"
               >
-                <span
-                  v-if="isPending(group.id, 'restore')"
-                  class="app-button__spinner"
-                  aria-hidden="true"
-                ></span
-                ><Icon v-else name="check" size="14" />恢复
-              </button>
-              <button
+                <Icon name="check" size="14" />恢复
+              </Button>
+              <Button
                 class="table-link-button table-link-button--danger"
                 type="button"
-                :disabled="isDisabled(group.id)"
-                :aria-busy="isPending(group.id, 'purge') || undefined"
+                variant="quiet"
+                size="sm"
+                :disabled="isActionDisabled(group.id, 'purge')"
+                :loading="isPending(group.id, 'purge')"
                 @click="runAction('purge', group)"
               >
-                <span
-                  v-if="isPending(group.id, 'purge')"
-                  class="app-button__spinner"
-                  aria-hidden="true"
-                ></span
-                ><Icon v-else name="trash" size="14" />永久删除
-              </button>
-              <button
+                <Icon name="trash" size="14" />永久删除
+              </Button>
+              <Button
+                variant="quiet"
+                size="sm"
                 class="table-more-button"
                 type="button"
                 aria-label="更多操作"
@@ -205,32 +211,33 @@ function runAction(action: AdminTableAction, group: DemoGroup) {
                 @click="open(group)"
               >
                 <Icon name="more" size="17" />
-              </button>
+              </Button>
             </template>
             <template v-else>
-              <button
+              <Button
+                variant="quiet"
+                size="sm"
                 class="table-link-button"
                 type="button"
                 :disabled="isDisabled(group.id)"
                 @click="open(group)"
               >
                 <Icon name="edit" size="14" />编辑
-              </button>
-              <button
+              </Button>
+              <Button
                 class="table-link-button table-link-button--danger"
                 type="button"
-                :disabled="isDisabled(group.id)"
-                :aria-busy="isPending(group.id, 'remove') || undefined"
+                variant="quiet"
+                size="sm"
+                :disabled="isActionDisabled(group.id, 'remove')"
+                :loading="isPending(group.id, 'remove')"
                 @click="runAction('remove', group)"
               >
-                <span
-                  v-if="isPending(group.id, 'remove')"
-                  class="app-button__spinner"
-                  aria-hidden="true"
-                ></span
-                ><Icon v-else name="trash" size="14" />删除
-              </button>
-              <button
+                <Icon name="trash" size="14" />删除
+              </Button>
+              <Button
+                variant="quiet"
+                size="sm"
                 class="table-more-button"
                 type="button"
                 aria-label="更多操作"
@@ -238,7 +245,7 @@ function runAction(action: AdminTableAction, group: DemoGroup) {
                 @click="open(group)"
               >
                 <Icon name="more" size="17" />
-              </button>
+              </Button>
             </template>
           </td>
         </tr>

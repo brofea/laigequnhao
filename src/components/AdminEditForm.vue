@@ -13,10 +13,12 @@ import {
   ImageCompressionError,
   revokeImagePreview,
 } from "@/shared/browser/image-compression";
+import { useDelayedLoading } from "@/shared/composables/useDelayedLoading";
 import Badge from "./Badge.vue";
 import Button from "./Button.vue";
 import Icon from "./Icon.vue";
 import Select from "./Select.vue";
+import Spinner from "./Spinner.vue";
 
 export type AdminEditBusyAction = "save" | "delete" | "remove";
 
@@ -88,6 +90,8 @@ watch(
 );
 const uploadMessage = ref("");
 const uploading = ref(false);
+const { visualLoading: visualUploading } = useDelayedLoading(() => uploading.value);
+const activeUploadKey = ref<string | null>(null);
 const submissionLimitPerHour = ref<number | null>(null);
 const logoR2Key = ref<string | null>(props.group.logoR2Key ?? null);
 const avatarInput = ref<HTMLInputElement | null>(null);
@@ -247,6 +251,7 @@ async function readImage(event: Event, method?: JoinMethod) {
   }
   const requestKey = imageRequestKey(method);
   const requestVersion = nextImageRequestVersion(requestKey);
+  activeUploadKey.value = requestKey;
   uploading.value = true;
   uploadMessage.value = "正在处理图片…";
   try {
@@ -282,7 +287,12 @@ async function readImage(event: Event, method?: JoinMethod) {
     }
   } finally {
     uploading.value = false;
+    if (activeUploadKey.value === requestKey) activeUploadKey.value = null;
   }
+}
+
+function isVisualUploadLoading(method: JoinMethod) {
+  return visualUploading.value && activeUploadKey.value === imageRequestKey(method);
 }
 
 function removeAvatar() {
@@ -392,7 +402,7 @@ function save() {
             variant="normal"
             size="sm"
             :loading="uploading"
-            :disabled="uploading || isDisabled"
+            :disabled="props.disabled || isBusy"
             @click="openAvatarPicker"
           >
             上传头像
@@ -434,20 +444,20 @@ function save() {
           label="群组性质"
           :options="kindOptions"
           :loading="isBusy"
-          :disabled="isDisabled"
+          :disabled="props.disabled"
         /><Select
           v-model="draft.platform"
           label="平台"
           :options="platformOptions"
           :loading="isBusy"
-          :disabled="isDisabled"
+          :disabled="props.disabled"
         /><Select
           v-if="!props.publicMode"
           v-model="draft.status"
           label="状态"
           :options="statusOptions"
           :loading="isBusy"
-          :disabled="isDisabled"
+          :disabled="props.disabled"
         />
         <div v-else class="public-submit-status" aria-label="审核状态">
           <span class="app-field__label">状态</span>
@@ -515,7 +525,7 @@ function save() {
           trigger-icon="plus"
           :options="visibleJoinMethodOptions"
           :loading="isBusy"
-          :disabled="isDisabled"
+          :disabled="props.disabled"
           @update:model-value="chooseJoinMethod"
         />
       </div>
@@ -540,7 +550,10 @@ function save() {
                 />
                 <span v-else>二维码图片占位</span>
               </div>
-              <label class="app-button app-button--normal app-button--sm admin-edit-upload-button">
+              <label
+                class="app-button app-button--normal app-button--sm admin-edit-upload-button"
+                :aria-busy="uploading ? 'true' : undefined"
+              >
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
@@ -548,9 +561,9 @@ function save() {
                   :aria-label="`上传${method.label}`"
                   @change="readImage($event, method)"
                 />
-                <span v-if="uploading" class="app-button__spinner" aria-hidden="true"></span>
+                <Spinner v-if="isVisualUploadLoading(method)" class="app-field__spinner" />
                 <Icon v-else name="upload" size="16" />
-                <span class="app-button__label">{{ uploading ? "处理中" : "上传图片" }}</span>
+                <span class="app-button__label">上传图片</span>
               </label>
               <small>最大上传 5MB 图片，支持多种格式。</small>
             </div>
@@ -635,19 +648,24 @@ function save() {
         tone="danger"
         :icon="props.removable ? 'arrow-right' : 'trash'"
         :loading="props.removable ? isRemoveBusy : isDeleteBusy"
-        :disabled="isDisabled"
+        :disabled="props.disabled || (isBusy && !(props.removable ? isRemoveBusy : isDeleteBusy))"
         @click="requestDestructiveAction"
       >
         {{ props.removable ? "移除群组" : "删除群组" }}
       </Button>
       <span class="admin-edit-form__footer-spacer"></span>
-      <Button variant="quiet" :disabled="isDisabled" @click="cancel">取消</Button
+      <Button
+        variant="quiet"
+        :disabled="props.disabled || isBusy"
+        :aria-busy="isBusy ? 'true' : undefined"
+        @click="cancel"
+        >取消</Button
       ><Button
         variant="normal"
         type="submit"
         icon="check"
         :loading="isSaveBusy"
-        :disabled="isDisabled"
+        :disabled="props.disabled || (isBusy && !isSaveBusy)"
       >
         {{ props.publicMode ? "提交群组" : "保存修改" }}
       </Button>

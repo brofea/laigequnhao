@@ -1,0 +1,6 @@
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"逐项核对通用 Button、Select、原生异步按钮、Dialog 和所有 Loading/Disabled/aria-busy 状态是否符合统一契约。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核 Loading 普通指针、业务 Disabled 禁止指针、150ms 防闪烁、无障碍属性和视觉回归。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"复核组件测试、失败重试、重复提交、快慢请求和 Playwright Dialog 生命周期覆盖是否证明验收条件。"}
+{"file":".trellis/tasks/08-05-button-loading-disabled-state/prd.md","reason":"按 R1–R8 和 AC 逐项验收，不以测试数量代替对状态语义、样式优先级和全局按钮审计的证明。"}
+{"file":".trellis/tasks/08-05-button-loading-disabled-state/design.md","reason":"检查实现是否采用统一忙碌状态优先级、延迟 Spinner 和 Dialog busy 传播，而不是局部修复或继续混用 disabled。"}
+{"file":".trellis/tasks/08-05-button-loading-disabled-state/implement.md","reason":"复核执行顺序、运行时按钮覆盖范围、规范更新和质量门禁是否完整。"}

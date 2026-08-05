@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/architecture.md","reason":"约束 Button、表单、列表、Dialog 与 composable 之间的状态归属和依赖方向，避免把请求 Loading 当成业务 Disabled。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"定义 loading/disabled/aria-busy、原生按钮、Dialog 生命周期和异步成功/失败反馈契约。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"定义无障碍、CSS 状态优先级、响应式交互和组件/E2E 回归质量门禁。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"规定 Vitest、Vue Test Utils、Playwright 的分层验证，以及快请求/慢请求/失败重试的交互测试策略。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"约束 Spinner 延迟、按钮状态标识和重复提交防护的复用，避免通用 Button 与原生行级按钮产生分叉实现。"}

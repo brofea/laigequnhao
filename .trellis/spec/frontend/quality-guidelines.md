@@ -30,6 +30,14 @@ pnpm build
 - 永久删除等破坏性 Dialog 必须断言响应返回前仍可见、确认按钮处于 Pending、失败后可重试，成功后才关闭。
 - 失败测试不得只断言请求失败；必须检查用户可见的 warning/danger Toast 或 inline 错误，且不存在误报成功提示。
 
+### Button 状态回归门禁
+
+- 组件测试必须覆盖 `loading`/`disabled` 分离、同一渲染周期锁定、`aria-busy`、普通 Loading 指针和业务 Disabled 禁止指针。
+- 使用真实延迟状态测试 149ms 不挂载 Spinner、约 150ms 挂载 Spinner、提前完成清理 Spinner，以及重复 Loading 周期不继承旧状态；不能只测试 CSS 动画延迟。
+- 列表读取 loading 只能断言结果容器的忙碌语义，不得把它作为搜索、状态筛选、回收站、分页或无关业务 Button 的 Disabled 来源。
+- 点赞必须断言请求完成前数字/`aria-pressed` 不变，慢请求才出现数字位置 Spinner，成功 Toast/权威数字状态和失败 Toast 均可见；不得以乐观更新或回滚代替该契约。
+- Dialog 失败测试必须断言请求期间仍可见、确认 Button 只发出一次请求、失败后上下文保留且可重试，成功后才按反馈矩阵关闭或展示结果。
+
 ## 复核检查表
 
 - Props 和发出的事件有类型约束。

@@ -22,8 +22,14 @@ select {
 button {
   cursor: pointer;
 }
-button:disabled {
+button:disabled:not([aria-busy="true"]) {
   cursor: not-allowed;
+}
+button[aria-busy="true"]:disabled {
+  cursor: pointer;
+}
+[aria-busy="true"] button:disabled {
+  cursor: pointer;
 }
 
 .app-shell {
@@ -331,8 +337,16 @@ h3 {
   transform: translateY(0);
   box-shadow: var(--shadow-pressed);
 }
-.app-button:disabled {
+.app-button:disabled:not([aria-busy="true"]) {
   opacity: 0.52;
+}
+.app-button[aria-busy="true"]:disabled {
+  opacity: 1;
+  cursor: pointer;
+}
+[aria-busy="true"] .app-button:disabled {
+  opacity: 1;
+  cursor: pointer;
 }
 .app-button--normal {
   border-color: transparent;
@@ -810,8 +824,8 @@ h3 {
   background: transparent;
   font-size: 0.75rem;
 }
-.like-button:hover,
-.like-button--active {
+.like-button:hover:not(:disabled),
+.like-button--active:not(:disabled) {
   border-color: color-mix(in srgb, var(--danger) 30%, transparent);
   color: var(--danger);
   background: var(--danger-soft);
@@ -1278,7 +1292,7 @@ h3 {
   font-size: 0.72rem;
   font-weight: 760;
 }
-.table-link-button:hover {
+.table-link-button:hover:not(:disabled) {
   border-color: var(--border-subtle);
   background: var(--surface-muted);
 }
@@ -2224,9 +2238,14 @@ h3 {
   color: var(--text-primary);
   background: var(--surface-muted);
 }
-.table-icon-button:disabled {
+.table-icon-button:disabled:not([aria-busy="true"]) {
   color: var(--text-muted);
   opacity: 0.45;
+}
+[aria-busy="true"] .table-icon-button:disabled {
+  color: var(--text-secondary);
+  opacity: 1;
+  cursor: pointer;
 }
 .token-detail-preview {
   display: grid;

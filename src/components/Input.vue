@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Icon from "./Icon.vue";
 
-type InputStatus = "default" | "error" | "loading";
+type InputStatus = "default" | "error";
 
 const props = withDefaults(
   defineProps<{
@@ -33,13 +33,8 @@ const emit = defineEmits<{
         :aria-invalid="props.status === 'error'"
         @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       />
-      <span
-        v-if="props.status === 'loading'"
-        class="app-field__spinner"
-        aria-label="搜索中"
-      ></span>
       <button
-        v-else-if="props.clearable && props.modelValue"
+        v-if="props.clearable && props.modelValue"
         class="app-field__clear"
         type="button"
         aria-label="清除搜索"

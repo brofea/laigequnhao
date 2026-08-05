@@ -315,17 +315,17 @@ function useTag(tag: string) {
 async function toggleLike(group: DemoGroup) {
   const actionKey = `like:${group.id}`;
   if (!pendingActions.start(actionKey)) return;
-  const nextLiked = !group.liked;
   try {
-    const nextCount = await likedGroups.toggle(group.id, group.liked);
-    if (nextCount === null) {
+    const result = await likedGroups.toggle(group.id, group.liked);
+    if (result === null) {
       showToast("点赞失败，请稍后重试", "warning");
       return;
     }
     localLikeState.value = {
       ...localLikeState.value,
-      [group.id]: { liked: nextLiked, likes: nextCount },
+      [group.id]: { liked: result.liked, likes: result.likeCount },
     };
+    showToast(result.liked ? "点赞成功" : "已取消点赞", "success");
   } finally {
     pendingActions.finish(actionKey);
   }
@@ -990,13 +990,7 @@ function removeScrollListener() {
             label="搜索群组"
             placeholder="试试“设计”、城市或兴趣关键词"
             clearable
-            :status="
-              publicDirectory.loading.value
-                ? 'loading'
-                : publicDirectory.error.value
-                  ? 'error'
-                  : 'default'
-            "
+            :status="publicDirectory.error.value ? 'error' : 'default'"
             :help-text="publicDirectory.error.value ?? ''"
             @update:model-value="setSearch"
             @clear="setSearch('')"
@@ -1160,13 +1154,7 @@ function removeScrollListener() {
                   label="管理端搜索"
                   placeholder="按标题查找"
                   clearable
-                  :status="
-                    adminDirectory.loading.value
-                      ? 'loading'
-                      : adminDirectory.error.value
-                        ? 'error'
-                        : 'default'
-                  "
+                  :status="adminDirectory.error.value ? 'error' : 'default'"
                   :help-text="adminDirectory.error.value ?? ''"
                   @update:model-value="setAdminSearch"
                   @clear="setAdminSearch('')"
@@ -1180,15 +1168,11 @@ function removeScrollListener() {
                     { value: '待审核', label: '待审核' },
                     { value: '已拒绝', label: '已拒绝' },
                   ]"
-                  :loading="adminDirectory.loading.value"
-                  :disabled="adminDirectory.loading.value"
                 /><Button
                   variant="normal"
                   size="md"
                   icon="trash"
                   :aria-pressed="showRecycleBin"
-                  :loading="adminDirectory.loading.value"
-                  :disabled="adminDirectory.loading.value"
                   @click="toggleRecycleBin"
                 >
                   回收站
@@ -1226,33 +1210,32 @@ function removeScrollListener() {
                   icon="arrow-left"
                   icon-only
                   aria-label="上一页"
-                  :disabled="adminDirectory.loading.value || adminPage <= 1"
+                  :disabled="adminPage <= 1"
                   @click="adminDirectory.goToPage(adminPage - 1)"
                 /><span class="pagination__current">{{ adminPage }}</span
-                ><button
+                ><Button
+                  variant="quiet"
+                  size="sm"
                   v-if="adminTotalPages > adminPage"
                   type="button"
-                  :disabled="adminDirectory.loading.value"
+                  :disabled="false"
                   @click="adminDirectory.goToPage(adminPage + 1)"
-                >
-                  {{ adminPage + 1 }}</button
-                ><button
+                  >{{ adminPage + 1 }}</Button
+                ><Button
+                  variant="quiet"
+                  size="sm"
                   v-if="adminTotalPages > adminPage + 1"
                   type="button"
-                  :disabled="adminDirectory.loading.value"
+                  :disabled="false"
                   @click="adminDirectory.goToPage(adminPage + 2)"
-                >
-                  {{ adminPage + 2 }}</button
+                  >{{ adminPage + 2 }}</Button
                 ><Button
                   variant="quiet"
                   size="sm"
                   icon="arrow-right"
                   icon-only
                   aria-label="下一页"
-                  :disabled="
-                    adminDirectory.loading.value ||
-                    (adminTotalPages > 0 && adminPage >= adminTotalPages)
-                  "
+                  :disabled="adminTotalPages > 0 && adminPage >= adminTotalPages"
                   @click="adminDirectory.goToPage(adminPage + 1)"
                 />
               </div>
@@ -1523,6 +1506,9 @@ function removeScrollListener() {
           <Button
             variant="quiet"
             :disabled="isPending(groupActionKey(purgeConfirmGroup.id, 'purge'))"
+            :aria-busy="
+              isPending(groupActionKey(purgeConfirmGroup.id, 'purge')) ? 'true' : undefined
+            "
             @click="purgeConfirmGroup = null"
             >取消</Button
           >

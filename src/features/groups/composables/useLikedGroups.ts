@@ -22,33 +22,21 @@ export function useLikedGroups() {
     setItem("likedIds", [...likedIds.value]);
   }
 
-  async function toggle(groupId: string, currentLiked: boolean): Promise<number | null> {
-    const prevLiked = likedIds.value.has(groupId);
-
-    // 乐观更新
-    if (currentLiked) {
-      likedIds.value.delete(groupId);
-    } else {
-      likedIds.value.add(groupId);
-    }
-    likedIds.value = new Set(likedIds.value);
-    save();
-
+  async function toggle(
+    groupId: string,
+    currentLiked: boolean,
+  ): Promise<{ liked: boolean; likeCount: number } | null> {
     const result = await toggleLike(groupId, currentLiked);
 
-    if (!result.ok) {
-      // 回滚
-      if (prevLiked) {
-        likedIds.value.add(groupId);
-      } else {
-        likedIds.value.delete(groupId);
-      }
-      likedIds.value = new Set(likedIds.value);
-      save();
-      return null;
-    }
+    if (!result.ok) return null;
 
-    return result.data.likeCount;
+    const next = new Set(likedIds.value);
+    if (result.data.liked) next.add(groupId);
+    else next.delete(groupId);
+    likedIds.value = next;
+    save();
+
+    return result.data;
   }
 
   return { deviceId, likedIds, toggle };

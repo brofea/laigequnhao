@@ -83,13 +83,19 @@ function save() {
       label="状态"
       :options="enabledOptions"
       :loading="props.busy"
-      :disabled="isDisabled"
+      :disabled="props.disabled"
     />
     <div class="board-edit-form__summary">
       <span>当前成员</span><strong>{{ props.board.members.length }} 个群组</strong>
     </div>
     <div class="admin-edit-form__footer">
-      <Button variant="quiet" type="button" :disabled="isDisabled" @click="emit('cancel')">
+      <Button
+        variant="quiet"
+        type="button"
+        :disabled="props.disabled || props.busy"
+        :aria-busy="props.busy ? 'true' : undefined"
+        @click="emit('cancel')"
+      >
         取消
       </Button>
       <Button

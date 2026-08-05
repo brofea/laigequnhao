@@ -91,6 +91,7 @@ onBeforeUnmount(() => {
       type="button"
       aria-label="关闭弹窗"
       :disabled="props.busy"
+      :aria-busy="props.busy || undefined"
       @click="requestClose"
     ></button>
     <section
@@ -115,6 +116,7 @@ onBeforeUnmount(() => {
           type="button"
           aria-label="关闭弹窗"
           :disabled="props.busy"
+          :aria-busy="props.busy || undefined"
           @click="requestClose"
         >
           <span aria-hidden="true">×</span>

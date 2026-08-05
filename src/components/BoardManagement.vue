@@ -26,7 +26,7 @@ const props = withDefaults(
     groups: DemoGroup[];
     /** 板块或成员的资源级 pending；不同板块/成员可以并行操作。 */
     pendingActions?: readonly BoardManagementPendingAction[];
-    /** 板块列表读取中，阻止重复触发本地管理操作。 */
+    /** 板块列表读取中，仅标记管理区忙碌语义；独立操作由 pendingActions 锁定。 */
     loading?: boolean;
     /** 兼容上层统一的异步状态命名。 */
     busy?: boolean;
@@ -85,6 +85,10 @@ function managerBusy() {
   return props.loading || props.busy;
 }
 
+function hasGlobalReorderPending() {
+  return props.pendingActions.some((pending) => pending.action === "reorder");
+}
+
 function hasPending(action: BoardManagementAction, boardId?: string, groupId?: string) {
   return props.pendingActions.some(
     (pending) =>
@@ -95,10 +99,8 @@ function hasPending(action: BoardManagementAction, boardId?: string, groupId?: s
 }
 
 function isBoardBusy(boardId: string) {
-  return props.pendingActions.some(
-    (pending) =>
-      pending.boardId === boardId ||
-      (pending.action === "reorder" && pending.boardId === undefined),
+  return (
+    hasGlobalReorderPending() || props.pendingActions.some((pending) => pending.boardId === boardId)
   );
 }
 
@@ -119,17 +121,35 @@ function memberMoveLoading(boardId: string, memberId: string, direction: "up" | 
 }
 
 function isReorderBusy(boardId: string) {
-  return managerBusy() || props.disabled || hasPending("reorder") || isBoardBusy(boardId);
+  return hasPending("reorder", boardId);
+}
+
+function isBoardActionDisabled(boardId: string, action?: BoardManagementAction) {
+  const actionPending = action ? hasPending(action, boardId) : false;
+  return props.disabled || (isBoardBusy(boardId) && !actionPending);
+}
+
+function isMemberActionDisabled(
+  boardId: string,
+  memberId: string,
+  action: "move-member" | "remove-member",
+  direction?: "up" | "down",
+) {
+  const actionPending =
+    action === "move-member" && direction
+      ? memberMoveLoading(boardId, memberId, direction)
+      : hasPending(action, boardId, memberId);
+  return props.disabled || (isMemberBusy(boardId, memberId) && !actionPending);
 }
 
 function editMember(board: DemoBoard, memberId: string) {
-  if (managerBusy() || props.disabled || isMemberBusy(board.id, memberId)) return;
+  if (props.disabled || isMemberBusy(board.id, memberId)) return;
   const group = groupFor(memberId);
   if (group) emit("editGroup", group, board);
 }
 
 function moveBoard(id: string, offset: number) {
-  if (isReorderBusy(id)) return;
+  if (isBoardBusy(id)) return;
   const index = orderedBoards.value.findIndex((board) => board.id === id);
   const target = index + offset;
   if (index < 0 || target < 0 || target >= orderedBoards.value.length) return;
@@ -142,33 +162,33 @@ function moveBoard(id: string, offset: number) {
 }
 
 function moveMember(board: DemoBoard, memberId: string, offset: number) {
-  if (managerBusy() || props.disabled || isMemberBusy(board.id, memberId)) return;
+  if (props.disabled || isMemberBusy(board.id, memberId)) return;
   const direction = offset < 0 ? "up" : "down";
   emit("moveMember", board, memberId, direction);
 }
 
 function removeMember(board: DemoBoard, memberId: string) {
-  if (managerBusy() || props.disabled || isMemberBusy(board.id, memberId)) return;
+  if (props.disabled || isMemberBusy(board.id, memberId)) return;
   emit("removeMember", board, memberId);
 }
 
 function confirmDelete(board: DemoBoard) {
-  if (managerBusy() || props.disabled || isBoardBusy(board.id)) return;
+  if (props.disabled || isBoardBusy(board.id)) return;
   emit("delete", board);
 }
 
 function openBoardEditor(board: DemoBoard) {
-  if (managerBusy() || props.disabled || isBoardBusy(board.id)) return;
+  if (props.disabled || isBoardBusy(board.id)) return;
   emit("edit", board);
 }
 
 function openAddGroup(board: DemoBoard) {
-  if (managerBusy() || props.disabled || isBoardBusy(board.id)) return;
+  if (props.disabled || isBoardBusy(board.id)) return;
   emit("addGroup", board);
 }
 
 function createBoard() {
-  if (managerBusy() || props.disabled || props.createBusy || hasPending("create")) return;
+  if (props.disabled || props.createBusy || hasPending("create")) return;
   emit("addBoard");
 }
 </script>
@@ -188,7 +208,7 @@ function createBoard() {
         size="sm"
         icon="plus"
         :loading="props.createBusy || hasPending('create')"
-        :disabled="props.disabled || managerBusy()"
+        :disabled="props.disabled"
         @click="createBoard"
       >
         添加板块
@@ -203,12 +223,14 @@ function createBoard() {
         :class="{
           'board-panel--disabled': !board.enabled,
         }"
+        :aria-busy="isBoardBusy(board.id) || undefined"
       >
         <header class="board-panel__header">
           <button
             class="board-panel__toggle"
             type="button"
-            :disabled="props.disabled || managerBusy() || isBoardBusy(board.id)"
+            :disabled="props.disabled || isBoardBusy(board.id)"
+            :aria-busy="isBoardBusy(board.id) || undefined"
             :aria-expanded="expandedId === board.id"
             @click="expandedId = expandedId === board.id ? null : board.id"
           >
@@ -228,8 +250,10 @@ function createBoard() {
               size="sm"
               icon="chevron-up"
               icon-only
-              :loading="isReorderBusy(board.id) && hasPending('reorder', board.id)"
-              :disabled="isReorderBusy(board.id) || index === 0"
+              :loading="isReorderBusy(board.id)"
+              :disabled="
+                props.disabled || (isBoardBusy(board.id) && !isReorderBusy(board.id)) || index === 0
+              "
               :aria-label="`上移 ${board.title}`"
               @click="moveBoard(board.id, -1)"
             />
@@ -238,8 +262,12 @@ function createBoard() {
               size="sm"
               icon="chevron-down"
               icon-only
-              :loading="isReorderBusy(board.id) && hasPending('reorder', board.id)"
-              :disabled="isReorderBusy(board.id) || index === orderedBoards.length - 1"
+              :loading="isReorderBusy(board.id)"
+              :disabled="
+                props.disabled ||
+                (isBoardBusy(board.id) && !isReorderBusy(board.id)) ||
+                index === orderedBoards.length - 1
+              "
               :aria-label="`下移 ${board.title}`"
               @click="moveBoard(board.id, 1)"
             />
@@ -248,7 +276,7 @@ function createBoard() {
               size="sm"
               icon="edit"
               icon-only
-              :disabled="props.disabled || managerBusy() || isBoardBusy(board.id)"
+              :disabled="isBoardActionDisabled(board.id)"
               :aria-label="`编辑 ${board.title}`"
               @click="openBoardEditor(board)"
             />
@@ -257,8 +285,7 @@ function createBoard() {
               size="sm"
               icon="trash"
               icon-only
-              :loading="hasPending('delete', board.id)"
-              :disabled="props.disabled || managerBusy() || isBoardBusy(board.id)"
+              :disabled="isBoardActionDisabled(board.id)"
               :aria-label="`删除 ${board.title}`"
               @click="confirmDeleteId = board.id"
             />
@@ -274,7 +301,7 @@ function createBoard() {
                 tone="danger"
                 size="sm"
                 :loading="hasPending('delete', board.id)"
-                :disabled="props.disabled || managerBusy()"
+                :disabled="isBoardActionDisabled(board.id, 'delete')"
                 @click="confirmDelete(board)"
               >
                 确认删除
@@ -282,7 +309,8 @@ function createBoard() {
               <Button
                 variant="quiet"
                 size="sm"
-                :disabled="props.disabled || managerBusy() || hasPending('delete', board.id)"
+                :disabled="props.disabled || hasPending('delete', board.id)"
+                :aria-busy="hasPending('delete', board.id) ? 'true' : undefined"
                 @click="confirmDeleteId = null"
                 >取消</Button
               >
@@ -295,7 +323,7 @@ function createBoard() {
               size="sm"
               icon="plus"
               :loading="hasPending('add-group', board.id)"
-              :disabled="props.disabled || managerBusy() || isBoardBusy(board.id)"
+              :disabled="isBoardActionDisabled(board.id, 'add-group')"
               @click="openAddGroup(board)"
             >
               添加新群
@@ -317,7 +345,11 @@ function createBoard() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="memberId in board.members" :key="memberId">
+                <tr
+                  v-for="memberId in board.members"
+                  :key="memberId"
+                  :aria-busy="isMemberBusy(board.id, memberId) || undefined"
+                >
                   <th scope="row">{{ groupFor(memberId)?.title ?? memberId }}</th>
                   <td class="board-members__status">
                     <Badge :tone="memberStatusTone(memberId)" dot>
@@ -326,88 +358,73 @@ function createBoard() {
                   </td>
                   <td>
                     <div class="board-member-order-actions">
-                      <button
+                      <Button
                         class="table-icon-button"
                         type="button"
+                        variant="quiet"
+                        size="sm"
+                        icon="chevron-up"
+                        icon-only
+                        :loading="memberMoveLoading(board.id, memberId, 'up')"
                         :disabled="
-                          props.disabled ||
-                          managerBusy() ||
-                          isMemberBusy(board.id, memberId) ||
+                          isMemberActionDisabled(board.id, memberId, 'move-member', 'up') ||
                           board.members.indexOf(memberId) === 0
                         "
-                        :aria-busy="memberMoveLoading(board.id, memberId, 'up') || undefined"
                         :aria-label="`上移 ${groupFor(memberId)?.title ?? memberId}`"
                         @click="moveMember(board, memberId, -1)"
-                      >
-                        <span
-                          v-if="memberMoveLoading(board.id, memberId, 'up')"
-                          class="app-button__spinner"
-                          aria-hidden="true"
-                        ></span
-                        ><Icon v-else name="chevron-up" size="14" />
-                      </button>
-                      <button
+                      />
+                      <Button
                         class="table-icon-button"
                         type="button"
+                        variant="quiet"
+                        size="sm"
+                        icon="chevron-down"
+                        icon-only
+                        :loading="memberMoveLoading(board.id, memberId, 'down')"
                         :disabled="
-                          props.disabled ||
-                          managerBusy() ||
-                          isMemberBusy(board.id, memberId) ||
+                          isMemberActionDisabled(board.id, memberId, 'move-member', 'down') ||
                           board.members.indexOf(memberId) === board.members.length - 1
                         "
-                        :aria-busy="memberMoveLoading(board.id, memberId, 'down') || undefined"
                         :aria-label="`下移 ${groupFor(memberId)?.title ?? memberId}`"
                         @click="moveMember(board, memberId, 1)"
-                      >
-                        <span
-                          v-if="memberMoveLoading(board.id, memberId, 'down')"
-                          class="app-button__spinner"
-                          aria-hidden="true"
-                        ></span
-                        ><Icon v-else name="chevron-down" size="14" />
-                      </button>
+                      />
                     </div>
                   </td>
                   <td>
                     <div class="board-member-actions">
-                      <button
+                      <Button
                         class="table-link-button"
                         type="button"
-                        :disabled="
-                          props.disabled || managerBusy() || isMemberBusy(board.id, memberId)
-                        "
+                        variant="quiet"
+                        size="sm"
+                        :disabled="isMemberActionDisabled(board.id, memberId, 'move-member')"
                         @click="editMember(board, memberId)"
                       >
                         <Icon name="edit" size="14" />编辑
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         class="table-link-button table-link-button--danger"
                         type="button"
-                        :disabled="
-                          props.disabled || managerBusy() || isMemberBusy(board.id, memberId)
-                        "
-                        :aria-busy="hasPending('remove-member', board.id, memberId) || undefined"
+                        variant="quiet"
+                        size="sm"
+                        :loading="hasPending('remove-member', board.id, memberId)"
+                        :disabled="isMemberActionDisabled(board.id, memberId, 'remove-member')"
                         @click="removeMember(board, memberId)"
                       >
-                        <span
-                          v-if="hasPending('remove-member', board.id, memberId)"
-                          class="app-button__spinner"
-                          aria-hidden="true"
-                        ></span
-                        ><Icon v-else name="arrow-right" size="14" />移除
-                      </button>
+                        <Icon name="arrow-right" size="14" />移除
+                      </Button>
                     </div>
-                    <button
+                    <Button
+                      variant="quiet"
+                      size="sm"
                       class="board-member-more"
                       type="button"
-                      :disabled="
-                        props.disabled || managerBusy() || isMemberBusy(board.id, memberId)
-                      "
+                      :disabled="isMemberActionDisabled(board.id, memberId, 'move-member')"
                       :aria-label="`更多操作 ${groupFor(memberId)?.title ?? memberId}`"
                       @click="editMember(board, memberId)"
                     >
                       <Icon name="more" size="18" />
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               </tbody>
