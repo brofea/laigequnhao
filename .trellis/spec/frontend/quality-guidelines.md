@@ -59,3 +59,66 @@ pnpm build
 - 在组件中硬编码机构品牌信息
 - 吞掉复制、上传、解析或网络错误
 - 在没有具体需求且未更新架构决策时引入 Pinia、UI 框架或另一套请求缓存
+
+## Playwright 图片三引擎约定
+
+### 1. Scope / Trigger
+
+- Trigger：新增或修改涉及 Canvas、图片压缩、预览、multipart 上传或 R2 资源 adoption 的浏览器行为。
+- Scope：管理端图片关键路径必须在 Playwright Chromium、WebKit、Firefox 三个引擎中真实运行；公开投稿等相邻链路可由独立 spec 覆盖。
+
+### 2. Signatures
+
+- Playwright projects：`image-chromium`、`image-webkit`、`image-firefox`。
+- 图片 spec：`tests/e2e/image-flows.spec.ts`；测试层 helper 放在 `tests/e2e/fixtures/`。
+- 调试命令：`pnpm test:e2e --project=image-<browser> tests/e2e/image-flows.spec.ts`。
+
+### 3. Contracts
+
+- 三个 `image-*` project 只匹配图片 spec；既有 `chromium-desktop`/`chromium-mobile` 必须排除图片 spec，避免默认运行重复或漏测。
+- fixture 使用真实合法图片的内存 `FilePayload`，不使用“只有 PNG 签名的随机字节”伪 fixture；测试只访问本地 E2E D1/R2。
+- 成功链路必须从浏览器预览 Blob 和最终公开资源 URL 两处验证 `image/png`、PNG signature/IHDR、最长边和用途字节上限；头像还需验证 alpha，二维码还需验证所有像素不透明并通过 `jsQR`。
+- 失败链路必须验证精确用户文案、无预览，并在保存动作后确认没有 `/api/v1/admin/assets` 上传请求。
+
+### 4. Validation & Error Matrix
+
+| 场景 | 必须断言 |
+|---|---|
+| 浏览器未安装、服务启动失败、project 无匹配测试 | 命令失败；禁止 `skip` 或降级为单浏览器 |
+| 头像成功 | PNG、最长边 `<=128`、字节 `<=128KB`、存在透明像素、保存后资源可读 |
+| 二维码成功 | PNG、最长边 `<=1024`、字节 `<=1MB`、所有 alpha 为 `255`、二维码内容可解码、保存后资源可读 |
+| 头像压缩失败 | `图像压缩失败`、无预览、保存后无资源上传 |
+| 二维码压缩失败 | `图像压缩失败，请考虑裁剪图像`、无预览、保存后无资源上传 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：透明头像和固定内容二维码通过浏览器 `setInputFiles` 上传，预览与最终 R2 对象均经过字节/像素检查。
+- Base：每个浏览器 project 运行同一图片 spec，使用本地 D1/R2 和隔离测试数据，`workers: 1` 保持串行。
+- Bad：只断言预览可见、API 返回 2xx、只运行 Chromium，或用 WebP/随机字节伪造最终 PNG。
+
+### 6. Tests Required
+
+- Chromium、WebKit、Firefox 各运行头像成功、二维码成功、头像失败、二维码失败四条流程。
+- 成功测试同时断言浏览器预览 Blob、上传/保存结果、最终资源响应和群组引用；不要以单一 HTTP 状态码代替资源完成。
+- CI/新机器依赖安装后显式运行 `pnpm exec playwright install --with-deps chromium firefox webkit`。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+// 只在现有 Chromium project 中检查图片预览是否出现。
+await expect(page.getByAltText("已上传的二维码预览")).toBeVisible();
+```
+
+#### Correct
+
+```typescript
+// 三个 image-* project 运行同一 spec，并检查预览与最终资源的 PNG/像素契约。
+await expect(dialog.getByRole("status")).toContainText("二维码已准备好");
+const preview = await readImagePreview(page, "已上传的二维码预览");
+assertPreviewPng(preview, { maxDimension: 1024, maxBytes: 1024 * 1024 });
+await assertQrPng(Uint8Array.from(preview.bytes), expectedValue);
+```
+
+该约定防止把 Safari/WebKit 的 Canvas 编码回归误报为“后端上传成功”，也防止三引擎图片 spec 被既有 Chromium 项目重复执行或从默认门禁中遗漏。

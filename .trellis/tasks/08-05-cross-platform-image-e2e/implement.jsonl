@@ -1,0 +1,4 @@
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"图片 E2E 的真实二进制 fixture、三引擎门禁、本地 D1/R2 隔离和完整质量命令。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端测试、异步错误反馈和质量检查约束。"}
+{"file":".trellis/spec/frontend/architecture.md","reason":"浏览器 Canvas/object URL 边界，避免 E2E helper 进入 shared 层。"}
+{"file":".trellis/tasks/08-05-cross-platform-image-e2e/research/playwright-cross-browser-image-e2e.md","reason":"三引擎 project、FilePayload、PNG 像素验收和浏览器安装的研究结论。"}

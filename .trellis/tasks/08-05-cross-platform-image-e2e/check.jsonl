@@ -1,0 +1,3 @@
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"按项目测试分层、Playwright 关键路径、真实资源验收和浏览器缺失失败规则检查。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"按前端质量门禁复核 lint、format、typecheck、测试和 build。"}
+{"file":".trellis/tasks/08-05-cross-platform-image-e2e/research/playwright-cross-browser-image-e2e.md","reason":"复核三引擎 project 过滤、fixture 组织、PNG/alpha/二维码验收和 CI 安装方案。"}
