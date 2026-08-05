@@ -302,3 +302,36 @@ T06 完成全量验收：Unit 82 / Workers 104 / E2E 68（新增 public/admin/a1
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 统一按钮 Loading 与 Disabled 状态
+
+**Date**: 2026-08-05
+**Task**: 统一按钮 Loading 与 Disabled 状态
+**Branch**: `fix/button-feedback`
+
+### Summary
+
+统一公共按钮的 Loading/Disabled 状态与 150ms 延迟 Spinner，隔离搜索和状态筛选 Loading，补齐 Dialog、管理页、板块操作与点赞的重复提交防护、Toast 和回归测试；点赞改为响应成功后更新并提示。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `93ffb80` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
