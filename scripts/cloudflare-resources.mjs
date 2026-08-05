@@ -158,6 +158,8 @@ export async function writeGeneratedConfig(baseConfigPath, resources) {
   base.vars = {
     ENVIRONMENT: "production",
     SECURE_COOKIE: "true",
+    SUBMISSION_LIMIT_PER_HOUR: "1",
+    LIKE_LIMIT_PER_TEN_MINUTE: "20",
   };
   delete base.env;
 

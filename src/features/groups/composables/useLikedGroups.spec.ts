@@ -34,7 +34,7 @@ describe("useLikedGroups", () => {
     expect(groups.likedIds.value.has("group-1")).toBe(false);
 
     resolveRequest?.({ ok: true, data: { liked: true, likeCount: 4 } });
-    await expect(request).resolves.toEqual({ liked: true, likeCount: 4 });
+    await expect(request).resolves.toEqual({ ok: true, data: { liked: true, likeCount: 4 } });
     expect(groups.likedIds.value.has("group-1")).toBe(true);
   });
 
@@ -51,7 +51,10 @@ describe("useLikedGroups", () => {
     });
     const groups = useLikedGroups();
 
-    await expect(groups.toggle("group-2", true)).resolves.toBeNull();
+    await expect(groups.toggle("group-2", true)).resolves.toEqual({
+      ok: false,
+      code: "INTERNAL_ERROR",
+    });
     expect(groups.likedIds.value.has("group-2")).toBe(true);
   });
 });

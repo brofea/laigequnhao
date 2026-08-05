@@ -317,15 +317,19 @@ async function toggleLike(group: DemoGroup) {
   if (!pendingActions.start(actionKey)) return;
   try {
     const result = await likedGroups.toggle(group.id, group.liked);
-    if (result === null) {
-      showToast("点赞失败，请稍后重试", "warning");
+    if (!result.ok) {
+      if (result.code === "RATE_LIMITED") {
+        showToast("点赞太频繁了，请稍后再试", "warning");
+      } else {
+        showToast("点赞失败，请稍后重试", "warning");
+      }
       return;
     }
     localLikeState.value = {
       ...localLikeState.value,
-      [group.id]: { liked: result.liked, likes: result.likeCount },
+      [group.id]: { liked: result.data.liked, likes: result.data.likeCount },
     };
-    showToast(result.liked ? "点赞成功" : "已取消点赞", "success");
+    showToast(result.data.liked ? "点赞成功" : "已取消点赞", "success");
   } finally {
     pendingActions.finish(actionKey);
   }

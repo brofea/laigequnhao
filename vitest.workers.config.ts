@@ -32,6 +32,7 @@ export default defineWorkersConfig(async () => {
               SECURE_COOKIE: "true",
               LOGIN_MAX_ATTEMPTS: "100",
               LOGIN_WINDOW_MINUTES: "5",
+              LIKE_LIMIT_PER_TEN_MINUTE: "1000",
               R2_PUBLIC_BASE_URL: "https://assets.test.invalid",
             },
           },

@@ -25,6 +25,8 @@ export interface Env {
   LOGIN_WINDOW_MINUTES?: string;
   /** 单个 IP/设备每小时可提交新群组数量（默认 1） */
   SUBMISSION_LIMIT_PER_HOUR?: string;
+  /** 单个设备每 10 分钟可执行的点赞/取消点赞次数（默认 10） */
+  LIKE_LIMIT_PER_TEN_MINUTE?: string;
 }
 
 export interface AdminAuthSecrets {
@@ -65,4 +67,12 @@ export function getSubmissionLimitPerHour(env: Pick<Env, "SUBMISSION_LIMIT_PER_H
   if (!raw) return 1;
   const parsed = Number.parseInt(raw, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+/** 点赞限流数量：单个设备每 10 分钟可执行的点赞/取消点赞次数。非法配置回退默认 10。 */
+export function getLikeLimitPerTenMinute(env: Pick<Env, "LIKE_LIMIT_PER_TEN_MINUTE">): number {
+  const raw = env.LIKE_LIMIT_PER_TEN_MINUTE?.trim();
+  if (!raw) return 10;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 10;
 }
