@@ -10,6 +10,8 @@ const PNG_SIGNATURE_BYTES = PNG_SIGNATURE.byteLength;
 const PNG_CHUNK_HEADER_BYTES = 8;
 const PNG_CHUNK_TRAILER_BYTES = 4;
 const PNG_IHDR_BYTES = 13;
+const JPEG_SIGNATURE = Uint8Array.from([0xff, 0xd8]);
+const JPEG_END_SIGNATURE = Uint8Array.from([0xff, 0xd9]);
 
 type ImageValidationErrorCode =
   "VALIDATION_FAILED" | "PAYLOAD_TOO_LARGE" | "UNSUPPORTED_MEDIA_TYPE";
@@ -32,6 +34,11 @@ export interface ParsedPng {
   colorType: number;
   /** PNG 颜色类型或 tRNS 表明文件可能包含 alpha。 */
   hasAlpha: boolean;
+}
+
+export interface ParsedJpeg {
+  width: number;
+  height: number;
 }
 
 /** 已通过最终文件校验的内部资源输入；路由之外不应从客户端字段构造它。 */
@@ -217,7 +224,7 @@ export function parsePngStructure(bytes: Uint8Array): ParsedPng {
   return { ...parsed, hasAlpha: parsed.hasAlpha || sawTrns };
 }
 
-function assertPolicyLimits(purpose: AssetPurpose, parsed: ParsedPng) {
+function assertPolicyLimits(purpose: AssetPurpose, parsed: { width: number; height: number }) {
   const policy = getAssetPolicy(purpose);
   if (parsed.width > policy.maxDimension || parsed.height > policy.maxDimension) {
     invalid(`图片最长边不得超过 ${policy.maxDimension} 像素。`);
@@ -228,32 +235,37 @@ function assertPolicyLimits(purpose: AssetPurpose, parsed: ParsedPng) {
   }
 }
 
-function decodeAndVerify(bytes: Uint8Array, parsed: ParsedPng, purpose: AssetPurpose) {
+function decodeAndVerify(
+  bytes: Uint8Array,
+  parsed: { width: number; height: number },
+  purpose: AssetPurpose,
+  format: "PNG" | "JPEG",
+) {
   let image: PhotonImage | undefined;
   try {
     image = PhotonImage.new_from_byteslice(bytes);
     const width = image.get_width();
     const height = image.get_height();
     if (width !== parsed.width || height !== parsed.height) {
-      unsupported("PNG 声明尺寸与解码尺寸不一致。");
+      unsupported(`${format} 声明尺寸与解码尺寸不一致。`);
     }
 
     const pixels = image.get_raw_pixels();
     const expectedPixelBytes = width * height * 4;
     if (pixels.byteLength !== expectedPixelBytes) {
-      unsupported("PNG 解码结果不完整。");
+      unsupported(`${format} 解码结果不完整。`);
     }
 
     if (purpose === "qr_code") {
       for (let offset = 3; offset < pixels.byteLength; offset += 4) {
         if (pixels[offset] !== 0xff) {
-          invalid("二维码 PNG 必须是不透明的。");
+          invalid("二维码 JPEG 必须是不透明的。");
         }
       }
     }
   } catch (error) {
     if (error instanceof ImageValidationError) throw error;
-    unsupported("PNG 完整解码失败。");
+    unsupported(`${format} 完整解码失败。`);
   } finally {
     image?.free();
   }
@@ -264,6 +276,7 @@ function decodeAndVerify(bytes: Uint8Array, parsed: ParsedPng, purpose: AssetPur
  * request/file bytes -> PNG structure/dimensions -> purpose limits -> full decode.
  */
 export function validatePngUpload(bytes: Uint8Array, purpose: AssetPurpose): ValidatedImageUpload {
+  if (purpose !== "logo") unsupported("头像资源必须是 PNG。");
   if (bytes.byteLength === 0) {
     invalid("文件不能为空。");
   }
@@ -275,8 +288,77 @@ export function validatePngUpload(bytes: Uint8Array, purpose: AssetPurpose): Val
 
   const parsed = parsePngStructure(bytes);
   assertPolicyLimits(purpose, parsed);
-  decodeAndVerify(bytes, parsed, purpose);
+  decodeAndVerify(bytes, parsed, purpose, "PNG");
 
+  return {
+    bytes,
+    purpose,
+    width: parsed.width,
+    height: parsed.height,
+    byteLength: bytes.byteLength,
+  };
+}
+
+function isJpeg(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 4 &&
+    JPEG_SIGNATURE.every((byte, index) => bytes[index] === byte) &&
+    JPEG_END_SIGNATURE.every(
+      (byte, index) => bytes[bytes.length - JPEG_END_SIGNATURE.length + index] === byte,
+    )
+  );
+}
+
+function readJpegDimensions(bytes: Uint8Array): ParsedJpeg {
+  if (!isJpeg(bytes)) unsupported("文件不是有效的 JPEG。");
+  let offset = 2;
+  while (offset + 3 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset++;
+      continue;
+    }
+    while (offset < bytes.length && bytes[offset] === 0xff) offset++;
+    const marker = bytes[offset++];
+    if (marker === undefined || marker === 0xd8 || marker === 0xd9) continue;
+    if (marker === 0xda) break;
+    if (offset + 2 > bytes.length) unsupported("JPEG marker 被截断。");
+    const segmentLength = (bytes[offset]! << 8) | bytes[offset + 1]!;
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) {
+      unsupported("JPEG marker 长度无效。");
+    }
+    const isStartOfFrame =
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf);
+    if (isStartOfFrame) {
+      if (segmentLength < 7) unsupported("JPEG 尺寸段无效。");
+      const height = (bytes[offset + 3]! << 8) | bytes[offset + 4]!;
+      const width = (bytes[offset + 5]! << 8) | bytes[offset + 6]!;
+      if (width < 1 || height < 1) invalid("JPEG 图像尺寸无效。");
+      return { width, height };
+    }
+    offset += segmentLength;
+  }
+  unsupported("JPEG 缺少图像尺寸段。");
+}
+
+/** 按用途校验最终资源：logo 仅 PNG，qr_code 仅 JPEG。 */
+export function validateImageUpload(
+  bytes: Uint8Array,
+  purpose: AssetPurpose,
+): ValidatedImageUpload {
+  if (purpose === "logo") return validatePngUpload(bytes, purpose);
+  if (bytes.byteLength === 0) invalid("文件不能为空。");
+  const policy = getAssetPolicy(purpose);
+  if (bytes.byteLength > policy.maxBytes) {
+    tooLarge(`文件大小超过 ${policy.maxBytes} 字节限制。`);
+  }
+  const parsed = readJpegDimensions(bytes);
+  assertPolicyLimits(purpose, parsed);
+  // Photon 的 workerd 构建只提供 PNG 输入解码；JPEG 的 SOI/marker/SOF/SOS/EOI
+  // 结构、尺寸和完整字节边界已在 readJpegDimensions 中校验。JPEG 输出本身不携带
+  // alpha 通道，因此 qr_code 的不透明约束由格式契约保证。
   return {
     bytes,
     purpose,

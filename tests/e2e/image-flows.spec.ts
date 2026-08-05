@@ -1,8 +1,10 @@
 import { expect, test as base, type Page } from "@playwright/test";
+import sharp from "sharp";
 import {
   assertLogoPng,
   assertPreviewPng,
-  assertQrPng,
+  assertQrJpeg,
+  assertPreviewJpeg,
   inspectPng,
   readImagePreview,
 } from "./fixtures/image-assertions";
@@ -108,11 +110,15 @@ async function readSavedGroup(page: Page, auth: Auth, groupId: string) {
 async function fetchAsset(page: Page, publicUrl: string) {
   const response = await page.request.get(new URL(publicUrl, page.url()).toString());
   expect(response.status()).toBe(200);
-  expect(response.headers()["content-type"]).toBe("image/png");
+  const contentType = response.headers()["content-type"];
+  expect(["image/png", "image/jpeg"]).toContain(contentType);
   const bytes = await response.body();
-  const info = await inspectPng(bytes);
-  expect(info.metadata.format).toBe("png");
-  expect(info.data.byteLength).toBeGreaterThan(0);
+  const info =
+    contentType === "image/jpeg"
+      ? await sharp(bytes).metadata()
+      : await inspectPng(bytes).then((value) => value.metadata);
+  expect(info.format).toMatch(/png|jpeg/);
+  expect(bytes.byteLength).toBeGreaterThan(0);
   return { bytes, info };
 }
 
@@ -151,12 +157,12 @@ test.describe("管理端图片上传跨浏览器流程", () => {
     if (typeof logoUrl !== "string") throw new Error("保存后的群组缺少 logoUrl。");
     const finalAsset = await fetchAsset(page, logoUrl);
     expect(finalAsset.bytes.byteLength).toBeLessThanOrEqual(128 * 1024);
-    expect(finalAsset.info.metadata.width).toBeLessThanOrEqual(128);
-    expect(finalAsset.info.metadata.height).toBeLessThanOrEqual(128);
+    expect(finalAsset.info.width).toBeLessThanOrEqual(128);
+    expect(finalAsset.info.height).toBeLessThanOrEqual(128);
     await assertLogoPng(finalAsset.bytes);
   });
 
-  test("二维码经过白底 PNG 压缩、可识别并在保存后完成 adoption", async ({ page, images }) => {
+  test("二维码经过白底 JPEG 压缩、可识别并在保存后完成 adoption", async ({ page, images }) => {
     const auth = await loginViaApi(page);
     const title = `三引擎二维码-${String(Date.now())}`;
     const groupId = await seedGroup(page, auth, title);
@@ -168,13 +174,11 @@ test.describe("管理端图片上传跨浏览器流程", () => {
     await dialog.getByLabel("上传二维码").setInputFiles(images.qr);
     await expect(dialog.getByRole("status")).toContainText("二维码已准备好");
     const preview = await readImagePreview(page, "已上传的二维码预览");
-    assertPreviewPng(preview, { maxDimension: 1024, maxBytes: 1024 * 1024 });
+    await assertPreviewJpeg(preview, { maxDimension: 1024, maxBytes: 1024 * 1024 });
     for (let index = 3; index < preview.pixels.length; index += 4) {
       expect(preview.pixels[index]).toBe(255);
     }
-    const previewAsset = await inspectPng(Uint8Array.from(preview.bytes));
-    await assertQrPng(Uint8Array.from(preview.bytes), QR_EXPECTED_VALUE);
-    expect(previewAsset.info.channels).toBe(4);
+    await assertQrJpeg(Uint8Array.from(preview.bytes), QR_EXPECTED_VALUE);
 
     const assetResponses: string[] = [];
     const onResponse = (response: import("@playwright/test").Response) => {
@@ -203,9 +207,9 @@ test.describe("管理端图片上传跨浏览器流程", () => {
     if (typeof qrUrl !== "string") throw new Error("保存后的群组缺少二维码 URL。");
     const finalAsset = await fetchAsset(page, qrUrl);
     expect(finalAsset.bytes.byteLength).toBeLessThanOrEqual(1024 * 1024);
-    expect(finalAsset.info.metadata.width).toBeLessThanOrEqual(1024);
-    expect(finalAsset.info.metadata.height).toBeLessThanOrEqual(1024);
-    await assertQrPng(finalAsset.bytes, QR_EXPECTED_VALUE);
+    expect(finalAsset.info.width).toBeLessThanOrEqual(1024);
+    expect(finalAsset.info.height).toBeLessThanOrEqual(1024);
+    await assertQrJpeg(finalAsset.bytes, QR_EXPECTED_VALUE);
   });
 
   test("头像压缩失败时显示精确 Toast 且不产生上传预览", async ({ page, images }) => {

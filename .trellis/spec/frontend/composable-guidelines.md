@@ -22,7 +22,7 @@ Composable 负责可复用的有状态行为。它们不渲染 UI，也不得把
 
 剪贴板、本地存储、主题媒体查询、图片 canvas 转换和对象 URL 清理应放在聚焦单一职责的 composable 或 `src/shared/browser/` 中。持久化 JSON 先按 `unknown` 解析；无效数据必须安全重置。
 
-`useLikedGroups` 负责本地匿名设备 ID 和已点赞 ID 集合，但不计算全局点赞数。图片适配器绝不上传源文件；它只返回最终 PNG blob 和已验证的元数据。
+`useLikedGroups` 负责本地匿名设备 ID 和已点赞 ID 集合，但不计算全局点赞数。图片适配器绝不上传源文件；它只返回按用途编码的最终 Logo PNG 或二维码 JPEG blob 和已验证的元数据。
 
 ## 错误行为
 

@@ -507,7 +507,7 @@ function saveQrCode(method: DemoGroup["joinMethods"][number]) {
   // 网页端：触发图片下载
   const link = document.createElement("a");
   link.href = method.value;
-  link.download = "group-qr-code.png";
+  link.download = "group-qr-code.jpg";
   document.body.appendChild(link);
   link.click();
   link.remove();

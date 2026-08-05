@@ -1,6 +1,11 @@
 import { createR2Adapter, type R2Adapter } from "../adapters/r2-adapter";
 import type { Env } from "../env";
-import { ASSET_CONTENT_TYPE, type AdminAssetDto, type AssetInfo } from "@shared/contracts/asset";
+import {
+  getAssetContentType,
+  getAssetFileExtension,
+  type AdminAssetDto,
+  type AssetInfo,
+} from "@shared/contracts/asset";
 import type { ValidatedImageUpload } from "./image-validation";
 
 // ─── 内部行类型 ──────────────────────────────────────────
@@ -27,7 +32,7 @@ function mapToAdminDto(row: AssetRow, publicUrl: string): AdminAssetDto {
     id: row.id,
     purpose: row.purpose as AdminAssetDto["purpose"],
     r2Key: row.r2_key,
-    contentType: ASSET_CONTENT_TYPE,
+    contentType: getAssetContentType(row.purpose as "logo" | "qr_code"),
     byteLength: row.byte_length,
     width: row.width,
     height: row.height,
@@ -109,16 +114,17 @@ export function createAssetService(
 
       const byteLength = bytes.byteLength;
       const id = crypto.randomUUID();
-      const key = `${uploadPurpose}/${id}.png`;
+      const contentType = getAssetContentType(uploadPurpose);
+      const key = `${uploadPurpose}/${id}.${getAssetFileExtension(uploadPurpose)}`;
 
       // 1. 先写 D1 staged 行，避免出现无法追踪的 R2 孤儿。
       try {
         await db
           .prepare(
             `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status)
-             VALUES (?, ?, ?, 'image/png', ?, ?, ?, 'staged')`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'staged')`,
           )
-          .bind(id, key, uploadPurpose, byteLength, width, height)
+          .bind(id, key, uploadPurpose, contentType, byteLength, width, height)
           .run();
       } catch {
         throw new AssetServiceError("D1_WRITE_FAILED", "Failed to save asset metadata.");
@@ -128,7 +134,7 @@ export function createAssetService(
       try {
         // Copy the view so a caller cannot accidentally upload bytes outside
         // the validated Uint8Array slice.
-        await r2Adapter.upload(key, bytes.slice().buffer, ASSET_CONTENT_TYPE);
+        await r2Adapter.upload(key, bytes.slice().buffer, contentType);
       } catch {
         try {
           await db
@@ -153,7 +159,7 @@ export function createAssetService(
         id,
         purpose: uploadPurpose,
         r2Key: key,
-        contentType: ASSET_CONTENT_TYPE,
+        contentType,
         byteLength,
         width,
         height,

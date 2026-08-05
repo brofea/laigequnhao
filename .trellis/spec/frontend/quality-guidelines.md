@@ -76,8 +76,10 @@ pnpm build
 ### 3. Contracts
 
 - 三个 `image-*` project 只匹配图片 spec；既有 `chromium-desktop`/`chromium-mobile` 必须排除图片 spec，避免默认运行重复或漏测。
-- fixture 使用真实合法图片的内存 `FilePayload`，不使用“只有 PNG 签名的随机字节”伪 fixture；测试只访问本地 E2E D1/R2。
-- 成功链路必须从浏览器预览 Blob 和最终公开资源 URL 两处验证 `image/png`、PNG signature/IHDR、最长边和用途字节上限；头像还需验证 alpha，二维码还需验证所有像素不透明并通过 `jsQR`。
+- fixture 使用真实合法图片的内存 `FilePayload`，不使用“只有 PNG 签名的随机字节”伪 fixture；测试只访问本地 E2E D1/R2。最终 fixture 不使用 WebP。
+- 按用途验证格式：头像预览和最终公开资源必须是 `image/png`/PNG signature/IHDR，二维码预览和最终公开资源必须是 `image/jpeg`/JPEG signature；两者都验证最长边和用途字节上限。
+- 头像必须保留 alpha；二维码必须在 JPEG 编码前铺白底、解码后不含透明像素并通过 `jsQR`。
+- 二维码压缩必须固定按 `0.90 → 0.80 → 0.70` 质量阶梯重试，总共最多 3 次；每次失败不得上传超限 Blob。
 - 失败链路必须验证精确用户文案、无预览，并在保存动作后确认没有 `/api/v1/admin/assets` 上传请求。
 
 ### 4. Validation & Error Matrix
@@ -86,15 +88,16 @@ pnpm build
 |---|---|
 | 浏览器未安装、服务启动失败、project 无匹配测试 | 命令失败；禁止 `skip` 或降级为单浏览器 |
 | 头像成功 | PNG、最长边 `<=128`、字节 `<=128KB`、存在透明像素、保存后资源可读 |
-| 二维码成功 | PNG、最长边 `<=1024`、字节 `<=1MB`、所有 alpha 为 `255`、二维码内容可解码、保存后资源可读 |
+| 二维码成功 | JPEG、最长边 `<=1024`、字节 `<=1MB`、解码后不透明、二维码内容可解码、保存后资源可读 |
+| 二维码超限 | 按 `0.90 → 0.80 → 0.70` 重试；第三次仍超限后显示二维码 Toast，且没有上传超限 Blob |
 | 头像压缩失败 | `图像压缩失败`、无预览、保存后无资源上传 |
 | 二维码压缩失败 | `图像压缩失败，请考虑裁剪图像`、无预览、保存后无资源上传 |
 
 ### 5. Good / Base / Bad Cases
 
-- Good：透明头像和固定内容二维码通过浏览器 `setInputFiles` 上传，预览与最终 R2 对象均经过字节/像素检查。
+- Good：透明头像和固定内容二维码通过浏览器 `setInputFiles` 上传，预览与最终 R2 对象均经过用途格式、字节/像素检查。
 - Base：每个浏览器 project 运行同一图片 spec，使用本地 D1/R2 和隔离测试数据，`workers: 1` 保持串行。
-- Bad：只断言预览可见、API 返回 2xx、只运行 Chromium，或用 WebP/随机字节伪造最终 PNG。
+- Bad：只断言预览可见、API 返回 2xx、只运行 Chromium、保留 WebP 兼容，或用随机字节伪造最终图片。
 
 ### 6. Tests Required
 
@@ -114,11 +117,16 @@ await expect(page.getByAltText("已上传的二维码预览")).toBeVisible();
 #### Correct
 
 ```typescript
-// 三个 image-* project 运行同一 spec，并检查预览与最终资源的 PNG/像素契约。
+// 三个 image-* project 运行同一 spec，并检查预览与最终资源的用途格式/像素契约。
 await expect(dialog.getByRole("status")).toContainText("二维码已准备好");
 const preview = await readImagePreview(page, "已上传的二维码预览");
-assertPreviewPng(preview, { maxDimension: 1024, maxBytes: 1024 * 1024 });
-await assertQrPng(Uint8Array.from(preview.bytes), expectedValue);
+assertPreviewJpeg(preview, { maxDimension: 1024, maxBytes: 1024 * 1024 });
+await assertQrImage(Uint8Array.from(preview.bytes), expectedValue, { opaque: true });
 ```
+
+### 8. Seed 验收
+
+- `pnpm seed` 必须使用本地 API，固定规划 140 个群组；任一应存在的头像或二维码上传失败都必须以非零状态退出。
+- 验收必须确认 140 个群组和 140 个头像资源已落库，所有二维码加群方式均有 JPEG 资源；验收后保留本地 D1/R2 和 `seed-local.sql`，不运行清理命令。
 
 该约定防止把 Safari/WebKit 的 Canvas 编码回归误报为“后端上传成功”，也防止三引擎图片 spec 被既有 Chromium 项目重复执行或从默认门禁中遗漏。

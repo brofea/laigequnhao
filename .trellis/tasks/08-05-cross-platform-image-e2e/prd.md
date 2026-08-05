@@ -1,74 +1,71 @@
-# 三平台 Playwright 图片流程 E2E 测试
+# 图片格式切换与三平台 E2E 验收
 
 ## Goal
 
-为头像和二维码图片处理建立真正跨浏览器引擎的 Playwright E2E 回归，覆盖 Chromium、WebKit（Safari 对应引擎）和 Firefox，确保用户从选择原图、前端压缩、预览到上传保存的关键链路在三平台上都能工作。该任务只负责测试与测试运行基础设施，不改变已经落地的 PNG 图片业务契约。
+在网站发布前彻底收敛图片格式契约：头像继续使用透明 PNG，二维码改为 JPEG，并让前端、后端、seed 和 Chromium/WebKit/Firefox 图片流程 E2E 使用同一套规则。完成后通过一次真实本地 seed，将 140 个群组的图片全部成功写入本地存储；验收结束后保留这些数据，不执行清理。
 
 ## What I already know
 
-- 当前 Playwright 配置只有 `chromium-desktop` 与 `chromium-mobile` 两个项目。
-- `tests/e2e/` 当前没有专门的图片上传流程；现有图片契约主要由 Vitest 覆盖。
-- 头像上传入口位于 `AdminEditForm.vue`，公开投稿支持头像，管理员编辑还支持二维码。
-- 前端压缩最终输出统一为 PNG：头像最长边 128px、最大 128KB 且保留 alpha；二维码最长边 1024px、最大 1MB 且不透明白底。
-- 后端会对最终 PNG 的 MIME、签名、尺寸、像素和字节数再次校验；管理端图片通过 staged asset 上传后随群组保存完成 adoption。
-- 现有 E2E 已有 API 登录/种子数据模式，但没有图片 fixture 和资源落库验收模式。
-- 当前本机 Chromium、WebKit 与 Firefox 均已安装；Firefox 已通过实际 `firefox.launch()` 验证为 Playwright `153.0`。
+- 当前任务已经实现了 Chromium、WebKit、Firefox 三个图片专用 Playwright project，但成功流程仍按二维码 PNG 验收。
+- 头像当前规则为最长边 128px、透明 PNG、最大 128KB、只编码一次；本次保持不变。
+- 二维码当前规则为最长边 1024px、不透明 PNG、最大 1MB；本次改为最长边 1024px 的 JPEG，默认质量 0.90，超限后按 0.10 递减并限制尝试次数。
+- 头像压缩失败 Toast 必须为 `图像压缩失败`；二维码压缩失败 Toast 必须为 `图像压缩失败，请考虑裁剪图像`，文案不变。
+- 后端当前统一按 `image/png`、`.png` 和 PNG 校验处理资源；二维码改为 JPEG 后，后端必须按用途接受并返回正确的 JPEG MIME/扩展名。
+- `pnpm seed` 是 `scripts/seed.mjs` 的稳定入口，实际执行 `scripts/seed-local.mjs`。
+- 当前 seed 固定规划 140 个群组，所有群组应有头像，二维码按群组加群方式随机生成；脚本目前会吞掉部分下载/上传失败并继续生成 SQL，不能满足“140 图全部成功”的验收要求。
+- 旧资源无需迁移或兼容；最终资源不再使用 WebP。seed 可以读取可由 sharp 解码的源图，但不得向 API 或 R2 写入 WebP。
 
 ## Assumptions (temporary)
 
-- 优先新增独立的图片流程 spec，并让该 spec 在三个浏览器项目中运行；不把所有既有公开/管理流程复制到三个引擎。
-- 测试使用仓库内确定性、无真实联系方式的 PNG/JPEG/WebP fixture；不依赖网络图片或个人浏览器会话。
-- 成功用例应走真实浏览器 UI，并在必要处通过本地 E2E API/R2/D1 读取结果，避免只验证“按钮点击后没有报错”。
-- 失败用例聚焦前端压缩失败后的精确 Toast；后端纯校验边界继续由已有 Worker/Vitest 测试负责，除非实现过程中发现跨浏览器必须补充的 E2E 边界。
+- “140 图”按当前 seed 的数据模型解释为 140 个群组均成功拥有一个头像资源；有二维码加群方式的群组还必须拥有对应二维码资源。若用户指的是固定 140 个二维码，则需要调整 seed 分布和验收计数。
+- 三平台图片 E2E 继续覆盖管理端头像/二维码成功链路及两类压缩失败 Toast，不把全量既有业务流程复制到三个引擎。
+- 本次不保留旧 PNG 二维码资源的读取兼容层；二维码新的资源记录、URL、R2 key 和响应 MIME 均使用 JPEG 契约。
 
-## Scope Decision
+## Decisions
 
-本任务按完整管理端链路实施：在每个目标浏览器中登录管理端，编辑一个测试群组，上传头像和二维码，验证预览与 PNG 元数据，保存后读取后端资源并验收最终对象，同时覆盖压缩失败 Toast。公开投稿的头像链路不在本次三引擎专用 spec 内。
+- “最多压三次”确定为总共编码 3 次，二维码质量序列固定为 `0.90 → 0.80 → 0.70`；三次都超过 1MB 才失败并显示原有 Toast。
 
-## Requirements
+## Requirements (evolving)
 
-- 为 Chromium、WebKit、Firefox 增加明确的 Playwright 项目或等价运行入口，并保证图片 spec 可以被单独选择和在 CI 中执行。
-- 新增图片相关 E2E，至少覆盖管理端头像和二维码的成功上传/保存流程，以及头像/二维码压缩失败 Toast。
-- 成功流程必须验证最终上传对象满足对应契约：`image/png`、PNG 签名、最长边限制、字节数限制；头像保留 alpha，二维码为不透明白底。
-- 二维码成功流程必须验证图片仍可被真实二维码解码器识别，或记录清晰、可重复的跨浏览器替代验收策略。
-- 上传使用本地 E2E 服务、隔离数据和确定性 fixture；每个测试应清理或隔离自己创建的记录与资源，避免依赖测试执行顺序。
-- 浏览器缺失、服务未启动、测试未发现或任一目标浏览器失败，都必须让 E2E 命令失败，不能静默降级为单浏览器或组件测试。
-- 更新必要的 Playwright 配置、fixture、运行文档和任务文档；不修改产品图片压缩策略。
+- 头像：最长边不超过 128px；保持 alpha；只执行一次 PNG 编码；输出不超过 128KB；失败显示 `图像压缩失败`。
+- 二维码：最长边不超过 1024px；依次以 JPEG quality `0.90`、`0.80`、`0.70` 编码，超过 1MB 才进入下一次，三次均超限后失败；失败显示 `图像压缩失败，请考虑裁剪图像`。
+- 二维码 JPEG 编码前必须铺白底，避免 alpha 丢失造成黑底或不可读；头像不得铺白底。
+- 前端不再把 WebP 作为最终格式或兼容格式；上传控件、压缩器和资源 API 的最终输出契约统一为头像 PNG、二维码 JPEG。
+- 后端按资源用途校验真实 MIME、文件签名、尺寸和字节上限，并以正确扩展名、`Content-Type` 和数据库元数据保存/返回。
+- 三个平台的图片 E2E 必须验证浏览器预览 Blob、上传响应、保存后的最终资源和资源引用；二维码改为 JPEG/MIME 断言，但仍需验证二维码可识别。
+- seed 必须在真实本地 API 上完成 140 个群组的头像写入；所有二维码关联也必须完成对应 JPEG 上传和落库。任意一张图片失败都让 seed 失败，不生成“缺图但看似成功”的结果。
+- 最终 seed 验收必须记录群组、头像和二维码资源/引用计数，执行成功后保留本地 D1/R2 状态、生成的 `seed-local.sql` 和图片资源，不运行 `pnpm clean`。
 
-## Acceptance Criteria
+## Acceptance Criteria (evolving)
 
-- [x] 图片 E2E spec 在 Chromium、WebKit、Firefox 三个浏览器引擎项目中均被列出并实际执行。
-- [x] 管理端头像成功流程从文件选择走到真实上传/保存，并验证最终 PNG、尺寸、128KB 上限和 alpha 保留。
-- [x] 管理端二维码成功流程从文件选择走到真实上传/保存，并验证最终 PNG、尺寸、1MB 上限、不透明白底和二维码可识别。
-- [x] 头像和二维码压缩失败分别显示精确文案：`图像压缩失败`、`图像压缩失败，请考虑裁剪图像`，且不会继续上传无效 Blob。
-- [x] 测试数据、图片 fixture 和本地服务隔离可重复；测试不访问生产资源、不包含真实敏感信息。
-- [x] 运行文档明确三浏览器安装前置条件、单 spec 调试命令和 CI 门禁命令。
-- [x] 任务相关 lint、format、typecheck、单元/Worker 测试、E2E 和 build 通过；已知全局 format 基线问题单独记录。
+- [x] 已确认总共尝试 3 次，前端、seed、单元测试和 E2E 统一使用 `0.90 → 0.80 → 0.70`。
+- [x] 头像在三平台成功流程中输出透明 PNG，最长边 `<=128`，大小 `<=128KB`，保存后资源可读且 alpha 保留。
+- [x] 二维码在三平台成功流程中输出 JPEG，最长边 `<=1024`，大小 `<=1MB`，保存后响应为 `image/jpeg`，二维码仍可识别。
+- [x] 二维码超过大小上限时按约定质量阶梯重试；所有尝试失败后不上传 Blob，并显示原有二维码 Toast。
+- [x] 后端只接受头像 PNG 和二维码 JPEG 的新契约；不保留 WebP 最终资源或旧二维码 PNG 兼容路径。
+- [x] `pnpm seed` 一次成功完成 140 个群组、140 个头像资源，以及 78 个二维码关联资源的上传和落库；验收查询无缺失引用，数据在验收后保留。
+- [x] Chromium、WebKit、Firefox 图片 E2E 均实际执行且各 4/4 通过；浏览器缺失、服务失败、任一项目失败或 seed 计数不符都会使验收失败。
+- [x] 相关 lint、typecheck、Vitest、Worker 测试、三平台 E2E、build 通过；全局 `format:check` 仅剩未修改的 `tests/e2e/a11y-flows.spec.ts` 基线问题，已单独记录。
 
 ## Definition of Done
 
-- 三平台图片 E2E 和运行配置完成并通过质量检查。
-- 任务文档记录浏览器安装、数据隔离、fixture 和失败诊断方式。
-- 不改变现有业务代码的 PNG 契约；若为可测试性需要调整代码，必须在设计中说明边界和理由。
+- 质量阶梯语义已确认，前后端、seed、测试和文档没有 PNG/JPEG 契约漂移。
+- 三平台图片 E2E 和压缩/Worker 测试覆盖成功、超限重试和失败反馈。
+- 真实本地 seed 已完成并留下 140 图验收证据，未清理验收数据。
+- Trellis quality check 通过，必要的前端规格文档已更新。
 
-## Out of Scope
+## Out of Scope (explicit)
 
-- 不恢复 WebP 作为最终资源格式，也不兼容旧 WebP 资源。
-- 不把所有现有 E2E 流程复制到 WebKit/Firefox；本任务只扩展管理端图片关键路径的三引擎覆盖。
-- 不在本任务中新增公开投稿的三引擎图片 spec；公开投稿的头像行为仍由现有分层测试和后续专门任务覆盖。
-- 不用 Playwright 替代已有的 Vitest 图片算法、Canvas 编码和 Worker 图片校验测试。
-- 不接入真实 Safari/真实 Firefox GUI 或生产 Cloudflare 资源；Playwright 的 WebKit/Firefox 引擎与本地 E2E 服务是验收对象。
+- 不迁移或兼容发布前不存在的旧 WebP、旧二维码 PNG 资源。
+- 不把 JPEG 用于头像；不改变头像一次透明 PNG 的规则。
+- 不新增真实 Safari/真实 Firefox GUI 测试，不访问生产 R2/D1。
+- 不以 mock、组件测试或只运行 Chromium 替代三平台真实浏览器流程。
 
 ## Technical Notes
 
-- 相关前端入口：`src/components/AdminEditForm.vue`、`src/shared/browser/image-compression.ts`、`src/features/admin/pending-images.ts`。
-- 相关后端入口：`functions/_lib/routes/admin-assets.ts`、`functions/_lib/services/image-validation.ts`、`functions/_lib/routes/admin-groups.ts`。
-- 相关 E2E 基础设施：`playwright.config.ts`、`scripts/start-e2e-api.mjs`、`tests/e2e/application.spec.ts`、`tests/e2e/admin-flows.spec.ts`、`tests/e2e/real-flows.spec.ts`。
-- 项目测试策略要求 Playwright 覆盖图片关键路径，并禁止以“浏览器未安装”或组件测试替代目标浏览器门禁。
-- 研究结论见 [`research/playwright-cross-browser-image-e2e.md`](research/playwright-cross-browser-image-e2e.md)：采用单一配置、三个图片专用 desktop project；使用真实内存 `FilePayload`、本地 D1/R2 和 `jsQR`/像素检查。
-
-## Divergence Notes
-
-- 后续演进：若图片三引擎稳定，可再把完整公开/管理关键路径扩展到 WebKit/Firefox，或按浏览器拆分独立 CI job。
-- 相关场景：公开投稿头像与移动视口暂不加入本任务的三引擎图片 spec，避免把管理端资源 adoption 和公开投稿限流混成一组回归。
-- 失败边界：浏览器缺失、`No tests found`、本地服务启动失败和资源未完成 adoption 都视为门禁失败；压缩失败必须阻止无效 Blob 继续上传。
+- 前端入口：`src/shared/browser/image-compression.ts`、`src/components/AdminEditForm.vue`、`src/features/admin/api.ts`。
+- 共享契约：`shared/contracts/asset.ts`。
+- 后端入口：`functions/_lib/routes/admin-assets.ts`、`functions/_lib/services/image-validation.ts`、`functions/_lib/services/asset-service.ts`、`functions/_lib/app.ts`。
+- seed：`scripts/seed.mjs`、`scripts/seed-local.mjs`、`scripts/seed-local.test.mjs`。
+- 三平台 E2E：`playwright.config.ts`、`tests/e2e/image-flows.spec.ts`、`tests/e2e/fixtures/`。
+- 当前实现和旧验收结果只作为回归基线；本次需求变更后必须重新打开实施清单，不能直接沿用已勾选项。

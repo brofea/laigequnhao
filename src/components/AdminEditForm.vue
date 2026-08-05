@@ -402,8 +402,8 @@ function save() {
           <p>
             {{
               props.publicMode
-                ? "原图支持 PNG、JPEG 或 WebP，提交时转为 PNG（最大 128KB）。"
-                : "原图支持 PNG、JPEG 或 WebP，保存时转为 PNG（最大 128KB）。"
+                ? "原图支持 PNG 或 JPEG，提交时转为透明 PNG（最大 128KB）。"
+                : "原图支持 PNG 或 JPEG，保存时转为透明 PNG（最大 128KB）。"
             }}
           </p>
         </div>
@@ -424,7 +424,7 @@ function save() {
             ref="avatarInput"
             class="app-sr-only"
             type="file"
-            accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+            accept="image/png,image/jpeg,.png,.jpg,.jpeg"
             aria-label="上传群组头像"
             @change="readImage"
           />
@@ -566,7 +566,7 @@ function save() {
               >
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                  accept="image/png,image/jpeg,.png,.jpg,.jpeg"
                   :disabled="uploading || isDisabled"
                   :aria-label="`上传${method.label}`"
                   @change="readImage($event, method)"
@@ -575,7 +575,7 @@ function save() {
                 <Icon v-else name="upload" size="16" />
                 <span class="app-button__label">上传图片</span>
               </label>
-              <small>原图支持 PNG、JPEG 或 WebP，保存时转为 PNG，最大 1MB。</small>
+              <small>原图支持 PNG 或 JPEG，保存时转为白底 JPEG，最大 1MB。</small>
             </div>
             <p v-else class="table-muted">公开投稿不支持二维码上传。</p>
           </template>

@@ -17,6 +17,8 @@ const REAL_QR_PNG_BASE64 =
 const VALID_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const JPEG_BASE64 =
+  "/9j/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AKpgA//Z";
 
 function decodeBase64(value: string): ArrayBuffer {
   const binary = atob(value);
@@ -36,6 +38,17 @@ function createPngBlob(size?: number, type = "image/png"): Blob {
   const blobBytes = new Uint8Array(bytes.byteLength);
   blobBytes.set(bytes);
   return new Blob([blobBytes.buffer], { type });
+}
+
+function createJpegBlob(size?: number): Blob {
+  const source = new Uint8Array(decodeBase64(JPEG_BASE64));
+  const bytes = new Uint8Array(Math.max(size ?? 0, source.byteLength));
+  bytes.set(source);
+  if (bytes.length > source.length) {
+    bytes[bytes.length - 2] = 0xff;
+    bytes[bytes.length - 1] = 0xd9;
+  }
+  return new Blob([bytes], { type: "image/jpeg" });
 }
 
 function readBlobBytes(blob: Blob): Promise<Uint8Array> {
@@ -104,7 +117,7 @@ describe("image compression browser adapter", () => {
     vi.unstubAllGlobals();
   });
 
-  it.each(["image/png", "image/jpeg", "image/webp"])("接受 %s 原图", (contentType) => {
+  it.each(["image/png", "image/jpeg"])("接受 %s 原图", (contentType) => {
     const file = new File([new Uint8Array([1, 2, 3])], "source", { type: contentType });
     expect(() => {
       validateImageSource(file, getImageCompressionPolicy("logo"));
@@ -248,10 +261,10 @@ describe("image compression browser adapter", () => {
     expect(createObjectUrl).toHaveBeenCalledOnce();
   });
 
-  it("二维码使用不透明 canvas 铺纯白底，并且只编码一次", async () => {
+  it("二维码使用不透明 canvas 铺纯白底，并以 JPEG 编码", async () => {
     const bitmap = stubBitmap(2000, 1000);
     const policy = getImageCompressionPolicy("qr_code");
-    const output = createPngBlob(policy.maxBytes);
+    const output = createJpegBlob(policy.maxBytes);
     const { canvas, context } = createMockCanvas(output);
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
 
@@ -262,16 +275,17 @@ describe("image compression browser adapter", () => {
 
     expect(result.width).toBe(1024);
     expect(result.height).toBe(512);
-    expect(result.blob.type).toBe("image/png");
+    expect(result.blob.type).toBe("image/jpeg");
     expect(result.byteLength).toBe(policy.maxBytes);
     expect(canvas.toBlob).toHaveBeenCalledOnce();
+    expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/jpeg", 0.9);
     expect(canvas.getContext).toHaveBeenCalledWith("2d", { alpha: false });
     expect(context.fillStyle).toBe("#fff");
     expect(context.fillRect).toHaveBeenCalledWith(0, 0, 1024, 512);
     expect(context.drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 1024, 512);
   });
 
-  it("真实 PNG 二维码经过白底编码后仍可被扫码器识别且没有透明像素", async () => {
+  it("真实二维码经过白底 JPEG 编码后仍可被扫码器识别且没有透明像素", async () => {
     const sourcePng = Buffer.from(decodeBase64(REAL_QR_PNG_BASE64));
     stubBitmap();
     const context = {
@@ -280,17 +294,20 @@ describe("image compression browser adapter", () => {
       fillRect: vi.fn(),
       fillStyle: "",
     } as unknown as CanvasRenderingContext2D;
-    let encodedPng: Buffer | undefined;
+    let encodedJpeg: Buffer | undefined;
     const canvas = {
       width: 128,
       height: 128,
       getContext: vi.fn(() => context),
       toBlob: vi.fn(async (callback: BlobCallback, type?: string) => {
-        expect(type).toBe("image/png");
-        encodedPng = await sharp(sourcePng).flatten({ background: "#fff" }).png().toBuffer();
-        const blobBytes = new Uint8Array(encodedPng.byteLength);
-        blobBytes.set(encodedPng);
-        callback(new Blob([blobBytes.buffer], { type: "image/png" }));
+        expect(type).toBe("image/jpeg");
+        encodedJpeg = await sharp(sourcePng)
+          .flatten({ background: "#fff" })
+          .jpeg({ quality: 90 })
+          .toBuffer();
+        const blobBytes = new Uint8Array(encodedJpeg.byteLength);
+        blobBytes.set(encodedJpeg);
+        callback(new Blob([blobBytes.buffer], { type: "image/jpeg" }));
       }),
     } as unknown as HTMLCanvasElement;
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
@@ -300,10 +317,10 @@ describe("image compression browser adapter", () => {
       "qr_code",
     );
     expect(result.byteLength).toBeLessThanOrEqual(getImageCompressionPolicy("qr_code").maxBytes);
-    expect(encodedPng).toBeDefined();
-    if (!encodedPng) throw new Error("测试未产生 PNG 编码结果。");
+    expect(encodedJpeg).toBeDefined();
+    if (!encodedJpeg) throw new Error("测试未产生 JPEG 编码结果。");
 
-    const { data, info } = await sharp(encodedPng)
+    const { data, info } = await sharp(encodedJpeg)
       .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
@@ -358,16 +375,19 @@ describe("image compression browser adapter", () => {
     expect(bitmap.close).toHaveBeenCalledOnce();
   });
 
-  it("PNG 单次编码超过二维码上限时失败且不生成预览", async () => {
+  it("JPEG 三次编码都超过二维码上限时失败且不生成预览", async () => {
     stubBitmap(2000, 1000);
     const policy = getImageCompressionPolicy("qr_code");
-    const { canvas } = createMockCanvas(createPngBlob(policy.maxBytes + 1));
+    const { canvas } = createMockCanvas(createJpegBlob(policy.maxBytes + 1));
     vi.spyOn(document, "createElement").mockReturnValue(canvas);
 
     await expect(
       compressImage(new File(["x"], "qr.png", { type: "image/png" }), "qr_code"),
     ).rejects.toMatchObject({ code: "OUTPUT_TOO_LARGE" });
-    expect(canvas.toBlob).toHaveBeenCalledOnce();
+    expect(canvas.toBlob).toHaveBeenCalledTimes(3);
+    expect(canvas.toBlob).toHaveBeenNthCalledWith(1, expect.any(Function), "image/jpeg", 0.9);
+    expect(canvas.toBlob).toHaveBeenNthCalledWith(2, expect.any(Function), "image/jpeg", 0.8);
+    expect(canvas.toBlob).toHaveBeenNthCalledWith(3, expect.any(Function), "image/jpeg", 0.7);
     expect(createObjectUrl).not.toHaveBeenCalled();
   });
 

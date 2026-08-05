@@ -15,13 +15,13 @@ function asset(id: string, purpose: AssetInfo["purpose"]): AssetInfo {
   return {
     id,
     purpose,
-    r2Key: `${purpose}/${id}.png`,
-    contentType: "image/png",
+    r2Key: `${purpose}/${id}.${purpose === "qr_code" ? "jpg" : "png"}`,
+    contentType: purpose === "qr_code" ? "image/jpeg" : "image/png",
     byteLength: 128,
     width: 1,
     height: 1,
     status: "staged",
-    publicUrl: `/api/v1/assets/${purpose}/${id}.png`,
+    publicUrl: `/api/v1/assets/${purpose}/${id}.${purpose === "qr_code" ? "jpg" : "png"}`,
   };
 }
 
@@ -44,7 +44,7 @@ describe("pending admin images", () => {
     mocks.uploadLogoAsset.mockResolvedValue({ ok: true, data: logo });
     mocks.uploadQrAsset.mockResolvedValue({ ok: true, data: qr });
     const logoBlob = new Blob(["logo"], { type: "image/png" });
-    const qrBlob = new Blob(["qr"], { type: "image/png" });
+    const qrBlob = new Blob(["qr"], { type: "image/jpeg" });
 
     const result = await stagePendingAdminImages(
       { logo: logoBlob, qr: [{ methodId: "method-qr", blob: qrBlob }] },
@@ -72,8 +72,8 @@ describe("pending admin images", () => {
       {
         logo: new Blob(["logo"], { type: "image/png" }),
         qr: [
-          { methodId: "method-1", blob: new Blob(["qr-1"], { type: "image/png" }) },
-          { methodId: "method-2", blob: new Blob(["qr-2"], { type: "image/png" }) },
+          { methodId: "method-1", blob: new Blob(["qr-1"], { type: "image/jpeg" }) },
+          { methodId: "method-2", blob: new Blob(["qr-2"], { type: "image/jpeg" }) },
         ],
       },
       "csrf-token",

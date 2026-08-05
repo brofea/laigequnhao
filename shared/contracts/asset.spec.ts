@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  ASSET_CONTENT_TYPE,
+  ASSET_CONTENT_TYPES,
   ASSET_POLICIES,
   ASSET_UPLOAD_REQUEST_MAX_BYTES,
   assetPublicUrlSchema,
 } from "./asset";
 
-describe("asset PNG policy", () => {
-  it("uses the agreed final PNG limits and leaves multipart boundary headroom", () => {
-    expect(ASSET_CONTENT_TYPE).toBe("image/png");
+describe("asset purpose policies", () => {
+  it("uses purpose-specific final formats and leaves multipart boundary headroom", () => {
+    expect(ASSET_CONTENT_TYPES).toEqual({ logo: "image/png", qr_code: "image/jpeg" });
     expect(ASSET_POLICIES.logo).toMatchObject({
       maxBytes: 128 * 1024,
       maxDimension: 128,

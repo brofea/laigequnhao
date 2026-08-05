@@ -94,8 +94,8 @@ function sampleSeedInputs() {
   };
   qrCodes[0] = {
     id: "00000000-0000-4000-8000-000000000003",
-    r2Key: "qr_code/00000000-0000-4000-8000-000000000003.png",
-    publicUrl: "http://localhost:8787/qr_code/00000000-0000-4000-8000-000000000003.png",
+    r2Key: "qr_code/00000000-0000-4000-8000-000000000003.jpg",
+    publicUrl: "http://localhost:8787/qr_code/00000000-0000-4000-8000-000000000003.jpg",
     width: 1024,
     height: 576,
     byteLength: 200000,
@@ -119,7 +119,7 @@ test("生成 SQL 中 assets 写入为幂等 upsert，且不抛主键冲突", () 
     "INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, created_at, updated_at) VALUES " +
       "('00000000-0000-4000-8000-000000000001', 'logo/00000000-0000-4000-8000-000000000001.png', 'logo', 'image/png', 1000, 128, 128, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'), " +
       "('00000000-0000-4000-8000-000000000002', 'logo/00000000-0000-4000-8000-000000000002.png', 'logo', 'image/png', 900, 128, 96, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'), " +
-      "('00000000-0000-4000-8000-000000000003', 'qr_code/00000000-0000-4000-8000-000000000003.png', 'qr_code', 'image/png', 200000, 1024, 576, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+      "('00000000-0000-4000-8000-000000000003', 'qr_code/00000000-0000-4000-8000-000000000003.jpg', 'qr_code', 'image/jpeg', 200000, 1024, 576, 'staged', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
   );
   stagedDb.exec(sql);
   const assets = stagedDb.prepare("SELECT id, status, ref_count FROM assets ORDER BY id").all();

@@ -39,13 +39,17 @@ export async function createImageFixtures(): Promise<ImageFixtures> {
   })
     .png()
     .toBuffer();
+  const qrBuffer = await sharp(Buffer.from(QR_PNG_BASE64, "base64"))
+    .flatten({ background: "#ffffff" })
+    .jpeg({ quality: 90 })
+    .toBuffer();
 
   return {
     logo: { name: "transparent-logo.png", mimeType: "image/png", buffer: logoBuffer },
     qr: {
-      name: "group-qr.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(QR_PNG_BASE64, "base64"),
+      name: "group-qr.jpg",
+      mimeType: "image/jpeg",
+      buffer: qrBuffer,
     },
     invalid: {
       name: "broken-image.png",

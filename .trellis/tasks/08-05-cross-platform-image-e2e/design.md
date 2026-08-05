@@ -1,82 +1,82 @@
-# 三平台 Playwright 图片流程 E2E 测试：技术设计
+# 图片格式切换与三平台 E2E：技术设计
 
 ## 1. 设计目标
 
-在真实 Chromium、WebKit、Firefox 引擎中验证管理端图片链路：文件选择 → 浏览器解码与 Canvas PNG 压缩 → 预览 → staged asset 上传 → 群组保存 adoption → 重新读取最终资源。测试只验证现有 PNG 契约，不改变生产压缩器、共享资源契约或 Worker 校验逻辑。
+将图片格式按用途拆开：头像始终是透明 PNG，二维码始终是铺白底的 JPEG。压缩器、浏览器预览、multipart 上传、R2 key、D1 元数据、公开资源响应、seed 和三平台 E2E 必须共享同一份用途契约。
 
-## 2. 边界与项目矩阵
+## 2. 用途契约
 
-采用单一 `playwright.config.ts`，新增三个只匹配图片 spec 的 desktop project：
+| 用途 | 输出格式 | 最长边 | 大小上限 | alpha | 压缩策略 |
+|---|---|---:|---:|---|---|
+| `logo` | PNG | 128px | 128KB | 保留 | 一次编码 |
+| `qr_code` | JPEG | 1024px | 1MB | 铺白底后编码 | 固定 3 次：`0.90 → 0.80 → 0.70` |
 
-- `image-chromium`：Playwright 管理的 Chromium desktop。
-- `image-webkit`：Playwright WebKit desktop，对应 Safari/WebKit 行为。
-- `image-firefox`：Playwright Firefox desktop。
+建议共享契约暴露用途对应的 `contentType`、扩展名和压缩参数，避免继续使用一个对两种资源都成立的 `ASSET_CONTENT_TYPE = image/png`。服务器按用途选择解码/校验器：logo 使用 PNG 结构校验，QR 使用 JPEG 解码和尺寸/像素/字节校验，并拒绝用途与 MIME 不匹配的上传。
 
-现有 `chromium-desktop` 与 `chromium-mobile` 保留既有全量测试，但排除图片 spec；这样 `pnpm test:e2e` 默认会运行既有 Chromium 流程和三引擎图片流程，图片 spec 不会在 Chromium 重复执行。三引擎 project 使用 `testMatch` 或等价过滤，不使用 branded Chrome channel 代替 Playwright Chromium。
+不做旧资源迁移。由于网站尚未发布，清空现有本地资源后以新契约重新生成即可；R2 key 和 seed 文件名直接使用 `logo/<id>.png` 与 `qr_code/<id>.jpg`。
 
-继续沿用 `fullyParallel: false`、`workers: 1` 和现有 `webServer`。本地 API 通过 `scripts/start-e2e-api.mjs` 重建 `.e2e-state`，Vite 仍运行在 `5173`，API 仍运行在 `8788`。三引擎在同一个 job 串行执行，避免共享 D1/R2 状态和固定端口互相干扰。
+## 3. 浏览器压缩流程
 
-## 3. 测试数据和 fixture
+### 3.1 头像
 
-在 `tests/e2e/fixtures/` 建立 E2E 专用 helper：
+1. 检查源图并在 Canvas 中按最长边 128px 缩放。
+2. 保留源图 alpha，调用一次 `canvas.toBlob(..., "image/png")`。
+3. 校验返回 Blob 类型、签名、尺寸和 128KB 上限。
+4. 任一失败都抛出压缩错误，由现有表单显示 `图像压缩失败`，不产生 pending upload。
 
-- `image-fixtures.ts`：导出真实可解码的透明头像 PNG、固定内容二维码 PNG，以及用于压缩失败的不可解码 PNG payload。优先使用内存 `FilePayload`，避免依赖系统文件选择器；fixture 不含真实联系方式、Secret 或用户数据。
-- `image-assertions.ts`：读取预览/最终资源字节，验证 PNG signature、IHDR 尺寸、MIME、大小和像素 alpha；使用现有 `sharp` 解码最终 PNG，并使用现有 `jsqr` 解码二维码。测试 helper 不进入 `shared/`，避免让共享层依赖 DOM 或 Node 图像库。
-- 如需减少认证和种子重复，在该 fixture 层封装本 spec 专用的 API 登录、session cookie 注入、群组创建和资源读取；不扩大本任务范围去重写既有 E2E 文件。
+### 3.2 二维码
 
-fixture 必须是真实合法图片。头像样本需要包含透明像素且原图最长边大于 128px，以证明浏览器实际缩放和 alpha 保留；二维码样本使用固定可解码内容且尺寸大于目标尺寸，以证明白底处理和缩放。超限精确边界继续由 Vitest/Worker 测试负责，E2E 不依赖跨引擎完全一致的 PNG 字节数。
+1. 按最长边 1024px 缩放 Canvas；不带 alpha 的 JPEG 前先绘制白色背景。
+2. 依次以 `0.90`、`0.80`、`0.70` 调用 `canvas.toBlob(..., "image/jpeg", quality)`，总共最多 3 次。
+3. 每个 Blob 都校验 `image/jpeg`、JPEG 可解码、尺寸和 1MB 上限；未超限立即返回。
+4. 前两次超限时降低 0.10 质量；第三次仍超限后抛出压缩错误，表单继续使用现有二维码 Toast `图像压缩失败，请考虑裁剪图像`。
+5. 任何失败都不得上传最后一个超限 Blob；压缩器返回的 Blob 类型必须决定后续 multipart filename 和后端用途。
 
-## 4. 成功流程
+不再把 WebP 列为浏览器输入兼容格式或输出格式；测试 fixture 只使用 PNG/JPEG。
 
-### 4.1 头像
+## 4. 服务端与存储数据流
 
-1. 通过本地 API 登录管理员，向浏览器 context 注入 session cookie。
-2. 创建一个带普通加群方式的测试群组，进入管理端并打开编辑弹窗。
-3. 使用可访问名称 `上传群组头像` 定位隐藏 file input，调用 `setInputFiles(FilePayload)`。
-4. 等待 `role=status` 显示头像已准备好，读取 `alt="已上传的群组头像预览"` 的 blob URL。
-5. 在 browser context 内读取预览 Blob，断言 `image/png`、PNG signature、IHDR/图片尺寸、`<= 128 * 1024`，并对解码像素断言至少存在 alpha 小于 255。
-6. 保存群组，等待保存成功；通过本地 API 查询群组 DTO 和 `logoUrl`，再 GET 资源 URL，断言最终响应 `Content-Type: image/png`、资源字节和服务端返回的 width/height/byteLength 一致。
+1. 前端 API 上传函数按用途选择 `logo.png`/`qr.jpg` 和对应 Blob MIME。
+2. admin asset route 校验 multipart `purpose` 与 MIME 的组合：logo 仅 PNG，qr_code 仅 JPEG；文件签名不能由请求头单独决定。
+3. asset service 按用途生成 `.png`/`.jpg` key，并把真实 MIME 写入 staged asset 元数据和 R2。
+4. 公开资源 route 从数据库读取资源 MIME（或按已校验用途映射），返回正确 `Content-Type`，不能继续硬编码 `image/png`。
+5. adoption、删除、回收和群组 DTO 继续沿用现有生命周期；只替换格式相关的校验和 key/metadata。
 
-### 4.2 二维码
+需要同步更新 schema、接口测试、Worker 测试和所有假资源。旧 `.webp` 或二维码 `.png` 资源不进入新 contract。
 
-1. 创建或准备一个带 `qr` 加群方式的测试群组，进入同一编辑弹窗。
-2. 使用可访问名称 `上传二维码` 定位 file input 并上传真实二维码 fixture。
-3. 读取 `alt="已上传的二维码预览"` 的预览 Blob，断言 PNG、`<= 1024 * 1024`、最长边 `<= 1024`，并对所有解码像素断言 alpha 为 255。
-4. 将解码后的 RGBA 像素交给 `jsQR`，断言固定二维码内容，不能依赖可选的原生 `BarcodeDetector`。
-5. 保存群组，查询群组 DTO 与二维码资源 URL，读取最终对象并重复 MIME、字节、尺寸、不透明和二维码识别验收，同时确认资源已从 staged 变为 ready/adopted。
+## 5. seed 设计
 
-## 5. 失败流程
+`scripts/seed-local.mjs` 使用 sharp 生成最终格式，不把 source image 的格式直接上传：
 
-使用三引擎都无法解码的 `image/png` 文件 payload 触发浏览器压缩失败：
+- 每个群组生成一次头像 PNG，最长边 128px、最大 128KB。
+- 每个有 `qr_code` 加群方式的群组生成 JPEG QR 版本，最长边 1024px，并复用浏览器的 `0.90 → 0.80 → 0.70` 质量序列和 1MB 上限。
+- `uploadViaApi` 按用途发送正确 Blob MIME、filename 和 `purpose`。
+- 上传或处理任何一张应存在的图失败时立即使 seed 非零退出，不能继续生成带空资源引用的 SQL。
+- SQL 执行后查询并断言 140 个群组、140 个头像引用，以及所有二维码加群方式均有 JPEG 资源；记录各计数、尺寸、字节数和 MIME。
+- 验收使用全新本地 state 运行一次，成功后保留 D1/R2 和 `seed-local.sql`，不调用清理命令。
 
-- 头像只显示 `图像压缩失败`，没有头像预览、没有 pending logo Blob、不会发出 `/admin/assets` 上传请求。
-- 二维码只显示 `图像压缩失败，请考虑裁剪图像`，没有二维码预览、没有 pending QR Blob、不会发出 `/admin/assets` 上传请求。
+为了满足“140 图全部成功”而不是“下载失败后用较少样本循环复用”，seed 应把有效图片数量不足 140 视为失败，或改用仓库内确定性 fixture/已下载的本地输入；具体取舍在实现前以现有 seed 网络约束和用户确认后的验收可重复性为准。无论输入来源如何，最终写入资源必须全部是 PNG/JPEG 新契约。
 
-失败断言通过可访问的 `role=status`/Toast 和请求监听完成，不依赖 Vue 内部状态或 file input 的 `files` 属性；因为组件会在 change handler 中清空 input value。
+## 6. 三平台 E2E 设计
 
-## 6. 跨层验收方式
+保留 `image-chromium`、`image-webkit`、`image-firefox` 三个图片专用 project 和既有隔离配置。
 
-每个成功场景同时验收三个层次：
+- 头像成功：预览与最终资源断言 `image/png`、PNG signature、最长边 `<=128`、`<=128KB`，且存在透明像素。
+- 二维码成功：预览与最终资源断言 `image/jpeg`、JPEG signature、最长边 `<=1024`、`<=1MB`，通过 sharp 解码后 alpha 全为 255，并由 `jsQR` 验证内容。
+- 二维码超限：用可稳定产生大 JPEG 的 fixture/测试 seam 验证恰好调用 `0.90`、`0.80`、`0.70` 三次、最终失败 Toast 和无上传；不要依赖三引擎压缩结果恰好产生相同字节数。
+- 两类解码失败：保留精确 Toast、无预览、无 staged asset 上传断言。
+- 三引擎项目必须实际执行，浏览器缺失、No tests found、服务启动失败和任一失败都让命令失败。
 
-1. 浏览器预览 Blob：证明真实浏览器编码结果，而不是只证明后端能接受一个人工构造的 PNG。
-2. 上传响应与最终资源 URL：证明 multipart 上传的 `purpose`、MIME 和字节已经进入本地 R2。
-3. 群组 API/D1 聚合状态：证明 staged asset 被正确 adoption，二维码关联和头像引用存在，最终页面链路不会留下孤立资源。
+## 7. 测试分层
 
-后端已有更完整的 PNG chunk、CRC/Photon 解码和资源生命周期测试；E2E 不复制所有畸形 PNG 矩阵，只验证真实浏览器产物能穿过真实 Worker 路由并正确落库。
+- `image-compression.spec.ts`：质量序列、JPEG MIME/质量参数、超限重试、失败边界、头像单次 PNG 和 WebP 移除。
+- `asset.spec.ts` 及 Worker 测试：用途 MIME、扩展名、JPEG/PNG 校验、响应头和生命周期。
+- `image-flows.spec.ts`：真实浏览器预览 → 上传 → 保存 → 最终资源和二维码识别。
+- `seed-local.test.mjs`：输出格式/质量 ladder helper、失败即终止和 140 计数校验；真实 `pnpm seed` 作为最终验收证据，不用测试 mock 代替。
 
-## 7. 运行和门禁
+## 8. 回滚与风险
 
-- 本机已用 `pnpm exec playwright install firefox` 检查 Firefox；实际通过 `firefox.launch()` 验证版本为 `153.0`。CI/新环境必须显式运行 `pnpm exec playwright install --with-deps chromium firefox webkit`。
-- `pnpm test:e2e` 必须默认包含 `image-chromium`、`image-webkit`、`image-firefox`；允许用 `--project` 做单浏览器调试，但不能在默认门禁中跳过任一 project。
-- 浏览器缺失、服务启动失败、没有匹配到图片测试或任一 project 失败都直接失败。
-- 失败测试沿用现有 `trace: "on-first-retry"`；不把重试通过当成跨浏览器稳定性的唯一证明。
-
-## 8. 方案取舍
-
-推荐的“图片专用三 project”优于把所有现有 E2E 复制到三个引擎：当前 suite 会写入共享本地 D1/R2，扩大到全量三引擎会显著增加运行时间和状态干扰；图片专用 project 已覆盖本次 Safari 根因相关的浏览器边界。若未来需要全量三引擎，再将三个 project 映射到独立 CI job，并为每个 job 参数化 state 目录和端口。
-
-## 9. 暂不改变的内容
-
-- 不修改 `src/shared/browser/image-compression.ts`、`shared/contracts/asset.ts` 或 Worker 图片校验。
-- 不恢复 WebP 最终输出和旧资源兼容。
-- 不在本任务中新增公开投稿三平台图片 spec。
+- 实现前保持 task status 为 `planning`，用户确认质量尝试语义后才重新 `task.py start`。
+- 若 JPEG 后端校验器引入已有依赖限制，优先复用项目现有 Photon/sharp 能力，不添加第二套图片解码栈。
+- 若真实 seed 的远程图片不稳定，验收必须切换为仓库内确定性输入或明确记录环境阻断；不能降低“140 图全部存入”的门槛。
+- 若 E2E 质量阶梯难以稳定触发，可对编码器注入受控的测试 seam，但成功链路仍必须走真实 Canvas 和真实 Worker，不得 mock 整条上传流程。

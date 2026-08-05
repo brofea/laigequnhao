@@ -1,4 +1,5 @@
 import { ASSET_POLICIES, ASSET_SOURCE_MAX_BYTES } from "@shared/contracts/asset";
+import { ASSET_CONTENT_TYPES } from "@shared/contracts/asset";
 
 export type ImageCompressionPurpose = "logo" | "qr_code";
 
@@ -30,12 +31,14 @@ export const imageCompressionPolicies: Readonly<
   }),
 });
 
-const SUPPORTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-const SUPPORTED_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
+const SUPPORTED_MIME_TYPES = new Set(["image/png", "image/jpeg"]);
+const SUPPORTED_EXTENSIONS = new Set(["png", "jpg", "jpeg"]);
 const HEIC_MIME_TYPES = new Set(["image/heic", "image/heif"]);
 const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
-const PNG_MIME_TYPE = "image/png";
+const PNG_MIME_TYPE = ASSET_CONTENT_TYPES.logo;
+const JPEG_MIME_TYPE = ASSET_CONTENT_TYPES.qr_code;
 const PNG_SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_SIGNATURE = Uint8Array.from([0xff, 0xd8]);
 
 export type ImageCompressionErrorCode =
   | "SOURCE_TOO_LARGE"
@@ -112,14 +115,14 @@ export function validateImageSource(file: Blob, policy: ImageCompressionPolicy):
   ) {
     throw new ImageCompressionError(
       "UNSUPPORTED_FORMAT",
-      "不支持 HEIC，请转换为 PNG/JPEG/WebP 后重试。",
+      "不支持 HEIC，请转换为 PNG/JPEG 后重试。",
     );
   }
   if (
     !SUPPORTED_MIME_TYPES.has(mimeType) &&
     !(mimeType === "" && extension !== null && SUPPORTED_EXTENSIONS.has(extension))
   ) {
-    throw new ImageCompressionError("UNSUPPORTED_FORMAT", "仅支持 PNG、JPG、JPEG 或 WebP 图片。");
+    throw new ImageCompressionError("UNSUPPORTED_FORMAT", "仅支持 PNG、JPG 或 JPEG 图片。");
   }
 }
 
@@ -191,7 +194,7 @@ async function decodeImage(file: Blob): Promise<DecodedImage> {
     try {
       return await decodeWithImageBitmap(file);
     } catch {
-      // 某些 Safari 版本暴露 createImageBitmap 但不能解码 WebP；继续使用兼容回退。
+      // 某些 Safari 版本暴露 createImageBitmap 但不能解码输入图片；继续使用兼容回退。
     }
   }
   try {
@@ -222,12 +225,22 @@ function createCanvas(
   return { canvas, context };
 }
 
-function encodeUnsupported(): ImageCompressionError {
-  return new ImageCompressionError("ENCODE_UNSUPPORTED", "当前浏览器不支持 PNG 编码。");
+function encodeUnsupported(contentType: string = PNG_MIME_TYPE): ImageCompressionError {
+  const format = contentType === JPEG_MIME_TYPE ? "JPEG" : "PNG";
+  return new ImageCompressionError("ENCODE_UNSUPPORTED", `当前浏览器不支持 ${format} 编码。`);
 }
 
 function hasPngSignature(bytes: Uint8Array): boolean {
   return PNG_SIGNATURE.every((byte, index) => bytes[index] === byte);
+}
+
+function hasJpegSignature(bytes: Uint8Array): boolean {
+  return (
+    JPEG_SIGNATURE.every((byte, index) => bytes[index] === byte) &&
+    bytes.length >= 4 &&
+    bytes[bytes.length - 2] === 0xff &&
+    bytes[bytes.length - 1] === 0xd9
+  );
 }
 
 function readBlobBytes(blob: Blob): Promise<Uint8Array> {
@@ -252,26 +265,34 @@ function readBlobBytes(blob: Blob): Promise<Uint8Array> {
   });
 }
 
-async function isActualPngBlob(blob: Blob | null): Promise<boolean> {
-  if (!blob || blob.type.trim().toLocaleLowerCase() !== PNG_MIME_TYPE) return false;
+async function isActualImageBlob(blob: Blob | null, contentType: string): Promise<boolean> {
+  if (!blob || blob.type.trim().toLocaleLowerCase() !== contentType) return false;
   try {
-    return hasPngSignature(await readBlobBytes(blob));
+    const bytes = await readBlobBytes(blob);
+    return contentType === PNG_MIME_TYPE ? hasPngSignature(bytes) : hasJpegSignature(bytes);
   } catch {
     return false;
   }
 }
 
-async function encodeCanvas(canvas: HTMLCanvasElement): Promise<Blob> {
-  if (typeof canvas.toBlob !== "function") throw encodeUnsupported();
+async function encodeCanvas(
+  canvas: HTMLCanvasElement,
+  contentType: string,
+  quality?: number,
+): Promise<Blob> {
+  if (typeof canvas.toBlob !== "function") throw encodeUnsupported(contentType);
   let blob: Blob | null;
   try {
     blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, PNG_MIME_TYPE);
+      if (quality === undefined) canvas.toBlob(resolve, contentType);
+      else canvas.toBlob(resolve, contentType, quality);
     });
   } catch {
-    throw encodeUnsupported();
+    throw encodeUnsupported(contentType);
   }
-  if (!blob || !(await isActualPngBlob(blob))) throw encodeUnsupported();
+  if (!blob || !(await isActualImageBlob(blob, contentType))) {
+    throw encodeUnsupported(contentType);
+  }
   return blob;
 }
 
@@ -319,7 +340,7 @@ export async function detectQrCode(blob: Blob): Promise<string | null> {
 }
 
 /**
- * 在浏览器端把用户原图转换为最终 PNG。
+ * 在浏览器端把用户原图转换为按用途编码的最终 Logo PNG 或二维码 JPEG。
  * 返回的 previewUrl 属于调用方，替换、取消、关闭和卸载时必须调用 revokeImagePreview。
  */
 export async function compressImage(
@@ -347,12 +368,30 @@ export async function compressImage(
     }
     context.drawImage(decoded.source, 0, 0, dimensions.width, dimensions.height);
 
-    const output = await encodeCanvas(canvas);
-    if (output.size > policy.maxBytes) {
-      throw new ImageCompressionError(
-        "OUTPUT_TOO_LARGE",
-        `${purpose === "logo" ? "头像" : "二维码"}压缩后仍超过大小限制，请选择更简单的图片。`,
-      );
+    let output: Blob;
+    if (purpose === "logo") {
+      // 头像始终只编码一次透明 PNG。
+      output = await encodeCanvas(canvas, PNG_MIME_TYPE);
+      if (output.size > policy.maxBytes) {
+        throw new ImageCompressionError(
+          "OUTPUT_TOO_LARGE",
+          "头像压缩后仍超过大小限制，请选择更简单的图片。",
+        );
+      }
+    } else {
+      // 二维码固定尝试三次 JPEG 质量：0.90 → 0.80 → 0.70。
+      let lastSize = 0;
+      output = await (async () => {
+        for (const quality of [0.9, 0.8, 0.7]) {
+          const candidate = await encodeCanvas(canvas, JPEG_MIME_TYPE, quality);
+          lastSize = candidate.size;
+          if (candidate.size <= policy.maxBytes) return candidate;
+        }
+        throw new ImageCompressionError(
+          "OUTPUT_TOO_LARGE",
+          `二维码压缩后仍超过大小限制（${String(lastSize)} 字节），请考虑裁剪图像。`,
+        );
+      })();
     }
     if (typeof URL.createObjectURL !== "function") {
       throw new ImageCompressionError("ENCODE_UNSUPPORTED", "当前浏览器不支持图片预览。");

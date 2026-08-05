@@ -5,7 +5,7 @@ import {
   SUBMISSION_LOGO_FORM_FIELD,
   SUBMISSION_MULTIPART_MAX_BYTES,
 } from "@shared/contracts/submission";
-import { ASSET_CONTENT_TYPE } from "@shared/contracts/asset";
+import { getAssetContentType } from "@shared/contracts/asset";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createGroupRepository } from "../repositories/group-repository";
 import { createRateLimitRepository } from "../repositories/rate-limit-repository";
@@ -228,7 +228,7 @@ submissionsRoute.post("/", async (c) => {
   let logo: ValidatedSubmissionLogo | undefined;
   if (parsedRequest.logoBytes) {
     try {
-      if (parsedRequest.logoContentType !== ASSET_CONTENT_TYPE) {
+      if (parsedRequest.logoContentType !== getAssetContentType("logo")) {
         throw new ImageValidationError(
           "UNSUPPORTED_MEDIA_TYPE",
           415,

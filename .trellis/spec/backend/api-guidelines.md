@@ -152,7 +152,7 @@ WHERE status = 'published' AND deleted_at IS NULL;
 | `POST` | `/admin/boards/:id/members` | 添加成员（published/delisted 可加，trash 拒绝，重复成员拒绝） |
 | `DELETE` | `/admin/boards/:id/members/:groupId` | 移除成员关联（不删除群组） |
 | `POST` | `/admin/boards/:id/members/:groupId/move` | 上移/下移（相邻位置交换，原子） |
-| `POST` | `/admin/assets` | 上传最终 PNG 及用途元数据 |
+| `POST` | `/admin/assets` | 按用途上传最终 Logo PNG 或二维码 JPEG |
 | `DELETE` | `/admin/assets/:id` | 删除未被引用的资源 |
 | `GET` | `/admin/dashboard` | D1 业务指标和相互独立的 Analytics 组件 |
 | `GET` | `/admin/health` | API、D1、R2、版本和部署健康状态 |
@@ -169,7 +169,7 @@ WHERE status = 'published' AND deleted_at IS NULL;
 
 `last_published_at` 不进入公开 DTO；`hourly_random` 的小时槽位使用 `site.config.boards.timezone`，不写数据库位置。
 
-资源上传使用 `multipart/form-data`，但只接受一个最终 PNG。用途为 `logo` 或 `qr_code`；硬上限分别为 128 KB 和 1 MB，Logo 最长边/总像素上限为 128/16,384，二维码为 1024/1,048,576；上传请求体总上限为 1.2 MB。浏览器原图上限 5 MB 只属于客户端预处理约束，不能作为后端收到压缩 PNG 后的校验条件。写入 R2 前，服务端必须依次限制请求体和实际文件字节数、读取 PNG 结构和 IHDR 尺寸、检查宽高与总像素，最后才在 workerd 中完整解码验证可解码性；不得信任客户端声明的尺寸或字节数。
+资源上传使用 `multipart/form-data`，用途为 `logo` 或 `qr_code`，且 MIME 必须与用途严格匹配：Logo 只能是透明 PNG，二维码只能是白底 JPEG。硬上限分别为 128 KB 和 1 MB，Logo 最长边/总像素上限为 128/16,384，二维码为 1024/1,048,576；上传请求体总上限为 1.2 MB。浏览器原图上限 5 MB 只属于客户端预处理约束，不能作为后端收到压缩文件后的校验条件。写入 R2 前，服务端必须依次限制请求体和实际文件字节数、读取对应格式的真实签名和尺寸、检查宽高与总像素；PNG 在 workerd 中完整解码验证，JPEG 至少完成 SOI/marker/SOF/SOS/EOI 结构校验。不得信任客户端声明的尺寸、字节数或 MIME。
 
 ## 场景：管理员图片资源的本地访问与聚合保存
 
@@ -235,29 +235,29 @@ emit("update:assetId", clientKey, result.id, result.publicUrl);
 
 ### 3. Contracts
 
-- 浏览器接受最大 5 MB 的 PNG/JPEG/WebP 原图，先缩放、转换 PNG 并本地预览；透明 Logo 保留 alpha，二维码使用白底不透明 PNG。
+- 浏览器接受最大 5 MB 的 PNG/JPEG 原图，不再兼容 WebP；先缩放并按用途输出本地预览。透明 Logo 保留 alpha 并一次编码为 PNG，二维码铺白底后依次以 JPEG quality `0.90 → 0.80 → 0.70` 尝试，三次均超限才失败。
 - 最终 Logo/二维码分别限制 128 KB/1 MB；分别限制 128/1024 最长边和 16,384/1,048,576 总像素；请求体总上限为 1.2 MB。
-- 后端只信任实际请求体和文件字节，按“请求体/文件字节 → PNG 结构与 IHDR 尺寸 → 宽高/像素 → 完整解码”顺序校验。
+- 后端只信任实际请求体和文件字节，按“请求体/文件字节 → 用途 MIME → PNG/JPEG 真实结构与尺寸 → 宽高/像素 → 格式对应的解码/结构校验”顺序校验。
 - 公开端不得有 staged/adopt 上传接口；R2 写入后若 D1 或投稿创建失败，必须补偿删除；补偿删除失败要记录 request ID、资源 key 和错误，并留下 `delete_failed` 清理记录供后续重试。
 
 ### 4. Validation & Error Matrix
 
 - 请求体或最终文件超限 → `PAYLOAD_TOO_LARGE`（413）。
-- 非 PNG、chunk 结构无效或无法完整解码 → `UNSUPPORTED_MEDIA_TYPE`（415）。
+- 用途 MIME 不匹配、非 PNG/JPEG、PNG chunk 结构无效或 JPEG marker 结构无效 → `UNSUPPORTED_MEDIA_TYPE`（415）。
 - 宽高或总像素超限 → `VALIDATION_FAILED`（400）。
 - R2 或 D1 不可用 → `DEPENDENCY_UNAVAILABLE`（503），不得留下可公开采用的半成品。
 - 补偿删除失败 → 保留安全错误响应，结构化记录并进入 `delete_failed` 清理队列。
 
 ### 5. Good / Base / Bad Cases
 
-- Good：用户选择 5 MB 以内原图，浏览器本地得到目标 PNG，最终请求一次完成限流、图片校验、R2 和 D1 写入。
-- Base：单次 PNG 压缩结果仍超限时不上传并提示用户调整图片，重新选择或裁剪后可再次执行一次新的压缩。
+- Good：用户选择 5 MB 以内 PNG/JPEG 原图，浏览器本地得到目标 Logo PNG 或二维码 JPEG，最终请求一次完成限流、图片校验、R2 和 D1 写入。
+- Base：头像只执行一次 PNG 编码；二维码按 `0.90 → 0.80 → 0.70` 质量阶梯尝试，三次仍超限时不上传并提示用户裁剪。
 - Bad：先公开上传临时 key、信任前端尺寸/字节声明，或 D1 失败后不删除 R2 对象。
 
 ### 6. Tests Required
 
-- 浏览器单测覆盖透明 Logo、白底二维码、单次 PNG 编码、5 MB 原图、对象 URL 清理，并使用真实二维码解码器验收压缩结果。
-- Workers Vitest 必须在本地 workerd 中覆盖 multipart 请求体/文件上限、PNG 结构和像素先验校验、真实解码、ready asset 聚合及 R2 补偿/清理失败。
+- 浏览器单测覆盖透明 Logo PNG、白底二维码 JPEG、质量参数序列、三次失败、5 MB 原图、对象 URL 清理，并使用真实二维码解码器验收压缩结果。
+- Workers Vitest 必须在本地 workerd 中覆盖 multipart 请求体/文件上限、用途 MIME、PNG/JPEG 结构/尺寸/字节校验、ready asset 聚合及 R2 补偿/清理失败。
 - Playwright 覆盖管理员头像/二维码上传和公开单请求头像投稿，至少运行桌面与移动视口。
 
 ### 7. Wrong vs Correct

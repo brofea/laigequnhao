@@ -75,7 +75,7 @@ export function uploadQrAsset(
   blob: Blob,
   csrfToken: string,
 ): Promise<ApiOkResult<AssetInfo> | ApiErrorResult> {
-  return uploadAsset(blob, "qr_code", "qr.png", csrfToken);
+  return uploadAsset(blob, "qr_code", "qr.jpg", csrfToken);
 }
 
 export async function uploadLogoAsset(

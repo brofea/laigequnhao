@@ -8,7 +8,7 @@ import {
   QR_CODE_MAX_DIMENSION,
   QR_CODE_TARGET_BYTES,
 } from "../../shared/contracts/asset";
-import { PNG_1X1, PNG_ALPHA_1X1 } from "./fixtures";
+import { JPEG_1X1, PNG_1X1, PNG_ALPHA_1X1 } from "./fixtures";
 
 const env = testEnv as Env;
 let authHeaders: Record<string, string>;
@@ -121,8 +121,9 @@ describe("POST /api/v1/admin/assets", () => {
 
   it("uses the larger QR final byte limit instead of the logo limit", async () => {
     const oversizedQr = new Uint8Array(QR_CODE_TARGET_BYTES + 1);
+    oversizedQr.set(JPEG_1X1);
     const formData = new FormData();
-    formData.append("file", new Blob([oversizedQr], { type: "image/png" }), "large-qr.png");
+    formData.append("file", new Blob([oversizedQr], { type: "image/jpeg" }), "large-qr.jpg");
     formData.append("purpose", "qr_code");
 
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
@@ -133,15 +134,14 @@ describe("POST /api/v1/admin/assets", () => {
   });
 
   it("rejects a forged dimension before full WASM decoding", async () => {
-    const forged = PNG_1X1.slice();
-    // IHDR width is a big-endian uint32 at byte offset 16.
-    forged[16] = 0x00;
-    forged[17] = 0x00;
-    forged[18] = (QR_CODE_MAX_DIMENSION >> 8) as number;
-    forged[19] = (QR_CODE_MAX_DIMENSION + 1) & 0xff;
+    const forged = JPEG_1X1.slice();
+    const sof = forged.findIndex((byte, index) => byte === 0xff && forged[index + 1] === 0xc0);
+    if (sof < 0) throw new Error("测试 JPEG 缺少 SOF0。");
+    forged[sof + 5] = (QR_CODE_MAX_DIMENSION >> 8) as number;
+    forged[sof + 6] = (QR_CODE_MAX_DIMENSION + 1) & 0xff;
 
     const formData = new FormData();
-    formData.append("file", new Blob([forged], { type: "image/png" }), "wide.png");
+    formData.append("file", new Blob([forged], { type: "image/jpeg" }), "wide.jpg");
     formData.append("purpose", "qr_code");
 
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
@@ -151,15 +151,15 @@ describe("POST /api/v1/admin/assets", () => {
     });
   });
 
-  it("rejects a transparent QR PNG after decoding its pixels", async () => {
+  it("rejects a PNG uploaded for the QR JPEG purpose", async () => {
     const formData = new FormData();
     formData.append("file", new Blob([PNG_ALPHA_1X1], { type: "image/png" }), "transparent.png");
     formData.append("purpose", "qr_code");
 
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(415);
     expect((await response.json()) as unknown).toMatchObject({
-      error: { code: "VALIDATION_FAILED" },
+      error: { code: "UNSUPPORTED_MEDIA_TYPE" },
     });
   });
 
@@ -291,7 +291,7 @@ describe("GET /api/v1/admin/dashboard", () => {
 describe("DELETE /api/v1/admin/assets/:id?mode=purge (real fixture)", () => {
   it("rejects direct reference mutation without purge mode", async () => {
     const formData = new FormData();
-    formData.append("file", new Blob([PNG_1X1], { type: "image/png" }), "qr.png");
+    formData.append("file", new Blob([JPEG_1X1], { type: "image/jpeg" }), "qr.jpg");
     formData.append("purpose", "qr_code");
     const uploadResp = await apiFetch("POST", "/api/v1/admin/assets", formData);
     const uploaded = (await uploadResp.json()) as {
@@ -310,7 +310,7 @@ describe("DELETE /api/v1/admin/assets/:id?mode=purge (real fixture)", () => {
 
   it("purges a staged asset: 200, D1 gone, R2 gone", async () => {
     const formData = new FormData();
-    formData.append("file", new Blob([PNG_1X1], { type: "image/png" }), "qr.png");
+    formData.append("file", new Blob([JPEG_1X1], { type: "image/jpeg" }), "qr.jpg");
     formData.append("purpose", "qr_code");
 
     const uploadResp = await apiFetch("POST", "/api/v1/admin/assets", formData);

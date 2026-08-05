@@ -3,6 +3,7 @@ import jsQR from "jsqr";
 import { expect, type Page } from "@playwright/test";
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const JPEG_SIGNATURE = [0xff, 0xd8, 0xff];
 
 export type PreviewImage = Readonly<{
   contentType: string | null;
@@ -94,6 +95,22 @@ export function assertPreviewPng(
   return info;
 }
 
+export async function assertPreviewJpeg(
+  preview: PreviewImage,
+  limits: { maxDimension: number; maxBytes: number },
+) {
+  expect(preview.contentType?.toLowerCase()).toBe("image/jpeg");
+  expect(preview.bytes.length).toBeLessThanOrEqual(limits.maxBytes);
+  expect(preview.bytes.slice(0, 3)).toEqual(JPEG_SIGNATURE);
+  expect(preview.bytes.slice(-2)).toEqual([0xff, 0xd9]);
+  const metadata = await sharp(Uint8Array.from(preview.bytes)).metadata();
+  expect(metadata.format).toBe("jpeg");
+  expect(Math.max(metadata.width, metadata.height)).toBeLessThanOrEqual(limits.maxDimension);
+  expect(preview.width).toBe(metadata.width);
+  expect(preview.height).toBe(metadata.height);
+  return metadata;
+}
+
 export async function inspectPng(bytes: Uint8Array) {
   const metadata = await sharp(bytes).metadata();
   const { data, info } = await sharp(bytes)
@@ -111,6 +128,17 @@ export async function assertLogoPng(bytes: Uint8Array) {
 
 export async function assertQrPng(bytes: Uint8Array, expectedValue: string) {
   const { data, info } = await inspectPng(bytes);
+  for (let index = 3; index < data.length; index += 4) expect(data[index]).toBe(255);
+  expect(jsQR(new Uint8ClampedArray(data), info.width, info.height)?.data).toBe(expectedValue);
+}
+
+export async function assertQrJpeg(bytes: Uint8Array, expectedValue: string) {
+  expect(Array.from(bytes.slice(0, 3))).toEqual(JPEG_SIGNATURE);
+  expect(Array.from(bytes.slice(-2))).toEqual([0xff, 0xd9]);
+  const { data, info } = await sharp(bytes)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
   for (let index = 3; index < data.length; index += 4) expect(data[index]).toBe(255);
   expect(jsQR(new Uint8ClampedArray(data), info.width, info.height)?.data).toBe(expectedValue);
 }

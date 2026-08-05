@@ -15,7 +15,7 @@ export function createR2Adapter(r2: R2Bucket, env: Env) {
   const baseUrl = getPublicBaseUrl(env);
 
   return {
-    /** 上传最终 PNG 到 R2，返回 key */
+    /** 按用途上传最终 Logo PNG 或二维码 JPEG 到 R2，返回 key */
     async upload(
       key: string,
       body: ArrayBuffer | ReadableStream,

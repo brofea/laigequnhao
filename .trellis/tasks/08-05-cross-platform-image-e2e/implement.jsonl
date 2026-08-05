@@ -2,3 +2,14 @@
 {"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端测试、异步错误反馈和质量检查约束。"}
 {"file":".trellis/spec/frontend/architecture.md","reason":"浏览器 Canvas/object URL 边界，避免 E2E helper 进入 shared 层。"}
 {"file":".trellis/tasks/08-05-cross-platform-image-e2e/research/playwright-cross-browser-image-e2e.md","reason":"三引擎 project、FilePayload、PNG 像素验收和浏览器安装的研究结论。"}
+{"file": "shared/contracts/asset.ts", "reason": "用途级 PNG/JPEG MIME、尺寸和字节契约。"}
+{"file": "src/shared/browser/image-compression.ts", "reason": "头像单次 PNG 与二维码 JPEG 三次质量阶梯的核心实现。"}
+{"file": "src/components/AdminEditForm.vue", "reason": "图片输入、预览、Toast 和 pending Blob 流程。"}
+{"file": "src/features/admin/api.ts", "reason": "按用途上传正确 filename 与 MIME。"}
+{"file": "functions/_lib/services/image-validation.ts", "reason": "PNG/JPEG 文件结构与用途校验。"}
+{"file": "functions/_lib/routes/admin-assets.ts", "reason": "按用途接受和拒绝上传 MIME。"}
+{"file": "functions/_lib/services/asset-service.ts", "reason": "R2 key、数据库 MIME 和 staged asset 生命周期。"}
+{"file": "functions/_lib/app.ts", "reason": "最终资源响应 Content-Type。"}
+{"file": "scripts/seed-local.mjs", "reason": "seed 头像 PNG、二维码 JPEG 和 140 图强门禁。"}
+{"file": "tests/e2e/image-flows.spec.ts", "reason": "三浏览器真实图片成功/失败流程和 JPEG 验收。"}
+{"file": ".trellis/tasks/08-05-cross-platform-image-e2e/research/qr-jpeg-seed-acceptance.md", "reason": "二维码用途 MIME、Canvas quality ladder、JPEG R2 contract 与 140 图 seed fail-closed 验收研究。"}

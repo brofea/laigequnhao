@@ -111,6 +111,7 @@ const LOGO_MAX_BYTES = 128 * 1024;
 
 const QR_MAX_DIM = 1024;
 const QR_MAX_BYTES = 1024 * 1024;
+export const QR_QUALITY_LADDER = Object.freeze([0.9, 0.8, 0.7]);
 
 // ─── 读取 .dev.vars ───────────────────────────────────────
 function readAdminPassword() {
@@ -208,12 +209,16 @@ const DESCRIPTIONS = [
 ];
 const KINDS = ["official", "interest"];
 
-// ─── 图片压缩（sharp，单次 PNG 编码）────────────────────────
+// ─── 图片压缩（logo 单次 PNG；QR 固定 JPEG quality ladder）────────
 async function compressToSize(buf, w, h, opts) {
   const pipeline = sharp(buf).resize(w, h);
-  if (!opts.preserveAlpha) pipeline.flatten({ background: "#ffffff" });
-  const png = await pipeline.png().toBuffer();
-  return png.length <= opts.maxBytes ? png : null;
+  if (opts.preserveAlpha) pipeline.ensureAlpha();
+  else pipeline.flatten({ background: "#ffffff" });
+  const encoded =
+    opts.format === "jpeg"
+      ? await pipeline.jpeg({ quality: Math.round(opts.quality * 100) }).toBuffer()
+      : await pipeline.png().toBuffer();
+  return encoded.length <= opts.maxBytes ? encoded : null;
 }
 
 // ─── 下载 + 处理图片（全部下载并压缩logo；QR压缩在后续按需进行）───
@@ -223,8 +228,7 @@ async function downloadAndProcess(count) {
   for (let i = 0; i < count; i++) {
     try {
       const res = await fetch("https://www.loliapi.com/acg/", { redirect: "manual" });
-      const imgUrl =
-        res.headers.get("location") || `https://esa-img.iloli.love/i/pc/img${380 + i}.webp`;
+      const imgUrl = res.headers.get("location") || `https://picsum.photos/seed/lgqh-${i}/800/600`;
       process.stdout.write(`  [${i + 1}/${count}] ${imgUrl.slice(-40)}... `);
 
       const imgRes = await fetch(imgUrl);
@@ -260,9 +264,14 @@ async function downloadAndProcess(count) {
       results.push(null);
     }
   }
-  const valid = results.filter(Boolean);
-  console.log(`  完成 ${valid.length}/${count} 张（有效）`);
-  return valid; // 只返回有效的，保持平坦索引
+  const failed = results.findIndex((item) => !item);
+  if (failed >= 0 || results.length !== count) {
+    throw new Error(
+      `图片处理失败：计划 ${count} 张，成功 ${results.filter(Boolean).length} 张（首个失败索引 ${failed}）。`,
+    );
+  }
+  console.log(`  完成 ${results.length}/${count} 张（有效）`);
+  return results;
 }
 
 // ─── 按需生成 QR 压缩版本 ──────────────────────────────────
@@ -272,14 +281,23 @@ async function compressQR(sourceBuf) {
     oh = meta.height;
   const qw = Math.max(ow, oh) > QR_MAX_DIM ? Math.round((ow * QR_MAX_DIM) / Math.max(ow, oh)) : ow;
   const qh = Math.max(ow, oh) > QR_MAX_DIM ? Math.round((oh * QR_MAX_DIM) / Math.max(ow, oh)) : oh;
-  return await compressToSize(sourceBuf, qw, qh, {
-    maxBytes: QR_MAX_BYTES,
-    preserveAlpha: false,
-  });
+  for (const quality of QR_QUALITY_LADDER) {
+    const jpeg = await compressToSize(sourceBuf, qw, qh, {
+      maxBytes: QR_MAX_BYTES,
+      preserveAlpha: false,
+      format: "jpeg",
+      quality,
+    });
+    if (jpeg) return jpeg;
+  }
+  throw new Error(`二维码 JPEG 在 quality ${QR_QUALITY_LADDER.join("、")} 下均超过 1MB。`);
 }
 
 // ─── 规划所有群组 ──────────────────────────────────────────
 function planGroups(imageCount) {
+  if (imageCount !== GROUP_COUNT) {
+    throw new Error(`图片数量必须与计划一致：需要 ${GROUP_COUNT} 张，实际 ${imageCount} 张。`);
+  }
   const groups = [];
   for (let i = 0; i < GROUP_COUNT; i++) {
     // 状态分配: 0-99 已发布, 100-109 待审核, 110-119 已下架, 120-129 已拒绝, 130-139 回收站
@@ -312,8 +330,8 @@ function planGroups(imageCount) {
       else hasQrCode = true;
     }
 
-    // 图片索引（循环使用）
-    const imageIndex = i % imageCount;
+    // 每个计划群组必须拥有独立成功处理的头像输入。
+    const imageIndex = i;
 
     groups.push({
       index: i,
@@ -346,9 +364,11 @@ async function authenticate() {
 
 // ─── API 上传 ─────────────────────────────────────────────
 async function uploadViaApi(buffer, purpose) {
-  const b = Buffer.isBuffer(buffer) ? new Blob([buffer], { type: "image/png" }) : buffer;
+  const contentType = purpose === "qr_code" ? "image/jpeg" : "image/png";
+  const extension = purpose === "qr_code" ? "jpg" : "png";
+  const b = Buffer.isBuffer(buffer) ? new Blob([buffer], { type: contentType }) : buffer;
   const form = new FormData();
-  form.append("file", b, `${purpose}.png`);
+  form.append("file", b, `${purpose}.${extension}`);
   form.append("purpose", purpose);
   const headers = { "X-CSRF-Token": csrfToken };
   if (sessionCookie) headers["Cookie"] = sessionCookie;
@@ -371,13 +391,11 @@ async function uploadAll(images, groups) {
   const logos = new Array(groups.length).fill(null);
   const qrCodes = new Array(groups.length).fill(null);
 
-  // 先统计需要上传的总数
-  let logoCount = 0,
-    qrCount = 0;
+  // 所有 140 个群组必须有头像；二维码群组必须有二维码资源。
+  const logoCount = groups.length;
+  let qrCount = 0;
   for (const g of groups) {
-    const img = images[g.imageIndex];
-    if (img) logoCount++;
-    if (g.joinMethods.hasQrCode && img) qrCount++;
+    if (g.joinMethods.hasQrCode) qrCount++;
   }
 
   // 上传 logos
@@ -385,19 +403,12 @@ async function uploadAll(images, groups) {
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i];
     const img = images[g.imageIndex];
-    if (!img) {
-      console.log(`  logo ${i + 1}/${logoCount}: SKIP（无源图）`);
-      continue;
-    }
+    if (!img) throw new Error(`logo ${i + 1}/${logoCount} 缺少已处理图片。`);
     process.stdout.write(`  logo ${done + 1}/${logoCount}... `);
-    try {
-      const asset = await uploadViaApi(img.logoBuf, "logo");
-      logos[i] = { ...asset, width: img.logoW, height: img.logoH, byteLength: img.logoBuf.length };
-      console.log(`OK ${asset.id.slice(0, 8)}`);
-      done++;
-    } catch (e) {
-      console.log(`FAIL: ${e.message}`);
-    }
+    const asset = await uploadViaApi(img.logoBuf, "logo");
+    logos[i] = { ...asset, width: img.logoW, height: img.logoH, byteLength: img.logoBuf.length };
+    console.log(`OK ${asset.id.slice(0, 8)}`);
+    done++;
   }
 
   // 上传 QR codes（仅对有 qr_code 的群）
@@ -406,41 +417,41 @@ async function uploadAll(images, groups) {
     const g = groups[i];
     if (!g.joinMethods.hasQrCode) continue;
     const img = images[g.imageIndex];
-    if (!img) {
-      console.log(`  QR ${i + 1}/${qrCount}: SKIP（无源图）`);
-      continue;
-    }
+    if (!img) throw new Error(`QR ${i + 1}/${qrCount} 缺少已处理图片。`);
     process.stdout.write(`  QR ${done + 1}/${qrCount}... `);
-    try {
-      const qrBuf = await compressQR(img.sourceBuf);
-      const qrMeta = await sharp(qrBuf).metadata();
-      const asset = await uploadViaApi(qrBuf, "qr_code");
-      qrCodes[i] = {
-        ...asset,
-        width: qrMeta.width,
-        height: qrMeta.height,
-        byteLength: qrBuf.length,
-      };
-      console.log(
-        `OK ${asset.id.slice(0, 8)} ${(qrBuf.length / 1024).toFixed(0)}KB ${qrMeta.width}x${qrMeta.height}`,
-      );
-      done++;
-    } catch (e) {
-      console.log(`FAIL: ${e.message}`);
-    }
+    const qrBuf = await compressQR(img.sourceBuf);
+    const qrMeta = await sharp(qrBuf).metadata();
+    const asset = await uploadViaApi(qrBuf, "qr_code");
+    qrCodes[i] = {
+      ...asset,
+      width: qrMeta.width,
+      height: qrMeta.height,
+      byteLength: qrBuf.length,
+    };
+    console.log(
+      `OK ${asset.id.slice(0, 8)} ${(qrBuf.length / 1024).toFixed(0)}KB ${qrMeta.width}x${qrMeta.height}`,
+    );
+    done++;
   }
 
   console.log(
     `R2 上传: ${logos.filter(Boolean).length} logos + ${qrCodes.filter(Boolean).length} QRs`,
   );
+  if (
+    logos.some((asset) => !asset) ||
+    groups.some((g, index) => g.joinMethods.hasQrCode && !qrCodes[index])
+  ) {
+    throw new Error("资源上传未完整完成，拒绝生成缺图 SQL。");
+  }
   return { logos, qrCodes };
 }
 
 // ─── 生成 SQL ─────────────────────────────────────────────
 /** 幂等写入 asset：空库插入，已存在（staged，来自上传接口）则原地升级为 ready */
 function assetUpsertSql(a, purpose, t) {
+  const contentType = purpose === "qr_code" ? "image/jpeg" : "image/png";
   return (
-    `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', '${purpose}', 'image/png', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}') ` +
+    `INSERT INTO assets (id, r2_key, purpose, content_type, byte_length, width, height, status, ref_count, created_at, updated_at) VALUES ('${a.id}', '${a.r2Key}', '${purpose}', '${contentType}', ${a.byteLength}, ${a.width}, ${a.height}, 'ready', 0, '${t}', '${t}') ` +
     `ON CONFLICT(id) DO UPDATE SET r2_key = excluded.r2_key, purpose = excluded.purpose, content_type = excluded.content_type, byte_length = excluded.byte_length, width = excluded.width, height = excluded.height, status = excluded.status, ref_count = 0, updated_at = excluded.updated_at;`
   );
 }
@@ -580,6 +591,88 @@ function generateSQL(groups, { logos, qrCodes }) {
 
 export { generateSQL };
 
+function executeLocalSqlJson(command) {
+  const output = execSync(
+    `${NPX} wrangler d1 execute lgqh-dev --local --persist-to "${PERSIST_TO}" --command "${command}" --json`,
+    { cwd: resolve(__dirname, ".."), encoding: "utf-8", timeout: 30000, stdio: "pipe" },
+  );
+  const ansiEscape = String.fromCharCode(27);
+  const normalized = output.replace(new RegExp(`${ansiEscape}\\[[0-?]*[ -/]*[@-~]`, "g"), "");
+  const jsonStart = normalized.indexOf("[");
+  if (jsonStart < 0) throw new Error("无法解析 seed D1 验收结果。");
+  const payload = JSON.parse(normalized.slice(jsonStart));
+  return payload[0]?.results ?? [];
+}
+
+async function verifySeedState(groups, assets) {
+  const expectedQrCount = groups.filter((group) => group.joinMethods.hasQrCode).length;
+  const expectedAssetCount = GROUP_COUNT + expectedQrCount;
+  const [stats] = executeLocalSqlJson(`
+    SELECT
+      (SELECT COUNT(*) FROM groups) AS groups,
+      (SELECT COUNT(*) FROM groups WHERE logo_r2_key IS NOT NULL AND logo_url IS NOT NULL) AS logo_references,
+      (SELECT COUNT(*) FROM assets) AS assets,
+      (SELECT COUNT(*) FROM assets WHERE purpose = 'logo' AND content_type = 'image/png' AND status = 'ready') AS ready_logos,
+      (SELECT COUNT(*) FROM assets WHERE purpose = 'qr_code' AND content_type = 'image/jpeg' AND status = 'ready') AS ready_qrs,
+      (SELECT COUNT(*) FROM join_methods WHERE type = 'qr_code') AS qr_methods,
+      (SELECT COUNT(*) FROM join_methods WHERE type = 'qr_code' AND asset_id IS NOT NULL) AS qr_references,
+      (SELECT COUNT(*) FROM assets WHERE ref_count = 0) AS orphan_assets,
+      (SELECT COUNT(*) FROM assets a WHERE a.ref_count !=
+        (SELECT COUNT(*) FROM groups g WHERE g.logo_r2_key = a.r2_key) +
+        (SELECT COUNT(*) FROM join_methods jm WHERE jm.asset_id = a.id)) AS ref_count_mismatches,
+      (SELECT COUNT(*) FROM assets WHERE (purpose = 'logo' AND r2_key NOT LIKE 'logo/%.png') OR (purpose = 'qr_code' AND r2_key NOT LIKE 'qr_code/%.jpg')) AS wrong_keys
+  `);
+  const expected = {
+    groups: GROUP_COUNT,
+    logo_references: GROUP_COUNT,
+    assets: expectedAssetCount,
+    ready_logos: GROUP_COUNT,
+    ready_qrs: expectedQrCount,
+    qr_methods: expectedQrCount,
+    qr_references: expectedQrCount,
+    orphan_assets: 0,
+    ref_count_mismatches: 0,
+    wrong_keys: 0,
+  };
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    if (Number(stats?.[key]) !== expectedValue) {
+      throw new Error(
+        `seed D1 验收失败：${key} 期望 ${expectedValue}，实际 ${String(stats?.[key])}。`,
+      );
+    }
+  }
+
+  const persistedAssets = [...assets.logos, ...assets.qrCodes].filter(Boolean);
+  for (const asset of persistedAssets) {
+    const response = await fetch(asset.publicUrl);
+    if (!response.ok) throw new Error(`seed R2 验收失败：${asset.r2Key} HTTP ${response.status}。`);
+    const expectedType = asset.r2Key.startsWith("qr_code/") ? "image/jpeg" : "image/png";
+    const responseType = response.headers.get("content-type")?.split(";", 1)[0]?.toLowerCase();
+    if (responseType !== expectedType) {
+      throw new Error(
+        `seed MIME 验收失败：${asset.r2Key} 期望 ${expectedType}，实际 ${responseType}。`,
+      );
+    }
+    const body = Buffer.from(await response.arrayBuffer());
+    if (body.byteLength !== asset.byteLength) {
+      throw new Error(`seed 字节验收失败：${asset.r2Key} 元数据与对象大小不一致。`);
+    }
+    const metadata = await sharp(body).metadata();
+    if (metadata.format !== (expectedType === "image/jpeg" ? "jpeg" : "png")) {
+      throw new Error(`seed 格式验收失败：${asset.r2Key}。`);
+    }
+    if (metadata.width !== asset.width || metadata.height !== asset.height) {
+      throw new Error(`seed 尺寸验收失败：${asset.r2Key} 元数据与对象尺寸不一致。`);
+    }
+    if (expectedType === "image/png" && metadata.hasAlpha !== true) {
+      throw new Error(`seed alpha 验收失败：${asset.r2Key} 不是带 alpha 通道的 PNG。`);
+    }
+  }
+  console.log(
+    `✅ seed 验收通过：${GROUP_COUNT} groups, ${GROUP_COUNT} logos, ${expectedQrCount} QRs；D1/R2 数据保留。`,
+  );
+}
+
 // ─── 主流程 ────────────────────────────────────────────────
 export async function main() {
   console.log("═══ 全链路种子数据生成 ═══\n");
@@ -607,6 +700,17 @@ export async function main() {
 
   // 3. 上传
   const assets = await uploadAll(images, groups);
+  if (assets.logos.length !== GROUP_COUNT || assets.logos.some((asset) => !asset)) {
+    throw new Error(
+      `seed 头像验收失败：需要 ${GROUP_COUNT} 个，实际 ${assets.logos.filter(Boolean).length} 个。`,
+    );
+  }
+  const expectedQrCount = groups.filter((group) => group.joinMethods.hasQrCode).length;
+  if (assets.qrCodes.filter(Boolean).length !== expectedQrCount) {
+    throw new Error(
+      `seed 二维码验收失败：需要 ${expectedQrCount} 个，实际 ${assets.qrCodes.filter(Boolean).length} 个。`,
+    );
+  }
 
   // 4. 生成 SQL
   const sql = generateSQL(groups, assets);
@@ -623,7 +727,7 @@ export async function main() {
         stdio: "pipe",
       },
     );
-    console.log("✅ 种子数据完成");
+    await verifySeedState(groups, assets);
   } catch (err) {
     console.error("❌ 执行失败:", err.stderr?.slice(0, 200) || err.message);
     console.log(`SQL 文件保留: ${SQL_FILE}`);
