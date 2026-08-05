@@ -401,3 +401,37 @@ T06 完成全量验收：Unit 82 / Workers 104 / E2E 68（新增 public/admin/a1
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 点赞按钮排版修复定稿（卡片+Diaog）
+
+**Date**: 2026-08-05
+**Task**: 点赞按钮排版修复定稿（卡片+Diaog）
+**Branch**: `fix/button-feedback`
+
+### Summary
+
+修复点赞按钮排版并定稿：根因是 Button 组件把 slot 包进 inline 的 .app-button__label，inline SVG 按文本基线对齐导致图标与数字错位；把 label 改为 inline-flex+align-items:center+gap 3px+translateY(1px) 契约，卡片 icon 0.5px、Dialog 底部点赞按钮（.dialog-like-button）icon 2px（后两项为用户手动微调值）。实测：卡片 icon 与数字共线 0.5px 差、间距 3px；Dialog icon 低于文字 2px。规范同步。另外 48882ef：wrangler 环境配置重构（删 preview/production，新增 develop 接入 pnpm dev，投稿限流 10000）。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b48ce93` | (see git log) |
+| `48882ef` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
