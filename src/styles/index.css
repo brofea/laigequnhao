@@ -28,9 +28,6 @@ button:disabled:not([aria-busy="true"]) {
 button[aria-busy="true"]:disabled {
   cursor: pointer;
 }
-[aria-busy="true"] button:disabled {
-  cursor: pointer;
-}
 
 .app-shell {
   --primitive-blue-500: #4f7cff;
