@@ -36,45 +36,27 @@
     "SUBMISSION_LIMIT_PER_HOUR": "1",
   },
   "env": {
-    "preview": {
-      "name": "laigequnhao-preview",
+    // pnpm dev 由 vite.config.ts 设置 CLOUDFLARE_ENV=develop 加载此环境。
+    // 部署流程（scripts/deploy.mjs）不读取 env 区块，生产 vars 由部署脚本硬编码。
+    "develop": {
+      // wrangler 环境区块不继承顶层 D1/R2 绑定，必须显式声明（本地模拟库）。
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "laigequnhao-preview",
+          "database_name": "lgqh-dev",
           "migrations_dir": "migrations",
         },
       ],
       "r2_buckets": [
         {
           "binding": "R2",
-          "bucket_name": "laigequnhao-assets-preview",
+          "bucket_name": "lgqh-dev",
         },
       ],
       "vars": {
-        "ENVIRONMENT": "preview",
-        "SECURE_COOKIE": "true",
-        "SUBMISSION_LIMIT_PER_HOUR": "1",
-      },
-    },
-    "production": {
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "laigequnhao-prod",
-          "migrations_dir": "migrations",
-        },
-      ],
-      "r2_buckets": [
-        {
-          "binding": "R2",
-          "bucket_name": "laigequnhao-assets-prod",
-        },
-      ],
-      "vars": {
-        "ENVIRONMENT": "production",
-        "SECURE_COOKIE": "true",
-        "SUBMISSION_LIMIT_PER_HOUR": "1",
+        "ENVIRONMENT": "develop",
+        "SECURE_COOKIE": "false",
+        "SUBMISSION_LIMIT_PER_HOUR": "10000",
       },
     },
   },
