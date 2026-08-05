@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-0.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-08-05
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-0.md` | ~370 | Active |
+| `journal-0.md` | ~403 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-08-05 | 完成跨平台图片压缩与 E2E 验收 | `a1119ad` | `fix/button-feedback` |
 | 11 | 2026-08-05 | 修复 WebKit 图片压缩与上传 | `5d0751e` | `fix/button-feedback` |
 | 10 | 2026-08-05 | 统一按钮 Loading 与 Disabled 状态 | `93ffb80` | `fix/button-feedback` |
 | 9 | 2026-08-05 | 补齐数据库交互按钮反馈 | `ddcf6ce` | `fix/button-feedback` |
