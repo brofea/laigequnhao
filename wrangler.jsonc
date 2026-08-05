@@ -51,7 +51,7 @@
         "ENVIRONMENT": "develop",
         "SECURE_COOKIE": "false",
         "SUBMISSION_LIMIT_PER_HOUR": "10000",
-        "LIKE_LIMIT_PER_TEN_MINUTE": "100",
+        "LIKE_LIMIT_PER_TEN_MINUTE": "1000",
       },
     },
   },
