@@ -335,3 +335,36 @@ T06 完成全量验收：Unit 82 / Workers 104 / E2E 68（新增 public/admin/a1
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 修复 WebKit 图片压缩与上传
+
+**Date**: 2026-08-05
+**Task**: 修复 WebKit 图片压缩与上传
+**Branch**: `fix/button-feedback`
+
+### Summary
+
+将头像和二维码前端压缩、管理员资源、公开投稿、R2/D1 元数据及本地 seed 全部统一为 PNG；头像 128KB、二维码 1MB，采用单次编码和精确失败 Toast，补齐 PNG 校验、alpha/白底与跨层回归测试。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5d0751e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
