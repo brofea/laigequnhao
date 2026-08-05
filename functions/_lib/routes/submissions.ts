@@ -228,7 +228,7 @@ submissionsRoute.post("/", async (c) => {
   let logo: ValidatedSubmissionLogo | undefined;
   if (parsedRequest.logoBytes) {
     try {
-      if (parsedRequest.logoContentType !== getAssetContentType("logo")) {
+      if (parsedRequest.logoContentType && parsedRequest.logoContentType !== getAssetContentType("logo")) {
         throw new ImageValidationError(
           "UNSUPPORTED_MEDIA_TYPE",
           415,
