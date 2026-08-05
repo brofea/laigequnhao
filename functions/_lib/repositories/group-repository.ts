@@ -479,7 +479,7 @@ export function createGroupRepository(db: D1Database) {
                  id, r2_key, purpose, content_type, byte_length, width, height,
                  status, ref_count
                )
-               VALUES (?, ?, 'logo', 'image/webp', ?, ?, ?, 'ready', 1)`,
+               VALUES (?, ?, 'logo', 'image/png', ?, ?, ?, 'ready', 1)`,
             )
             .bind(
               input.readyAsset.id,
@@ -617,7 +617,7 @@ export function createGroupRepository(db: D1Database) {
              id, r2_key, purpose, content_type, byte_length, width, height,
              status, ref_count, delete_attempts, delete_last_error, delete_last_error_code
            )
-           VALUES (?, ?, 'logo', 'image/webp', ?, ?, ?, 'delete_failed', 0, 1, ?, ?)
+           VALUES (?, ?, 'logo', 'image/png', ?, ?, ?, 'delete_failed', 0, 1, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              status = 'delete_failed',
              ref_count = 0,

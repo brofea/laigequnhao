@@ -4,7 +4,15 @@ import type { DemoGroup } from "../data/fixtures";
 import Button from "./Button.vue";
 import GroupCard from "./GroupCard.vue";
 
-const props = defineProps<{ groups: DemoGroup[] }>();
+const props = withDefaults(
+  defineProps<{
+    groups: DemoGroup[];
+    likeLoading?: (groupId: string) => boolean;
+  }>(),
+  {
+    likeLoading: () => false,
+  },
+);
 const emit = defineEmits<{
   open: [group: DemoGroup];
   like: [group: DemoGroup];
@@ -94,6 +102,7 @@ function handleTrackClick(event: MouseEvent) {
       <div v-for="group in props.groups" :key="group.id" class="carousel-slide">
         <GroupCard
           :group="group"
+          :like-loading="props.likeLoading(group.id)"
           @open="emit('open', $event)"
           @like="emit('like', $event)"
         />

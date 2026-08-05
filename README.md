@@ -157,6 +157,23 @@ Cloudflare Cron，应继续复用同一清理服务，并保留 D1/R2 失败可�
 
 ## 可用命令
 
+### 三平台图片 E2E
+
+Playwright 图片流程默认在 Chromium、WebKit 和 Firefox 三个桌面引擎中运行。首次执行前安装匹配的浏览器：
+
+```bash
+pnpm exec playwright install chromium firefox webkit
+pnpm test:e2e tests/e2e/image-flows.spec.ts
+```
+
+只调试某一个引擎时使用对应 project：
+
+```bash
+pnpm test:e2e --project=image-chromium tests/e2e/image-flows.spec.ts
+pnpm test:e2e --project=image-webkit tests/e2e/image-flows.spec.ts
+pnpm test:e2e --project=image-firefox tests/e2e/image-flows.spec.ts
+```
+
 ### 日常开发
 
 | 命令              | 说明                                                                        |

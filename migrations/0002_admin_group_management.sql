@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS assets (
   id                   TEXT PRIMARY KEY,
   r2_key               TEXT NOT NULL,
   purpose              TEXT NOT NULL CHECK (purpose IN ('logo', 'qr_code')),
-  content_type         TEXT NOT NULL DEFAULT 'image/webp',
+  content_type         TEXT NOT NULL DEFAULT 'image/png',
   byte_length          INTEGER NOT NULL,
   width                INTEGER NOT NULL,
   height               INTEGER NOT NULL,

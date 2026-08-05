@@ -14,6 +14,10 @@ function getOrCreateDeviceId(): string {
   return id;
 }
 
+export type LikeToggleResult =
+  | { ok: true; data: { liked: boolean; likeCount: number } }
+  | { ok: false; code: string };
+
 export function useLikedGroups() {
   const deviceId = getOrCreateDeviceId();
   const likedIds = ref<Set<string>>(new Set(getItem("likedIds", likedIdsSchema) ?? []));
@@ -22,33 +26,18 @@ export function useLikedGroups() {
     setItem("likedIds", [...likedIds.value]);
   }
 
-  async function toggle(groupId: string, currentLiked: boolean): Promise<number | null> {
-    const prevLiked = likedIds.value.has(groupId);
-
-    // 乐观更新
-    if (currentLiked) {
-      likedIds.value.delete(groupId);
-    } else {
-      likedIds.value.add(groupId);
-    }
-    likedIds.value = new Set(likedIds.value);
-    save();
-
+  async function toggle(groupId: string, currentLiked: boolean): Promise<LikeToggleResult> {
     const result = await toggleLike(groupId, currentLiked);
 
-    if (!result.ok) {
-      // 回滚
-      if (prevLiked) {
-        likedIds.value.add(groupId);
-      } else {
-        likedIds.value.delete(groupId);
-      }
-      likedIds.value = new Set(likedIds.value);
-      save();
-      return null;
-    }
+    if (!result.ok) return { ok: false, code: result.error.code };
 
-    return result.data.likeCount;
+    const next = new Set(likedIds.value);
+    if (result.data.liked) next.add(groupId);
+    else next.delete(groupId);
+    likedIds.value = next;
+    save();
+
+    return { ok: true, data: result.data };
   }
 
   return { deviceId, likedIds, toggle };

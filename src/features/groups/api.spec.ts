@@ -24,7 +24,7 @@ describe("submitGroup 图片接线", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("有 logo 时用 payload + 单张 WebP 组成 multipart", async () => {
+  it("有 logo 时用 payload + 单张 PNG 组成 multipart", async () => {
     const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
       expect(init.body).toBeInstanceOf(FormData);
       const form = init.body as FormData;
@@ -36,8 +36,8 @@ describe("submitGroup 图片接线", () => {
       expect(form.get("filePurpose")).toBe("logo");
       const file = form.get("file");
       expect(file).toBeInstanceOf(File);
-      expect((file as File).type).toBe("image/webp");
-      expect((file as File).name).toBe("logo.webp");
+      expect((file as File).type).toBe("image/png");
+      expect((file as File).name).toBe("logo.png");
       return Promise.resolve(
         new Response(JSON.stringify(receipt), {
           status: 201,
@@ -54,7 +54,7 @@ describe("submitGroup 图片接线", () => {
         platform: "微信群",
         groupNumber: "123456",
       },
-      new Blob(["final webp"], { type: "image/webp" }),
+      new Blob(["final png"], { type: "image/png" }),
     );
 
     expect(result).toMatchObject({ ok: true, data: receipt.data });

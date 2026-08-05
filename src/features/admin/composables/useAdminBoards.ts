@@ -28,14 +28,19 @@ export function useAdminBoards(getCsrf: () => string) {
   const loaded = ref(false);
 
   let controller: AbortController | null = null;
+  let latestRequestId = 0;
 
   async function load(): Promise<boolean> {
+    const requestId = ++latestRequestId;
     controller?.abort();
-    controller = new AbortController();
+    const requestController = new AbortController();
+    controller = requestController;
     loading.value = true;
     error.value = null;
     try {
-      const result = await fetchAdminBoards(controller.signal);
+      const result = await fetchAdminBoards(requestController.signal);
+      if (requestId !== latestRequestId) return false;
+
       if (!result.ok) {
         error.value = result.error.message;
         return false;
@@ -44,6 +49,8 @@ export function useAdminBoards(getCsrf: () => string) {
       const perBoard = await Promise.all(
         result.data.boards.map((board) => fetchBoardMembers(board.id)),
       );
+      if (requestId !== latestRequestId) return false;
+
       const next: Record<string, BoardMemberDto[]> = {};
       result.data.boards.forEach((board, index) => {
         const members = perBoard[index];
@@ -53,11 +60,12 @@ export function useAdminBoards(getCsrf: () => string) {
       loaded.value = true;
       return true;
     } catch (e) {
+      if (requestId !== latestRequestId) return false;
       if (e instanceof Error && e.name === "AbortError") return false;
       error.value = "板块加载失败";
       return false;
     } finally {
-      loading.value = false;
+      if (requestId === latestRequestId) loading.value = false;
     }
   }
 

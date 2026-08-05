@@ -1,17 +1,5 @@
-import {
-  LOGO_CODE_MAX_BYTES,
-  LOGO_MAX_BYTES,
-  LOGO_MAX_DIMENSION,
-  LOGO_MIN_QUALITY,
-  LOGO_QUALITY_STEP,
-  LOGO_START_QUALITY,
-  QR_CODE_MAX_BYTES,
-  QR_CODE_MAX_DIMENSION,
-  QR_CODE_TARGET_BYTES,
-  QR_MIN_QUALITY,
-  QR_QUALITY_STEP,
-  QR_START_QUALITY,
-} from "@shared/contracts/asset";
+import { ASSET_POLICIES, ASSET_SOURCE_MAX_BYTES } from "@shared/contracts/asset";
+import { ASSET_CONTENT_TYPES } from "@shared/contracts/asset";
 
 export type ImageCompressionPurpose = "logo" | "qr_code";
 
@@ -19,9 +7,6 @@ export type ImageCompressionPolicy = Readonly<{
   maxSourceBytes: number;
   maxBytes: number;
   maxDimension: number;
-  startQuality: number;
-  minQuality: number;
-  qualityStep: number;
   preserveAlpha: boolean;
 }>;
 
@@ -33,30 +18,27 @@ export const imageCompressionPolicies: Readonly<
   Record<ImageCompressionPurpose, ImageCompressionPolicy>
 > = Object.freeze({
   logo: Object.freeze({
-    maxSourceBytes: LOGO_CODE_MAX_BYTES,
-    maxBytes: LOGO_MAX_BYTES,
-    maxDimension: LOGO_MAX_DIMENSION,
-    startQuality: LOGO_START_QUALITY,
-    minQuality: LOGO_MIN_QUALITY,
-    qualityStep: LOGO_QUALITY_STEP,
-    preserveAlpha: true,
+    maxSourceBytes: ASSET_SOURCE_MAX_BYTES,
+    maxBytes: ASSET_POLICIES.logo.maxBytes,
+    maxDimension: ASSET_POLICIES.logo.maxDimension,
+    preserveAlpha: ASSET_POLICIES.logo.preserveAlpha,
   }),
   qr_code: Object.freeze({
-    maxSourceBytes: QR_CODE_MAX_BYTES,
-    maxBytes: QR_CODE_TARGET_BYTES,
-    maxDimension: QR_CODE_MAX_DIMENSION,
-    startQuality: QR_START_QUALITY,
-    minQuality: QR_MIN_QUALITY,
-    qualityStep: QR_QUALITY_STEP,
-    preserveAlpha: false,
+    maxSourceBytes: ASSET_SOURCE_MAX_BYTES,
+    maxBytes: ASSET_POLICIES.qr_code.maxBytes,
+    maxDimension: ASSET_POLICIES.qr_code.maxDimension,
+    preserveAlpha: ASSET_POLICIES.qr_code.preserveAlpha,
   }),
 });
 
-const SUPPORTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-const SUPPORTED_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
+const SUPPORTED_MIME_TYPES = new Set(["image/png", "image/jpeg"]);
+const SUPPORTED_EXTENSIONS = new Set(["png", "jpg", "jpeg"]);
 const HEIC_MIME_TYPES = new Set(["image/heic", "image/heif"]);
 const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
-const WEBP_MIME_TYPE = "image/webp";
+const PNG_MIME_TYPE = ASSET_CONTENT_TYPES.logo;
+const JPEG_MIME_TYPE = ASSET_CONTENT_TYPES.qr_code;
+const PNG_SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_SIGNATURE = Uint8Array.from([0xff, 0xd8]);
 
 export type ImageCompressionErrorCode =
   | "SOURCE_TOO_LARGE"
@@ -89,19 +71,6 @@ export function getImageCompressionPolicy(
   purpose: ImageCompressionPurpose,
 ): ImageCompressionPolicy {
   return imageCompressionPolicies[purpose];
-}
-
-export function getQualitySteps(policy: ImageCompressionPolicy): number[] {
-  const values: number[] = [];
-  for (
-    let quality = policy.startQuality;
-    quality >= policy.minQuality;
-    quality -= policy.qualityStep
-  ) {
-    values.push(quality);
-  }
-  if (values[values.length - 1] !== policy.minQuality) values.push(policy.minQuality);
-  return values;
 }
 
 export function calculateTargetDimensions(
@@ -146,14 +115,14 @@ export function validateImageSource(file: Blob, policy: ImageCompressionPolicy):
   ) {
     throw new ImageCompressionError(
       "UNSUPPORTED_FORMAT",
-      "不支持 HEIC，请转换为 PNG/JPEG/WebP 后重试。",
+      "不支持 HEIC，请转换为 PNG/JPEG 后重试。",
     );
   }
   if (
     !SUPPORTED_MIME_TYPES.has(mimeType) &&
     !(mimeType === "" && extension !== null && SUPPORTED_EXTENSIONS.has(extension))
   ) {
-    throw new ImageCompressionError("UNSUPPORTED_FORMAT", "仅支持 PNG、JPG、JPEG 或 WebP 图片。");
+    throw new ImageCompressionError("UNSUPPORTED_FORMAT", "仅支持 PNG、JPG 或 JPEG 图片。");
   }
 }
 
@@ -225,7 +194,7 @@ async function decodeImage(file: Blob): Promise<DecodedImage> {
     try {
       return await decodeWithImageBitmap(file);
     } catch {
-      // 某些 Safari 版本暴露 createImageBitmap 但不能解码 WebP；继续使用兼容回退。
+      // 某些 Safari 版本暴露 createImageBitmap 但不能解码输入图片；继续使用兼容回退。
     }
   }
   try {
@@ -256,21 +225,21 @@ function createCanvas(
   return { canvas, context };
 }
 
-function encodeUnsupported(): ImageCompressionError {
-  return new ImageCompressionError("ENCODE_UNSUPPORTED", "当前浏览器不支持 WebP 编码。");
+function encodeUnsupported(contentType: string = PNG_MIME_TYPE): ImageCompressionError {
+  const format = contentType === JPEG_MIME_TYPE ? "JPEG" : "PNG";
+  return new ImageCompressionError("ENCODE_UNSUPPORTED", `当前浏览器不支持 ${format} 编码。`);
 }
 
-function hasWebpSignature(bytes: Uint8Array): boolean {
+function hasPngSignature(bytes: Uint8Array): boolean {
+  return PNG_SIGNATURE.every((byte, index) => bytes[index] === byte);
+}
+
+function hasJpegSignature(bytes: Uint8Array): boolean {
   return (
-    bytes.length >= 12 &&
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
+    JPEG_SIGNATURE.every((byte, index) => bytes[index] === byte) &&
+    bytes.length >= 4 &&
+    bytes[bytes.length - 2] === 0xff &&
+    bytes[bytes.length - 1] === 0xd9
   );
 }
 
@@ -296,68 +265,35 @@ function readBlobBytes(blob: Blob): Promise<Uint8Array> {
   });
 }
 
-async function isActualWebpBlob(blob: Blob | null): Promise<boolean> {
-  if (!blob || blob.type.trim().toLocaleLowerCase() !== WEBP_MIME_TYPE) return false;
+async function isActualImageBlob(blob: Blob | null, contentType: string): Promise<boolean> {
+  if (!blob || blob.type.trim().toLocaleLowerCase() !== contentType) return false;
   try {
-    return hasWebpSignature(await readBlobBytes(blob));
+    const bytes = await readBlobBytes(blob);
+    return contentType === PNG_MIME_TYPE ? hasPngSignature(bytes) : hasJpegSignature(bytes);
   } catch {
     return false;
   }
 }
 
-function dataUrlToWebpBlob(dataUrl: string): Blob | null {
-  const comma = dataUrl.indexOf(",");
-  if (comma < 0 || dataUrl.slice(0, 5).toLocaleLowerCase() !== "data:") return null;
-
-  const metadata = dataUrl.slice(5, comma).split(";");
-  const mediaType = metadata[0]?.trim().toLocaleLowerCase();
-  if (mediaType !== WEBP_MIME_TYPE) return null;
-
-  const payload = dataUrl.slice(comma + 1);
+async function encodeCanvas(
+  canvas: HTMLCanvasElement,
+  contentType: string,
+  quality?: number,
+): Promise<Blob> {
+  if (typeof canvas.toBlob !== "function") throw encodeUnsupported(contentType);
+  let blob: Blob | null;
   try {
-    let bytes: Uint8Array;
-    if (metadata.slice(1).some((value) => value.trim().toLocaleLowerCase() === "base64")) {
-      const binary = atob(payload);
-      bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    } else {
-      const decoded = decodeURIComponent(payload);
-      bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
-    }
-    const buffer = new ArrayBuffer(bytes.byteLength);
-    new Uint8Array(buffer).set(bytes);
-    return new Blob([buffer], { type: WEBP_MIME_TYPE });
+    blob = await new Promise<Blob | null>((resolve) => {
+      if (quality === undefined) canvas.toBlob(resolve, contentType);
+      else canvas.toBlob(resolve, contentType, quality);
+    });
   } catch {
-    return null;
+    throw encodeUnsupported(contentType);
   }
-}
-
-async function encodeCanvasWithDataUrl(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
-  if (typeof canvas.toDataURL !== "function") throw encodeUnsupported();
-  try {
-    const dataUrl = canvas.toDataURL(WEBP_MIME_TYPE, quality / 100);
-    const blob = dataUrlToWebpBlob(dataUrl);
-    if (!blob || !(await isActualWebpBlob(blob))) throw encodeUnsupported();
-    return blob;
-  } catch (error) {
-    if (error instanceof ImageCompressionError) throw error;
-    throw encodeUnsupported();
+  if (!blob || !(await isActualImageBlob(blob, contentType))) {
+    throw encodeUnsupported(contentType);
   }
-}
-
-async function encodeCanvas(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
-  let blob: Blob | null = null;
-  if (typeof canvas.toBlob === "function") {
-    try {
-      blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob(resolve, WEBP_MIME_TYPE, quality / 100);
-      });
-    } catch {
-      blob = null;
-    }
-  }
-
-  if (blob && (await isActualWebpBlob(blob))) return blob;
-  return encodeCanvasWithDataUrl(canvas, quality);
+  return blob;
 }
 
 export function revokeImagePreview(previewUrl: string | null | undefined): void {
@@ -404,7 +340,7 @@ export async function detectQrCode(blob: Blob): Promise<string | null> {
 }
 
 /**
- * 在浏览器端把用户原图转换为最终 WebP。
+ * 在浏览器端把用户原图转换为按用途编码的最终 Logo PNG 或二维码 JPEG。
  * 返回的 previewUrl 属于调用方，替换、取消、关闭和卸载时必须调用 revokeImagePreview。
  */
 export async function compressImage(
@@ -432,19 +368,30 @@ export async function compressImage(
     }
     context.drawImage(decoded.source, 0, 0, dimensions.width, dimensions.height);
 
-    let output: Blob | null = null;
-    for (const quality of getQualitySteps(policy)) {
-      const candidate = await encodeCanvas(canvas, quality);
-      if (candidate.size <= policy.maxBytes) {
-        output = candidate;
-        break;
+    let output: Blob;
+    if (purpose === "logo") {
+      // 头像始终只编码一次透明 PNG。
+      output = await encodeCanvas(canvas, PNG_MIME_TYPE);
+      if (output.size > policy.maxBytes) {
+        throw new ImageCompressionError(
+          "OUTPUT_TOO_LARGE",
+          "头像压缩后仍超过大小限制，请选择更简单的图片。",
+        );
       }
-    }
-    if (!output) {
-      throw new ImageCompressionError(
-        "OUTPUT_TOO_LARGE",
-        `${purpose === "logo" ? "头像" : "二维码"}压缩后仍超过大小限制，请选择更简单的图片。`,
-      );
+    } else {
+      // 二维码固定尝试三次 JPEG 质量：0.90 → 0.80 → 0.70。
+      let lastSize = 0;
+      output = await (async () => {
+        for (const quality of [0.9, 0.8, 0.7]) {
+          const candidate = await encodeCanvas(canvas, JPEG_MIME_TYPE, quality);
+          lastSize = candidate.size;
+          if (candidate.size <= policy.maxBytes) return candidate;
+        }
+        throw new ImageCompressionError(
+          "OUTPUT_TOO_LARGE",
+          `二维码压缩后仍超过大小限制（${String(lastSize)} 字节），请考虑裁剪图像。`,
+        );
+      })();
     }
     if (typeof URL.createObjectURL !== "function") {
       throw new ImageCompressionError("ENCODE_UNSUPPORTED", "当前浏览器不支持图片预览。");

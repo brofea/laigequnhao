@@ -90,9 +90,9 @@ export async function submitGroup(
   const validated = submissionRequestSchema.parse(input);
   if (logoBlob) {
     const formData = new FormData();
-    // Blob 不进入 JSON schema；multipart 只承载最终压缩后的 WebP。
+    // Blob 不进入 JSON schema；multipart 只承载最终压缩后的 PNG。
     formData.append("payload", JSON.stringify(validated));
-    formData.append("file", logoBlob, "logo.webp");
+    formData.append("file", logoBlob, "logo.png");
     formData.append("filePurpose", "logo");
     return api.postForm("/submissions", submissionReceiptSchema, formData);
   }

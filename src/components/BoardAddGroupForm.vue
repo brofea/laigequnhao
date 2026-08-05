@@ -2,12 +2,17 @@
 import { computed, ref } from "vue";
 import type { DemoBoard, DemoGroup } from "../data/fixtures";
 import Button from "./Button.vue";
-import Icon from "./Icon.vue";
 import Input from "./Input.vue";
 
 const props = defineProps<{
   board: DemoBoard;
   groups: DemoGroup[];
+  /** 当前正在提交到板块的群组 ID；同一动作期间禁止重复添加。 */
+  addingGroupId?: string | null;
+  /** 整个添加流程的忙碌状态，例如上层正在重新同步板块快照。 */
+  busy?: boolean;
+  /** 禁止添加表单交互，但不表示组件正在执行异步动作。 */
+  disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -30,10 +35,38 @@ const results = computed(() => {
 function onAvatarError(groupId: string) {
   failedAvatarIds.value = new Set(failedAvatarIds.value).add(groupId);
 }
+
+function isAdding(groupId: string) {
+  return props.addingGroupId === groupId;
+}
+
+function isFormBusy() {
+  return Boolean(props.busy || props.addingGroupId);
+}
+
+function isActionDisabled(groupId?: string) {
+  return Boolean(
+    props.disabled || props.busy || (props.addingGroupId && groupId && !isAdding(groupId)),
+  );
+}
+
+function addLabel(title: string) {
+  return `添加群组 ${title}`;
+}
+
+function addGroup(group: DemoGroup) {
+  if (isActionDisabled(group.id) || isAdding(group.id)) return;
+  emit("add", group);
+}
+
+function cancel() {
+  if (isFormBusy() || props.disabled) return;
+  emit("cancel");
+}
 </script>
 
 <template>
-  <div class="board-add-group-form">
+  <div class="board-add-group-form" :aria-busy="isFormBusy() || undefined">
     <div class="board-edit-form__intro">
       <p class="eyebrow">Add group to board</p>
       <p>输入群组名称后再查询，空搜索不会渲染结果，也不会触发任何数据请求。</p>
@@ -46,14 +79,19 @@ function onAvatarError(groupId: string) {
       @clear="query = ''"
     />
     <div v-if="normalizedQuery" class="board-group-search-results" role="listbox">
-      <button
+      <Button
         v-for="group in results"
         :key="group.id"
         class="board-group-search-result"
         type="button"
         role="option"
-        :aria-label="`添加群组 ${group.title}`"
-        @click="emit('add', group)"
+        :aria-label="addLabel(group.title)"
+        :disabled="isActionDisabled(group.id)"
+        variant="normal"
+        size="sm"
+        icon="plus"
+        :loading="isAdding(group.id)"
+        @click="addGroup(group)"
       >
         <span
           class="group-avatar group-avatar--mini"
@@ -72,15 +110,22 @@ function onAvatarError(groupId: string) {
           <span v-else>!</span>
         </span>
         <strong>{{ group.title }}</strong>
-        <Icon name="plus" size="16" />
-      </button>
+      </Button>
       <div v-if="!results.length" class="app-empty app-empty--compact">
         <strong>没有匹配的群组</strong><span>换一个群组名称再试试。</span>
       </div>
     </div>
     <div class="admin-edit-form__footer">
       <span class="admin-edit-form__footer-spacer"></span>
-      <Button variant="quiet" type="button" @click="emit('cancel')">取消</Button>
+      <Button
+        variant="quiet"
+        type="button"
+        :disabled="isFormBusy() || props.disabled"
+        :aria-busy="isFormBusy() ? 'true' : undefined"
+        @click="cancel"
+      >
+        取消
+      </Button>
     </div>
   </div>
 </template>

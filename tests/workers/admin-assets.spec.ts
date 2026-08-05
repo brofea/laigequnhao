@@ -8,7 +8,7 @@ import {
   QR_CODE_MAX_DIMENSION,
   QR_CODE_TARGET_BYTES,
 } from "../../shared/contracts/asset";
-import { WEBP_1X1 } from "./fixtures";
+import { JPEG_1X1, PNG_1X1, PNG_ALPHA_1X1 } from "./fixtures";
 
 const env = testEnv as Env;
 let authHeaders: Record<string, string>;
@@ -60,9 +60,9 @@ describe("POST /api/v1/admin/assets", () => {
     expect(response.status).toBe(401);
   });
 
-  it("rejects non-WebP upload", async () => {
+  it("rejects non-PNG upload", async () => {
     const formData = new FormData();
-    formData.append("file", new Blob(["not-webp"], { type: "text/plain" }), "test.txt");
+    formData.append("file", new Blob(["not-png"], { type: "text/plain" }), "test.txt");
     formData.append("purpose", "logo");
     formData.append("width", "100");
     formData.append("height", "100");
@@ -72,10 +72,10 @@ describe("POST /api/v1/admin/assets", () => {
     expect(response.status).toBe(415);
   });
 
-  it("rejects a truncated WebP whose RIFF length no longer matches", async () => {
-    const truncated = WEBP_1X1.slice(0, -1);
+  it("rejects a truncated PNG", async () => {
+    const truncated = PNG_1X1.slice(0, -1);
     const formData = new FormData();
-    formData.append("file", new Blob([truncated], { type: "image/webp" }), "truncated.webp");
+    formData.append("file", new Blob([truncated], { type: "image/png" }), "truncated.png");
     formData.append("purpose", "logo");
 
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
@@ -88,14 +88,14 @@ describe("POST /api/v1/admin/assets", () => {
   it("rejects missing fields", async () => {
     const formData = new FormData();
     // Missing purpose, width, height, byteLength
-    formData.append("file", new Blob(["x"], { type: "image/webp" }), "test.webp");
+    formData.append("file", new Blob(["x"], { type: "image/png" }), "test.png");
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
     expect(response.status).toBe(400);
   });
 
   it("enforces multipart request size independently from the final file size", async () => {
     const formData = new FormData();
-    formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "test.webp");
+    formData.append("file", new Blob([PNG_1X1], { type: "image/png" }), "test.png");
     formData.append("purpose", "logo");
     formData.append("extra", "x".repeat(ASSET_UPLOAD_REQUEST_MAX_BYTES));
 
@@ -109,7 +109,7 @@ describe("POST /api/v1/admin/assets", () => {
   it("enforces the actual final file byte limit before decoding", async () => {
     const oversizedLogo = new Uint8Array(LOGO_MAX_BYTES + 1);
     const formData = new FormData();
-    formData.append("file", new Blob([oversizedLogo], { type: "image/webp" }), "large.webp");
+    formData.append("file", new Blob([oversizedLogo], { type: "image/png" }), "large.png");
     formData.append("purpose", "logo");
 
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
@@ -121,8 +121,9 @@ describe("POST /api/v1/admin/assets", () => {
 
   it("uses the larger QR final byte limit instead of the logo limit", async () => {
     const oversizedQr = new Uint8Array(QR_CODE_TARGET_BYTES + 1);
+    oversizedQr.set(JPEG_1X1);
     const formData = new FormData();
-    formData.append("file", new Blob([oversizedQr], { type: "image/webp" }), "large-qr.webp");
+    formData.append("file", new Blob([oversizedQr], { type: "image/jpeg" }), "large-qr.jpg");
     formData.append("purpose", "qr_code");
 
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
@@ -133,15 +134,14 @@ describe("POST /api/v1/admin/assets", () => {
   });
 
   it("rejects a forged dimension before full WASM decoding", async () => {
-    const forged = WEBP_1X1.slice();
-    // VP8L width is width-1 in bits 0..13. Keep the RIFF/chunk lengths valid.
-    forged[21] = (QR_CODE_MAX_DIMENSION & 0xff) as number;
-    forged[22] = (QR_CODE_MAX_DIMENSION >> 8) as number;
-    forged[23] = 0;
-    forged[24] = 0x10;
+    const forged = JPEG_1X1.slice();
+    const sof = forged.findIndex((byte, index) => byte === 0xff && forged[index + 1] === 0xc0);
+    if (sof < 0) throw new Error("测试 JPEG 缺少 SOF0。");
+    forged[sof + 5] = (QR_CODE_MAX_DIMENSION >> 8) as number;
+    forged[sof + 6] = (QR_CODE_MAX_DIMENSION + 1) & 0xff;
 
     const formData = new FormData();
-    formData.append("file", new Blob([forged], { type: "image/webp" }), "wide.webp");
+    formData.append("file", new Blob([forged], { type: "image/jpeg" }), "wide.jpg");
     formData.append("purpose", "qr_code");
 
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
@@ -151,11 +151,34 @@ describe("POST /api/v1/admin/assets", () => {
     });
   });
 
-  it("rejects a structurally valid but undecodable WebP", async () => {
-    const corrupt = WEBP_1X1.slice();
-    corrupt[25] = 0;
+  it("rejects a PNG uploaded for the QR JPEG purpose", async () => {
     const formData = new FormData();
-    formData.append("file", new Blob([corrupt], { type: "image/webp" }), "corrupt.webp");
+    formData.append("file", new Blob([PNG_ALPHA_1X1], { type: "image/png" }), "transparent.png");
+    formData.append("purpose", "qr_code");
+
+    const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
+    expect(response.status).toBe(415);
+    expect((await response.json()) as unknown).toMatchObject({
+      error: { code: "UNSUPPORTED_MEDIA_TYPE" },
+    });
+  });
+
+  it("preserves alpha-capable PNGs for logos", async () => {
+    const formData = new FormData();
+    formData.append("file", new Blob([PNG_ALPHA_1X1], { type: "image/png" }), "alpha-logo.png");
+    formData.append("purpose", "logo");
+
+    const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
+    expect(response.status).toBe(201);
+    const json = (await response.json()) as { ok: boolean; data: { contentType: string } };
+    expect(json).toMatchObject({ ok: true, data: { contentType: "image/png" } });
+  });
+
+  it("rejects a structurally valid but undecodable PNG", async () => {
+    const corrupt = PNG_1X1.slice();
+    corrupt[62] = 0;
+    const formData = new FormData();
+    formData.append("file", new Blob([corrupt], { type: "image/png" }), "corrupt.png");
     formData.append("purpose", "logo");
 
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
@@ -165,9 +188,9 @@ describe("POST /api/v1/admin/assets", () => {
     });
   });
 
-  it("stores a decoded WebP with the fixed R2 content type", async () => {
+  it("stores a decoded PNG with the fixed R2 content type", async () => {
     const formData = new FormData();
-    formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "logo.webp");
+    formData.append("file", new Blob([PNG_1X1], { type: "image/png" }), "logo.png");
     formData.append("purpose", "logo");
 
     const response = await apiFetch("POST", "/api/v1/admin/assets", formData);
@@ -184,17 +207,17 @@ describe("POST /api/v1/admin/assets", () => {
       };
     };
     expect(json.ok).toBe(true);
-    expect(json.data).toMatchObject({ width: 1, height: 1, byteLength: WEBP_1X1.byteLength });
+    expect(json.data).toMatchObject({ width: 1, height: 1, byteLength: PNG_1X1.byteLength });
     expect(json.data.publicUrl).toBe(`https://assets.test.invalid/${json.data.r2Key}`);
     const object = await env.R2.head(json.data.r2Key);
     expect(object).not.toBeNull();
-    expect(object?.httpMetadata?.contentType).toBe("image/webp");
+    expect(object?.httpMetadata?.contentType).toBe("image/png");
   });
 
   it("returns a same-origin public URL and serves its complete R2 response when no base URL is configured", async () => {
     const envWithoutPublicBaseUrl = { ...env, R2_PUBLIC_BASE_URL: undefined } as Env;
     const formData = new FormData();
-    formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "logo.webp");
+    formData.append("file", new Blob([PNG_1X1], { type: "image/png" }), "logo.png");
     formData.append("purpose", "logo");
 
     const uploadResponse = await app.fetch(
@@ -219,15 +242,15 @@ describe("POST /api/v1/admin/assets", () => {
       envWithoutPublicBaseUrl,
     );
     expect(assetResponse.status).toBe(200);
-    expect(new Uint8Array(await assetResponse.arrayBuffer())).toEqual(WEBP_1X1);
-    expect(assetResponse.headers.get("Content-Type")).toBe("image/webp");
+    expect(new Uint8Array(await assetResponse.arrayBuffer())).toEqual(PNG_1X1);
+    expect(assetResponse.headers.get("Content-Type")).toBe("image/png");
     expect(assetResponse.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
     expect(assetResponse.headers.get("X-Content-Type-Options")).toBe("nosniff");
   });
 
   it("returns 404 for a missing public asset", async () => {
     const response = await app.fetch(
-      new Request("http://localhost/api/v1/assets/logo/missing.webp"),
+      new Request("http://localhost/api/v1/assets/logo/missing.png"),
       env,
     );
 
@@ -268,7 +291,7 @@ describe("GET /api/v1/admin/dashboard", () => {
 describe("DELETE /api/v1/admin/assets/:id?mode=purge (real fixture)", () => {
   it("rejects direct reference mutation without purge mode", async () => {
     const formData = new FormData();
-    formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "qr.webp");
+    formData.append("file", new Blob([JPEG_1X1], { type: "image/jpeg" }), "qr.jpg");
     formData.append("purpose", "qr_code");
     const uploadResp = await apiFetch("POST", "/api/v1/admin/assets", formData);
     const uploaded = (await uploadResp.json()) as {
@@ -287,7 +310,7 @@ describe("DELETE /api/v1/admin/assets/:id?mode=purge (real fixture)", () => {
 
   it("purges a staged asset: 200, D1 gone, R2 gone", async () => {
     const formData = new FormData();
-    formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "qr.webp");
+    formData.append("file", new Blob([JPEG_1X1], { type: "image/jpeg" }), "qr.jpg");
     formData.append("purpose", "qr_code");
 
     const uploadResp = await apiFetch("POST", "/api/v1/admin/assets", formData);

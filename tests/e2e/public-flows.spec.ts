@@ -44,9 +44,10 @@ async function seedPublishedGroup(
   auth: { cookie: string; csrf: string },
   title: string,
   tags: string[] = [],
-  joinMethods: Array<{ type: "group_number"; value: string; sortOrder: number } | { type: "url"; url: string; sortOrder: number }> = [
-    { type: "group_number", value: "100001", sortOrder: 0 },
-  ],
+  joinMethods: Array<
+    | { type: "group_number"; value: string; sortOrder: number }
+    | { type: "url"; url: string; sortOrder: number }
+  > = [{ type: "group_number", value: "100001", sortOrder: 0 }],
 ): Promise<string> {
   const { status, data } = await api(
     page,
@@ -120,7 +121,13 @@ test("深链访问下架群组不泄露信息", async ({ page }) => {
   const title = `下架隔离群-${String(Date.now())}`;
   const groupId = await seedPublishedGroup(page, auth, title);
 
-  const { status: getStatus, data: getData } = await api(page, "GET", `/admin/${groupId}`, undefined, auth);
+  const { status: getStatus, data: getData } = await api(
+    page,
+    "GET",
+    `/admin/${groupId}`,
+    undefined,
+    auth,
+  );
   expect(getStatus).toBe(200);
   const version = (getData as { data: { version: number } }).data.version;
   const { status: downStatus } = await api(
@@ -155,16 +162,119 @@ test("点赞不打开详情弹窗", async ({ page }) => {
   const pressedBefore = await likeButton.getAttribute("aria-pressed");
   await likeButton.click();
   await expect(page.locator('[data-dialog="group-detail-dialog"]')).toHaveCount(0);
-  await expect(likeButton).toHaveAttribute("aria-pressed", pressedBefore === "true" ? "false" : "true");
+  await expect(likeButton).toHaveAttribute(
+    "aria-pressed",
+    pressedBefore === "true" ? "false" : "true",
+  );
+});
+
+test("点赞按 150ms 延迟显示 Loading，快请求不闪烁且响应后才更新", async ({ page }) => {
+  const auth = await loginViaApi(page);
+  const slowTitle = `慢点赞群-${String(Date.now())}`;
+  const fastTitle = `快点赞群-${String(Date.now())}`;
+  const failTitle = `失败点赞群-${String(Date.now())}`;
+  const slowGroupId = await seedPublishedGroup(page, auth, slowTitle);
+  await seedPublishedGroup(page, auth, fastTitle);
+  const failGroupId = await seedPublishedGroup(page, auth, failTitle);
+
+  await page.goto("/");
+  const slowCard = page.locator(".group-card", { hasText: slowTitle }).first();
+  const fastCard = page.locator(".group-card", { hasText: fastTitle }).first();
+  await expect(slowCard).toBeVisible();
+  await expect(fastCard).toBeVisible();
+
+  const slowButton = slowCard.locator(".like-button");
+  const slowCountBefore = Number((await slowButton.innerText()).trim());
+  let slowRequests = 0;
+  let releaseSlow: (() => void) | undefined;
+  const slowGate = new Promise<void>((resolve) => {
+    releaseSlow = resolve;
+  });
+
+  await page.route("**/api/v1/groups/*/like", async (route) => {
+    if (route.request().url().includes(slowGroupId)) {
+      slowRequests += 1;
+      await slowGate;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          data: { liked: true, likeCount: slowCountBefore + 1 },
+          requestId: "00000000-0000-4000-8000-000000000001",
+        }),
+      });
+      return;
+    }
+    if (route.request().url().includes(failGroupId)) {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          error: { code: "INTERNAL_ERROR", message: "点赞服务暂时不可用" },
+          requestId: "00000000-0000-4000-8000-000000000003",
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        data: { liked: true, likeCount: 1 },
+        requestId: "00000000-0000-4000-8000-000000000002",
+      }),
+    });
+  });
+
+  await slowButton.click();
+  await expect(slowButton).toBeDisabled();
+  await expect(slowButton).toHaveAttribute("aria-busy", "true");
+  await expect
+    .poll(() => slowButton.evaluate((element) => getComputedStyle(element).cursor))
+    .toBe("pointer");
+  await expect(slowButton).toContainText(String(slowCountBefore));
+  await expect(slowButton.locator(".app-button__spinner")).toHaveCount(0);
+
+  await slowButton.dispatchEvent("click");
+  expect(slowRequests).toBe(1);
+  await expect(slowButton.locator(".app-button__spinner")).toBeVisible();
+  await expect(slowButton.locator(".app-button__label")).toHaveCount(0);
+
+  releaseSlow?.();
+  await expect(slowButton).toHaveAttribute("aria-pressed", "true");
+  await expect(slowButton).toContainText(String(slowCountBefore + 1));
+  await expect(page.getByText("点赞成功")).toBeVisible();
+
+  const fastButton = fastCard.locator(".like-button");
+  await fastButton.click();
+  await expect(fastButton).toHaveAttribute("aria-pressed", "true");
+  await expect(fastButton.locator(".app-button__spinner")).toHaveCount(0);
+
+  const failButton = page
+    .locator(".group-card", { hasText: failTitle })
+    .first()
+    .locator(".like-button");
+  await failButton.click();
+  await expect(page.getByText("点赞失败，请稍后重试")).toBeVisible();
+  await expect(failButton).toHaveAttribute("aria-pressed", "false");
 });
 
 test("多个加群方式按固定顺序展示：群号→邀请链接→二维码", async ({ page }) => {
   const auth = await loginViaApi(page);
   const title = `加群顺序群-${String(Date.now())}`;
-  await seedPublishedGroup(page, auth, title, [], [
-    { type: "group_number", value: "100099", sortOrder: 0 },
-    { type: "url", url: "https://example.com/first", sortOrder: 1 },
-  ]);
+  await seedPublishedGroup(
+    page,
+    auth,
+    title,
+    [],
+    [
+      { type: "group_number", value: "100099", sortOrder: 0 },
+      { type: "url", url: "https://example.com/first", sortOrder: 1 },
+    ],
+  );
 
   await page.goto("/");
   const card = page.locator(".group-card", { hasText: title }).first();

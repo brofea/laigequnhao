@@ -269,3 +269,169 @@ T06 完成全量验收：Unit 82 / Workers 104 / E2E 68（新增 public/admin/a1
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: 补齐数据库交互按钮反馈
+
+**Date**: 2026-08-05
+**Task**: 补齐数据库交互按钮反馈
+**Branch**: `fix/button-feedback`
+
+### Summary
+
+完成 Issue #1：为网络写操作接入资源级 Pending、重复提交保护和失败提示；按规则实现成功 Toast、界面结果、乐观点赞与公开投稿持久状态；修复永久删除 Dialog 生命周期，补充组件、请求竞态、Workers 与桌面/移动端 E2E 验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ddcf6ce` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 10: 统一按钮 Loading 与 Disabled 状态
+
+**Date**: 2026-08-05
+**Task**: 统一按钮 Loading 与 Disabled 状态
+**Branch**: `fix/button-feedback`
+
+### Summary
+
+统一公共按钮的 Loading/Disabled 状态与 150ms 延迟 Spinner，隔离搜索和状态筛选 Loading，补齐 Dialog、管理页、板块操作与点赞的重复提交防护、Toast 和回归测试；点赞改为响应成功后更新并提示。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `93ffb80` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 11: 修复 WebKit 图片压缩与上传
+
+**Date**: 2026-08-05
+**Task**: 修复 WebKit 图片压缩与上传
+**Branch**: `fix/button-feedback`
+
+### Summary
+
+将头像和二维码前端压缩、管理员资源、公开投稿、R2/D1 元数据及本地 seed 全部统一为 PNG；头像 128KB、二维码 1MB，采用单次编码和精确失败 Toast，补齐 PNG 校验、alpha/白底与跨层回归测试。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5d0751e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 12: 完成跨平台图片压缩与 E2E 验收
+
+**Date**: 2026-08-05
+**Task**: 完成跨平台图片压缩与 E2E 验收
+**Branch**: `fix/button-feedback`
+
+### Summary
+
+头像统一 PNG、二维码改为三次质量阶梯 JPEG；完成 Chrome、WebKit、Firefox 图片 E2E 与全量测试，并完成 seed 验收，保留 140 groups、140 logos、78 QRs。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a1119ad` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 13: 点赞按钮排版修复定稿（卡片+Diaog）
+
+**Date**: 2026-08-05
+**Task**: 点赞按钮排版修复定稿（卡片+Diaog）
+**Branch**: `fix/button-feedback`
+
+### Summary
+
+修复点赞按钮排版并定稿：根因是 Button 组件把 slot 包进 inline 的 .app-button__label，inline SVG 按文本基线对齐导致图标与数字错位；把 label 改为 inline-flex+align-items:center+gap 3px+translateY(1px) 契约，卡片 icon 0.5px、Dialog 底部点赞按钮（.dialog-like-button）icon 2px（后两项为用户手动微调值）。实测：卡片 icon 与数字共线 0.5px 差、间距 3px；Dialog icon 低于文字 2px。规范同步。另外 48882ef：wrangler 环境配置重构（删 preview/production，新增 develop 接入 pnpm dev，投稿限流 10000）。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b48ce93` | (see git log) |
+| `48882ef` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

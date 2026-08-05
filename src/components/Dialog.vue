@@ -7,9 +7,11 @@ const props = withDefaults(
     labelledBy?: string;
     size?: "detail" | "submit" | "form";
     testId?: string;
+    busy?: boolean;
   }>(),
   {
     size: "detail",
+    busy: false,
   },
 );
 
@@ -58,7 +60,11 @@ function trapFocus(event: KeyboardEvent) {
 }
 
 function closeOnEscape(event: KeyboardEvent) {
-  if (event.key === "Escape") emit("close");
+  if (event.key === "Escape" && !props.busy) emit("close");
+}
+
+function requestClose() {
+  if (!props.busy) emit("close");
 }
 
 onMounted(() => {
@@ -84,7 +90,9 @@ onBeforeUnmount(() => {
       class="app-dialog-backdrop"
       type="button"
       aria-label="关闭弹窗"
-      @click="emit('close')"
+      :disabled="props.busy"
+      :aria-busy="props.busy || undefined"
+      @click="requestClose"
     ></button>
     <section
       ref="dialogElement"
@@ -94,6 +102,7 @@ onBeforeUnmount(() => {
       role="dialog"
       aria-modal="true"
       :aria-labelledby="props.labelledBy"
+      :aria-busy="props.busy || undefined"
       tabindex="-1"
     >
       <header class="app-dialog__header">
@@ -106,7 +115,9 @@ onBeforeUnmount(() => {
           class="app-button app-button--quiet app-button--sm app-button--icon-only"
           type="button"
           aria-label="关闭弹窗"
-          @click="emit('close')"
+          :disabled="props.busy"
+          :aria-busy="props.busy || undefined"
+          @click="requestClose"
         >
           <span aria-hidden="true">×</span>
         </button>

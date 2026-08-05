@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-0.md`
-- **Total Sessions**: 8
-- **Last Active**: 2026-08-03
+- **Total Sessions**: 13
+- **Last Active**: 2026-08-05
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-0.md` | ~271 | Active |
+| `journal-0.md` | ~437 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,11 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-08-05 | 点赞按钮排版修复定稿（卡片+Diaog） | `b48ce93`, `48882ef` | `fix/button-feedback` |
+| 12 | 2026-08-05 | 完成跨平台图片压缩与 E2E 验收 | `a1119ad` | `fix/button-feedback` |
+| 11 | 2026-08-05 | 修复 WebKit 图片压缩与上传 | `5d0751e` | `fix/button-feedback` |
+| 10 | 2026-08-05 | 统一按钮 Loading 与 Disabled 状态 | `93ffb80` | `fix/button-feedback` |
+| 9 | 2026-08-05 | 补齐数据库交互按钮反馈 | `ddcf6ce` | `fix/button-feedback` |
 | 8 | 2026-08-03 | 图片上传链路修复与任务归档 | `9ebf5fb` | `main` |
 | 7 | 2026-08-02 | T06 系统加固与发布验收 + 人工核验前端调整 | `4ab429a` | `main` |
 | 6 | 2026-08-02 | T06 系统加固与发布验收 + 人工核验前端调整 | `cb5db91` | `main` |

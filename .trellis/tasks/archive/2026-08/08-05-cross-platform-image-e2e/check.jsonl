@@ -1,0 +1,7 @@
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"按项目测试分层、Playwright 关键路径、真实资源验收和浏览器缺失失败规则检查。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"按前端质量门禁复核 lint、format、typecheck、测试和 build。"}
+{"file":".trellis/tasks/08-05-cross-platform-image-e2e/research/playwright-cross-browser-image-e2e.md","reason":"复核三引擎 project 过滤、fixture 组织、PNG/alpha/二维码验收和 CI 安装方案。"}
+{"file": "shared/contracts/asset.ts", "reason": "复核用途 MIME、尺寸、字节和 schema 契约。"}
+{"file": "scripts/seed-local.mjs", "reason": "复核 140 图成功存入、缺图失败和不清理验收。"}
+{"file": "tests/e2e/image-flows.spec.ts", "reason": "复核 Chromium/WebKit/Firefox JPEG/PNG 流程。"}
+{"file": ".trellis/tasks/08-05-cross-platform-image-e2e/research/qr-jpeg-seed-acceptance.md", "reason": "质量检查重点：QR JPEG 真实格式、purpose MIME、D1/R2 readback 和 140 图保留验收。"}

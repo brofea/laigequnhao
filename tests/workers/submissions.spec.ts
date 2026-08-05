@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import app from "../../functions/_lib/app";
 import type { Env } from "../../functions/_lib/env";
 import { env as testEnv } from "cloudflare:test";
-import { WEBP_1X1 } from "./fixtures";
+import { PNG_1X1 } from "./fixtures";
 import { SUBMISSION_MULTIPART_MAX_BYTES } from "../../shared/contracts/submission";
 import {
   createSubmissionService,
@@ -44,10 +44,10 @@ function multipartFetch(
   const form = new FormData();
   form.append("payload", JSON.stringify(payload));
   if (options.logo) {
-    form.append("logo", new Blob([options.logo], { type: "image/webp" }), "logo.webp");
+    form.append("logo", new Blob([options.logo], { type: "image/png" }), "logo.png");
   }
   for (const [index, file] of (options.extraFiles ?? []).entries()) {
-    form.append(`extra-${String(index)}`, new Blob([file], { type: "image/webp" }), "extra.webp");
+    form.append(`extra-${String(index)}`, new Blob([file], { type: "image/png" }), "extra.png");
   }
 
   if (options.totalBody) {
@@ -148,7 +148,7 @@ describe("POST /api/v1/submissions", () => {
         height: 9999,
         byteLength: 1,
       },
-      { logo: WEBP_1X1, ip: crypto.randomUUID() },
+      { logo: PNG_1X1, ip: crypto.randomUUID() },
     );
     const json = (await response.json()) as {
       ok: boolean;
@@ -174,9 +174,9 @@ describe("POST /api/v1/submissions", () => {
       status: "pending",
       logo_width: 1,
       logo_height: 1,
-      logo_byte_length: WEBP_1X1.byteLength,
+      logo_byte_length: PNG_1X1.byteLength,
     });
-    expect(group?.logo_r2_key).toMatch(/^logo\/submission\/[0-9a-f-]+\.webp$/);
+    expect(group?.logo_r2_key).toMatch(/^logo\/submission\/[0-9a-f-]+\.png$/);
 
     const asset = await env.DB.prepare(
       "SELECT purpose, status, ref_count, content_type, byte_length, width, height, r2_key FROM assets WHERE r2_key = ?",
@@ -196,8 +196,8 @@ describe("POST /api/v1/submissions", () => {
       purpose: "logo",
       status: "ready",
       ref_count: 1,
-      content_type: "image/webp",
-      byte_length: WEBP_1X1.byteLength,
+      content_type: "image/png",
+      byte_length: PNG_1X1.byteLength,
       width: 1,
       height: 1,
     });
@@ -211,8 +211,8 @@ describe("POST /api/v1/submissions", () => {
 
   it("rejects a second public image field", async () => {
     const response = await multipartFetch(validBody, {
-      logo: WEBP_1X1,
-      extraFiles: [WEBP_1X1],
+      logo: PNG_1X1,
+      extraFiles: [PNG_1X1],
       ip: crypto.randomUUID(),
     });
     expect(response.status).toBe(400);
@@ -222,7 +222,7 @@ describe("POST /api/v1/submissions", () => {
     });
   });
 
-  it("rejects an invalid final WebP before writing R2 or D1", async () => {
+  it("rejects an invalid final PNG before writing R2 or D1", async () => {
     const response = await multipartFetch(validBody, {
       logo: Uint8Array.from([0x52, 0x49, 0x46, 0x46]),
       ip: crypto.randomUUID(),
@@ -258,7 +258,7 @@ describe("POST /api/v1/submissions", () => {
     try {
       const response = await multipartFetch(
         { ...validBody, title: "强制 D1 投稿失败" },
-        { logo: WEBP_1X1, ip: crypto.randomUUID() },
+        { logo: PNG_1X1, ip: crypto.randomUUID() },
       );
       expect(response.status).toBe(503);
       expect(
@@ -306,7 +306,7 @@ describe("POST /api/v1/submissions", () => {
       platform: "qq",
       groupNumber: "123456",
     };
-    const logo: ValidatedSubmissionLogo = { bytes: WEBP_1X1, width: 1, height: 1 };
+    const logo: ValidatedSubmissionLogo = { bytes: PNG_1X1, width: 1, height: 1 };
 
     await expect(
       service.submit(input, crypto.randomUUID(), 1, {
@@ -315,7 +315,7 @@ describe("POST /api/v1/submissions", () => {
       }),
     ).rejects.toMatchObject({ name: "SubmissionDependencyError" });
     expect(cleanupRecord).toMatchObject({
-      r2Key: expect.stringMatching(/^logo\/submission\/[0-9a-f-]+\.webp$/),
+      r2Key: expect.stringMatching(/^logo\/submission\/[0-9a-f-]+\.png$/),
       requestId: "00000000-0000-4000-8000-000000000099",
     });
   });

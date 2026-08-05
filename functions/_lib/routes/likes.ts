@@ -6,7 +6,7 @@ import { createLikeRepository } from "../repositories/like-repository";
 import { createRateLimitRepository } from "../repositories/rate-limit-repository";
 import { hashDeviceId } from "../adapters/hash-adapter";
 import { dependencyUnavailable } from "../api-error";
-import { getLikePepper, type Env } from "../env";
+import { getLikeLimitPerTenMinute, getLikePepper, type Env } from "../env";
 
 const deviceIdSchema = z.string().uuid();
 
@@ -102,9 +102,13 @@ async function toggleLike(
 ) {
   const requestId = c.get("requestId");
 
-  // 限流
+  // 限流（LIKE_LIMIT_PER_TEN_MINUTE：单个设备每 10 分钟可执行的点赞/取消次数）
   const rateLimitRepo = createRateLimitRepository(c.env.DB);
-  const allowed = await rateLimitRepo.checkLimit(`like:${deviceId}`, 30, 10 * 60 * 1000);
+  const allowed = await rateLimitRepo.checkLimit(
+    `like:${deviceId}`,
+    getLikeLimitPerTenMinute(c.env),
+    10 * 60 * 1000,
+  );
   if (!allowed) {
     return c.json(
       apiErrorSchema.parse({

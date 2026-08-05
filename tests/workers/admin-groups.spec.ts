@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import app from "../../functions/_lib/app";
 import type { Env } from "../../functions/_lib/env";
 import { env as testEnv } from "cloudflare:test";
-import { WEBP_1X1 } from "./fixtures";
+import { JPEG_1X1, PNG_1X1 } from "./fixtures";
 
 const env = testEnv as Env;
 let authHeaders: Record<string, string>;
@@ -38,7 +38,7 @@ function apiFetch(method: string, path: string, body?: unknown): Promise<Respons
 
 async function uploadLogo(): Promise<{ id: string; r2Key: string; publicUrl: string }> {
   const formData = new FormData();
-  formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "logo.webp");
+  formData.append("file", new Blob([PNG_1X1], { type: "image/png" }), "logo.png");
   formData.append("purpose", "logo");
   const response = await app.fetch(
     new Request("http://localhost/api/v1/admin/assets", {
@@ -352,7 +352,7 @@ describe("QR resource lifecycle (ref_count +1/-1/delete_pending)", () => {
   it("ref_count increments when QR asset is used in group creation", async () => {
     // 1. Upload a staged asset
     const formData = new FormData();
-    formData.append("file", new Blob([WEBP_1X1], { type: "image/webp" }), "qr.webp");
+    formData.append("file", new Blob([JPEG_1X1], { type: "image/jpeg" }), "qr.jpg");
     formData.append("purpose", "qr_code");
 
     const uploadReq = new Request("http://localhost/api/v1/admin/assets", {

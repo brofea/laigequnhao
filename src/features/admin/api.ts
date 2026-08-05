@@ -75,14 +75,14 @@ export function uploadQrAsset(
   blob: Blob,
   csrfToken: string,
 ): Promise<ApiOkResult<AssetInfo> | ApiErrorResult> {
-  return uploadAsset(blob, "qr_code", "qr.webp", csrfToken);
+  return uploadAsset(blob, "qr_code", "qr.jpg", csrfToken);
 }
 
 export async function uploadLogoAsset(
   blob: Blob,
   csrfToken: string,
 ): Promise<ApiOkResult<AssetInfo> | ApiErrorResult> {
-  return uploadAsset(blob, "logo", "logo.webp", csrfToken);
+  return uploadAsset(blob, "logo", "logo.png", csrfToken);
 }
 
 export async function purgeStagedAsset(

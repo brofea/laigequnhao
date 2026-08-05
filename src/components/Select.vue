@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Icon, { type IconName } from "./Icon.vue";
 
 export interface SelectOption {
@@ -15,8 +15,10 @@ const props = withDefaults(
     description?: string;
     triggerLabel?: string;
     triggerIcon?: IconName;
+    loading?: boolean;
+    disabled?: boolean;
   }>(),
-  { description: "" },
+  { description: "", loading: false, disabled: false },
 );
 
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
@@ -30,6 +32,7 @@ function selectedLabel() {
 }
 
 function toggle() {
+  if (props.disabled || props.loading) return;
   open.value = !open.value;
   activeIndex.value = Math.max(
     0,
@@ -38,11 +41,13 @@ function toggle() {
 }
 
 function choose(value: string) {
+  if (props.disabled || props.loading) return;
   emit("update:modelValue", value);
   open.value = false;
 }
 
 function onKeydown(event: KeyboardEvent) {
+  if (props.disabled || props.loading) return;
   if (!open.value && ["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
     event.preventDefault();
     toggle();
@@ -73,6 +78,14 @@ function closeOnOutside(event: PointerEvent) {
 onMounted(() => {
   document.addEventListener("pointerdown", closeOnOutside);
 });
+
+watch(
+  () => props.disabled || props.loading,
+  (isUnavailable) => {
+    if (isUnavailable) open.value = false;
+  },
+);
+
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", closeOnOutside);
 });
@@ -85,8 +98,10 @@ onBeforeUnmount(() => {
       class="app-select__trigger"
       type="button"
       role="combobox"
-      :aria-expanded="open"
+      :aria-expanded="open && !props.disabled && !props.loading"
       :aria-label="props.label"
+      :aria-busy="props.loading || undefined"
+      :disabled="props.disabled || props.loading"
       @click="toggle"
       @keydown="onKeydown"
     >

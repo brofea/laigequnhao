@@ -1,0 +1,13 @@
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"检查 loading/disabled/aria-busy、Dialog 焦点和组件边界是否符合规范。"}
+{"file":".trellis/spec/frontend/composable-guidelines.md","reason":"检查 pending 清理、AbortController 竞态、错误暴露和状态单一负责方。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"检查完整质量门禁、错误提示、类型安全和无障碍覆盖。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"检查测试是否覆盖成功、失败、重复点击、Dialog 生命周期和桌面/移动端 E2E。"}
+{"command":"pnpm test","status":"passed","result":"16 个测试文件、131 个测试通过。"}
+{"command":"pnpm test:workers","status":"passed","result":"11 个测试文件、127 个测试通过。"}
+{"command":"pnpm typecheck","status":"passed","result":"vue-tsc、functions tsc、worker tsc 均通过。"}
+{"command":"pnpm build","status":"passed","result":"SSR 与客户端生产构建通过。"}
+{"command":"pnpm lint","status":"passed_with_existing_warnings","result":"0 errors；保留项目既有 Vue prop/格式警告。"}
+{"command":"pnpm test:e2e --project=chromium-desktop tests/e2e/admin-flows.spec.ts -g '回收站 UI：恢复与永久删除按钮可用'","status":"passed","result":"永久删除确认 Dialog 延迟响应生命周期通过。"}
+{"command":"pnpm test:e2e --project=chromium-desktop tests/e2e/public-flows.spec.ts -g '点赞不打开详情弹窗'","status":"passed","result":"点赞乐观更新流程通过。"}
+{"command":"pnpm test:e2e","status":"passed","result":"桌面/移动端共 68 个 Playwright 测试通过。"}
+{"command":"pnpm format:check","status":"blocked_by_preexisting","result":"仅 docs/PRD/v2/PRD.md 的既有 Markdown 格式差异未纳入本任务修改。"}

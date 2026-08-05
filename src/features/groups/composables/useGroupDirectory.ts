@@ -15,12 +15,15 @@ export function useGroupDirectory() {
   const rotationWindow = ref("");
 
   let controller: AbortController | null = null;
+  let latestRequestId = 0;
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   async function load(q?: string, cursor?: string | null, append = false) {
+    const requestId = ++latestRequestId;
     controller?.abort();
-    controller = new AbortController();
+    const requestController = new AbortController();
+    controller = requestController;
     loading.value = true;
     error.value = null;
 
@@ -29,8 +32,10 @@ export function useGroupDirectory() {
         q,
         cursor: cursor ?? null,
         limit: 50,
-        signal: controller.signal,
+        signal: requestController.signal,
       });
+
+      if (requestId !== latestRequestId) return;
 
       if (!result.ok) {
         error.value = result.error.message;
@@ -45,10 +50,11 @@ export function useGroupDirectory() {
       nextCursor.value = result.data.nextCursor;
       rotationWindow.value = result.data.rotationWindow;
     } catch (e) {
+      if (requestId !== latestRequestId) return;
       if (e instanceof Error && e.name === "AbortError") return;
       error.value = "加载失败，请重试";
     } finally {
-      loading.value = false;
+      if (requestId === latestRequestId) loading.value = false;
     }
   }
 

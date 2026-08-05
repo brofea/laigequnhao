@@ -36,11 +36,23 @@ import AdminEditForm from "./AdminEditForm.vue";
 import Toast, { type ToastItem } from "./Toast.vue";
 import { groupStatusLabels, type DemoBoard, type DemoGroup } from "../data/fixtures";
 import { useTheme, type ThemePreference } from "@/features/theme/useTheme";
+import { usePendingActions } from "@/shared/composables/usePendingActions";
 
 type ViewName = "home" | "admin";
 type AdminTab = "groups" | "boards" | "stats";
 type AdminSortField = "title" | "status" | "tags" | "kind" | "likes" | "platform";
 type AdminSortDirection = "asc" | "desc" | null;
+type AdminEditBusyAction = "save" | "delete" | "remove";
+type AdminTablePendingAction = {
+  groupId: string;
+  action: "remove" | "restore" | "purge";
+};
+type BoardManagementPendingAction = {
+  boardId?: string;
+  action: "create" | "reorder" | "edit" | "delete" | "add-group" | "move-member" | "remove-member";
+  groupId?: string;
+  direction?: "up" | "down";
+};
 
 const { preference: themePreference, resolvedTheme, setPreference } = useTheme();
 const props = defineProps<{ initialView: ViewName; csrfToken?: string }>();
@@ -71,10 +83,12 @@ const selectedAdminGroupContext = ref<{ boardId: string; groupId: string } | nul
 const selectedBoardId = ref<string | null>(null);
 const boardCreateDraft = ref<DemoBoard | null>(null);
 const selectedBoardAddGroupId = ref<string | null>(null);
+const boardAddGroupPendingGroupId = ref<string | null>(null);
 const boardListVersion = ref(0);
 const adminGroupPool = ref<DemoGroup[]>([]);
 const publicSubmitGroup = ref<DemoGroup | null>(null);
 const publicSubmitBusy = ref(false);
+const publicSubmitSuccess = ref(false);
 const adminCreateGroup = ref<DemoGroup | null>(null);
 const adminCreateSaveBusy = ref(false);
 const adminSaveBusy = ref(false);
@@ -85,6 +99,50 @@ const adminSortField = ref<AdminSortField | null>(null);
 const adminSortDirection = ref<AdminSortDirection>(null);
 const toastItems = ref<ToastItem[]>([]);
 let toastId = 0;
+const pendingActions = usePendingActions();
+const isPending = pendingActions.isPending;
+
+function groupActionKey(groupId: string, action: string) {
+  return `group:${groupId}:${action}`;
+}
+
+function boardActionKey(boardId: string, action: string, memberId?: string, detail?: string) {
+  return ["board", boardId, action, memberId, detail].filter(Boolean).join(":");
+}
+
+const adminTablePendingActions = computed<AdminTablePendingAction[]>(() =>
+  adminDirectory.groups.value.flatMap((group) =>
+    (["remove", "restore", "purge"] as const)
+      .filter((action) =>
+        isPending(groupActionKey(group.id, action === "remove" ? "delete" : action)),
+      )
+      .map((action) => ({ groupId: group.id, action })),
+  ),
+);
+
+const boardPendingActions = computed<BoardManagementPendingAction[]>(() => {
+  const actions: BoardManagementPendingAction[] = [];
+  for (const board of boards.value) {
+    for (const action of ["edit", "delete", "add-group"] as const) {
+      if (isPending(boardActionKey(board.id, action))) actions.push({ boardId: board.id, action });
+    }
+    if (isPending(boardActionKey(board.id, "reorder"))) {
+      actions.push({ boardId: board.id, action: "reorder" });
+    }
+    for (const memberId of board.members) {
+      for (const direction of ["up", "down"] as const) {
+        if (isPending(boardActionKey(board.id, "move-member", memberId, direction))) {
+          actions.push({ boardId: board.id, groupId: memberId, action: "move-member", direction });
+        }
+      }
+      if (isPending(boardActionKey(board.id, "remove-member", memberId))) {
+        actions.push({ boardId: board.id, groupId: memberId, action: "remove-member" });
+      }
+    }
+  }
+  if (isPending("board:create")) actions.push({ action: "create" });
+  return actions;
+});
 
 /** 点赞本地状态来源（adapter 依赖注入） */
 const likeStateSource = {
@@ -170,6 +228,17 @@ const selectedBoardAddGroup = computed(() =>
     ? boards.value.find((board) => board.id === selectedBoardAddGroupId.value)
     : undefined,
 );
+const selectedAdminGroupBusyAction = computed<AdminEditBusyAction | null>(() => {
+  const group = selectedAdminGroup.value;
+  if (!group) return null;
+  if (adminSaveBusy.value || isPending(groupActionKey(group.id, "save"))) return "save";
+  if (isPending(groupActionKey(group.id, "delete"))) return "delete";
+  const context = selectedAdminGroupContext.value;
+  if (context && isPending(boardActionKey(context.boardId, "remove-member", context.groupId))) {
+    return "remove";
+  }
+  return null;
+});
 let boardCreateSequence = 0;
 
 const isSearchMode = computed(() => Boolean(searchQuery.value.trim()) || Boolean(activeTag.value));
@@ -244,17 +313,26 @@ function useTag(tag: string) {
 }
 
 async function toggleLike(group: DemoGroup) {
-  const nextLiked = !group.liked;
-  const nextCount = await likedGroups.toggle(group.id, group.liked);
-  if (nextCount === null) {
-    showToast("点赞失败，请稍后重试", "warning");
-    return;
+  const actionKey = `like:${group.id}`;
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const result = await likedGroups.toggle(group.id, group.liked);
+    if (!result.ok) {
+      if (result.code === "RATE_LIMITED") {
+        showToast("点赞太频繁了，请稍后再试", "warning");
+      } else {
+        showToast("点赞失败，请稍后重试", "warning");
+      }
+      return;
+    }
+    localLikeState.value = {
+      ...localLikeState.value,
+      [group.id]: { liked: result.data.liked, likes: result.data.likeCount },
+    };
+    showToast(result.data.liked ? "点赞成功" : "已取消点赞", "success");
+  } finally {
+    pendingActions.finish(actionKey);
   }
-  localLikeState.value = {
-    ...localLikeState.value,
-    [group.id]: { liked: nextLiked, likes: nextCount },
-  };
-  showToast(nextLiked ? "已点赞" : "已取消点赞", "info");
 }
 
 function openGroup(group: DemoGroup) {
@@ -303,6 +381,7 @@ function openBoardAddGroupDialog(board: DemoBoard) {
 }
 
 function openPublicSubmitDialog() {
+  publicSubmitSuccess.value = false;
   publicSubmitGroup.value = {
     id: "public-submit-sample",
     title: "",
@@ -323,6 +402,7 @@ function openPublicSubmitDialog() {
 function closePublicSubmitDialog() {
   if (publicSubmitBusy.value) return;
   publicSubmitGroup.value = null;
+  publicSubmitSuccess.value = false;
 }
 
 function openAdminCreateDialog() {
@@ -343,7 +423,7 @@ function openAdminCreateDialog() {
 }
 
 async function submitPublicGroup(next: DemoGroup, pendingImages: PendingAdminImages) {
-  if (publicSubmitBusy.value) return;
+  if (publicSubmitBusy.value || !pendingActions.start("public:submit")) return;
   publicSubmitBusy.value = true;
   try {
     const groupNumber = next.joinMethods.find((method) => method.type === "number")?.value;
@@ -365,12 +445,12 @@ async function submitPublicGroup(next: DemoGroup, pendingImages: PendingAdminIma
       showToast(result.error.message, "warning");
       return;
     }
-    publicSubmitGroup.value = null;
-    showToast("提交成功，等待审核", "success");
+    publicSubmitSuccess.value = true;
   } catch {
     showToast("提交失败，请稍后重试", "warning");
   } finally {
     publicSubmitBusy.value = false;
+    pendingActions.finish("public:submit");
   }
 }
 
@@ -431,7 +511,7 @@ function saveQrCode(method: DemoGroup["joinMethods"][number]) {
   // 网页端：触发图片下载
   const link = document.createElement("a");
   link.href = method.value;
-  link.download = "group-qr-code.webp";
+  link.download = "group-qr-code.jpg";
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -445,16 +525,24 @@ async function shareGroup() {
 
 /** 板块顺序批量更新（服务端原子写入；失败时重新拉取服务端顺序） */
 async function applyBoards(next: DemoBoard[]) {
-  const result = await adminBoards.reorder(next.map((board) => board.id));
-  if (!result.ok) {
-    showToast(
-      result.conflict ? "板块列表已变化，请刷新后重试" : "板块顺序保存失败，请稍后重试",
-      "warning",
-    );
-    void adminBoards.load();
-    return;
+  const changedBoard = next.find(
+    (board, index) => adminBoards.boards.value[index]?.id !== board.id,
+  );
+  if (!changedBoard) return;
+  const actionKey = boardActionKey(changedBoard.id, "reorder");
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const result = await adminBoards.reorder(next.map((board) => board.id));
+    if (!result.ok) {
+      showToast(
+        result.conflict ? "板块列表已变化，请刷新后重试" : "板块顺序保存失败，请稍后重试",
+        "warning",
+      );
+      void adminBoards.load();
+    }
+  } finally {
+    pendingActions.finish(actionKey);
   }
-  showToast("板块顺序已保存");
 }
 
 function boardGroups(board: DemoBoard) {
@@ -495,16 +583,26 @@ watch(adminFilter, (label) => {
   adminDirectory.setStatuses(map[label] ?? ["published", "delisted", "pending", "rejected"]);
 });
 
-function removeAdminGroup(group: DemoGroup) {
-  void adminDirectory.softDelete(group.id).then((ok) => {
+async function removeAdminGroup(group: DemoGroup) {
+  const actionKey = groupActionKey(group.id, "delete");
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const ok = await adminDirectory.softDelete(group.id);
     showToast(ok ? `已删除“${group.title}”` : "删除失败，请稍后重试", ok ? "success" : "warning");
-  });
+  } finally {
+    pendingActions.finish(actionKey);
+  }
 }
 
-function restoreAdminGroup(group: DemoGroup) {
-  void adminDirectory.restore(group.id).then((ok) => {
+async function restoreAdminGroup(group: DemoGroup) {
+  const actionKey = groupActionKey(group.id, "restore");
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const ok = await adminDirectory.restore(group.id);
     showToast(ok ? `已恢复“${group.title}”` : "恢复失败，请稍后重试", ok ? "success" : "warning");
-  });
+  } finally {
+    pendingActions.finish(actionKey);
+  }
 }
 
 const purgeConfirmGroup = ref<DemoGroup | null>(null);
@@ -513,16 +611,21 @@ function purgeAdminGroup(group: DemoGroup) {
   purgeConfirmGroup.value = group;
 }
 
-function confirmPurgeGroup() {
+async function confirmPurgeGroup() {
   const group = purgeConfirmGroup.value;
   if (!group) return;
-  purgeConfirmGroup.value = null;
-  void adminDirectory.purge(group.id).then((ok) => {
+  const actionKey = groupActionKey(group.id, "purge");
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const ok = await adminDirectory.purge(group.id);
     showToast(
       ok ? `已永久删除“${group.title}”` : "永久删除失败，请稍后重试",
       ok ? "success" : "warning",
     );
-  });
+    if (ok) purgeConfirmGroup.value = null;
+  } finally {
+    pendingActions.finish(actionKey);
+  }
 }
 
 function toJoinMethodPayload(group: DemoGroup) {
@@ -583,13 +686,17 @@ function applyStagedAdminImages(next: DemoGroup, staged: { ok: true; data: Stage
 }
 
 async function saveAdminGroup(next: DemoGroup, pendingImages: PendingAdminImages) {
-  if (adminSaveBusy.value) return;
+  const actionKey = groupActionKey(next.id, "save");
+  if (adminSaveBusy.value || !pendingActions.start(actionKey)) return;
   adminSaveBusy.value = true;
   const current = adminDirectory.groups.value.find((item) => item.id === next.id);
   const csrfToken = props.csrfToken ?? "";
   let stagedIds: string[] = [];
   try {
-    if (!current) return;
+    if (!current) {
+      showToast("群组已不存在，请刷新后重试", "warning");
+      return;
+    }
     const staged = await stagePendingAdminImages(pendingImages, csrfToken);
     if (!staged.ok) {
       showToast(staged.error.message, "warning");
@@ -623,31 +730,43 @@ async function saveAdminGroup(next: DemoGroup, pendingImages: PendingAdminImages
     showToast("保存失败，请稍后重试", "warning");
   } finally {
     adminSaveBusy.value = false;
+    pendingActions.finish(actionKey);
   }
 }
 
-function deleteAdminGroup(group: DemoGroup) {
-  void adminDirectory.softDelete(group.id).then((ok) => {
+async function deleteAdminGroup(group: DemoGroup) {
+  const actionKey = groupActionKey(group.id, "delete");
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const ok = await adminDirectory.softDelete(group.id);
     if (ok) closeAdminGroupEdit();
     showToast(ok ? `已删除“${group.title}”` : "删除失败，请稍后重试", ok ? "success" : "warning");
-  });
+  } finally {
+    pendingActions.finish(actionKey);
+  }
 }
 
 async function removeGroupFromBoard() {
   const context = selectedAdminGroupContext.value;
   if (!context) return;
   const group = boardGroupPool.value.find((item) => item.id === context.groupId);
-  closeAdminGroupEdit();
-  const result = await adminBoards.removeMember(context.boardId, context.groupId);
-  if (!result.ok) {
-    showToast("移除成员失败，请稍后重试", "warning");
-    return;
+  const actionKey = boardActionKey(context.boardId, "remove-member", context.groupId);
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const result = await adminBoards.removeMember(context.boardId, context.groupId);
+    if (!result.ok) {
+      showToast("移除成员失败，请稍后重试", "warning");
+      return;
+    }
+    closeAdminGroupEdit();
+    showToast(`已将“${group?.title ?? "该群组"}”移出板块`, "success");
+  } finally {
+    pendingActions.finish(actionKey);
   }
-  showToast(`已将“${group?.title ?? "该群组"}”移出板块`, "success");
 }
 
 async function saveAdminCreateGroup(next: DemoGroup, pendingImages: PendingAdminImages) {
-  if (adminCreateSaveBusy.value) return;
+  if (adminCreateSaveBusy.value || !pendingActions.start("group:create")) return;
   adminCreateSaveBusy.value = true;
   const csrfToken = props.csrfToken ?? "";
   let stagedIds: string[] = [];
@@ -675,6 +794,7 @@ async function saveAdminCreateGroup(next: DemoGroup, pendingImages: PendingAdmin
     showToast("保存失败，请稍后重试", "warning");
   } finally {
     adminCreateSaveBusy.value = false;
+    pendingActions.finish("group:create");
   }
 }
 
@@ -685,72 +805,108 @@ async function saveBoard(next: DemoBoard) {
     selectedBoardId.value = null;
     return;
   }
-  const result = await adminBoards.updateBoard(next.id, {
-    title: next.title,
-    isEnabled: next.enabled,
-    version: current.version,
-  });
-  if (!result.ok) {
-    showToast(
-      result.conflict ? "板块已被其他会话修改，请刷新后重试" : "板块保存失败，请稍后重试",
-      "warning",
-    );
-    void adminBoards.load();
-    return;
+  const actionKey = boardActionKey(next.id, "edit");
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const result = await adminBoards.updateBoard(next.id, {
+      title: next.title,
+      isEnabled: next.enabled,
+      version: current.version,
+    });
+    if (!result.ok) {
+      showToast(
+        result.conflict ? "板块已被其他会话修改，请刷新后重试" : "板块保存失败，请稍后重试",
+        "warning",
+      );
+      void adminBoards.load();
+      return;
+    }
+    selectedBoardId.value = null;
+    showToast("板块信息已保存");
+  } finally {
+    pendingActions.finish(actionKey);
   }
-  selectedBoardId.value = null;
-  showToast("板块信息已保存");
 }
 
 async function saveBoardCreate(next: DemoBoard) {
-  const result = await adminBoards.createBoard(next.title);
-  if (!result.ok) {
-    showToast("创建板块失败，请稍后重试", "warning");
-    return;
+  if (!pendingActions.start("board:create")) return;
+  try {
+    const result = await adminBoards.createBoard(next.title);
+    if (!result.ok) {
+      showToast("创建板块失败，请稍后重试", "warning");
+      return;
+    }
+    boardListVersion.value += 1;
+    boardCreateDraft.value = null;
+    showToast("新板块已保存");
+  } finally {
+    pendingActions.finish("board:create");
   }
-  boardListVersion.value += 1;
-  boardCreateDraft.value = null;
-  showToast("新板块已保存");
 }
 
 async function deleteBoard(board: DemoBoard) {
-  const result = await adminBoards.deleteBoard(board.id);
-  if (!result.ok) {
-    showToast("删除板块失败，请稍后重试", "warning");
-    return;
+  const actionKey = boardActionKey(board.id, "delete");
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const result = await adminBoards.deleteBoard(board.id);
+    if (!result.ok) {
+      showToast("删除板块失败，请稍后重试", "warning");
+      return;
+    }
+    boardListVersion.value += 1;
+    showToast(`已删除“${board.title}”`);
+  } finally {
+    pendingActions.finish(actionKey);
   }
-  boardListVersion.value += 1;
-  showToast(`已删除“${board.title}”`);
 }
 
 async function moveBoardMemberOp(board: DemoBoard, memberId: string, direction: "up" | "down") {
-  const result = await adminBoards.moveMember(board.id, memberId, direction);
-  if (!result.ok) {
-    showToast("成员顺序更新失败，请稍后重试", "warning");
-    void adminBoards.load();
+  const actionKey = boardActionKey(board.id, "move-member", memberId, direction);
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const result = await adminBoards.moveMember(board.id, memberId, direction);
+    if (!result.ok) {
+      showToast("成员顺序更新失败，请稍后重试", "warning");
+      void adminBoards.load();
+    }
+  } finally {
+    pendingActions.finish(actionKey);
   }
 }
 
 async function removeBoardMemberOp(board: DemoBoard, memberId: string) {
   const group = boardGroupPool.value.find((item) => item.id === memberId);
-  const result = await adminBoards.removeMember(board.id, memberId);
-  if (!result.ok) {
-    showToast("移除成员失败，请稍后重试", "warning");
-    return;
+  const actionKey = boardActionKey(board.id, "remove-member", memberId);
+  if (!pendingActions.start(actionKey)) return;
+  try {
+    const result = await adminBoards.removeMember(board.id, memberId);
+    if (!result.ok) {
+      showToast("移除成员失败，请稍后重试", "warning");
+      return;
+    }
+    showToast(`已将“${group?.title ?? "该群组"}”移出板块`, "success");
+  } finally {
+    pendingActions.finish(actionKey);
   }
-  showToast(`已将“${group?.title ?? "该群组"}”移出板块`, "success");
 }
 
 async function addGroupToBoard(group: DemoGroup) {
   const board = selectedBoardAddGroup.value;
   if (!board || board.members.includes(group.id)) return;
-  const result = await adminBoards.addMember(board.id, group.id);
-  if (!result.ok) {
-    showToast(result.reason ?? "添加失败，请稍后重试", "warning");
-    return;
+  const actionKey = boardActionKey(board.id, "add-group");
+  if (!pendingActions.start(actionKey)) return;
+  boardAddGroupPendingGroupId.value = group.id;
+  try {
+    const result = await adminBoards.addMember(board.id, group.id);
+    if (!result.ok) {
+      showToast(result.reason ?? "添加失败，请稍后重试", "warning");
+      return;
+    }
+    selectedBoardAddGroupId.value = null;
+  } finally {
+    boardAddGroupPendingGroupId.value = null;
+    pendingActions.finish(actionKey);
   }
-  selectedBoardAddGroupId.value = null;
-  showToast(`已将“${group.title}”添加到“${board.title}”`);
 }
 
 /** 板块添加群组候选池：已发布 + 已下架（前 50 条） */
@@ -838,13 +994,7 @@ function removeScrollListener() {
             label="搜索群组"
             placeholder="试试“设计”、城市或兴趣关键词"
             clearable
-            :status="
-              publicDirectory.loading.value
-                ? 'loading'
-                : publicDirectory.error.value
-                  ? 'error'
-                  : 'default'
-            "
+            :status="publicDirectory.error.value ? 'error' : 'default'"
             :help-text="publicDirectory.error.value ?? ''"
             @update:model-value="setSearch"
             @clear="setSearch('')"
@@ -860,7 +1010,12 @@ function removeScrollListener() {
               </div>
               <span class="section-heading__hint">拖动卡片探索</span>
             </div>
-            <Carousel :groups="discoverGroups" @open="openGroup" @like="toggleLike" />
+            <Carousel
+              :groups="discoverGroups"
+              :like-loading="(groupId) => isPending(`like:${groupId}`)"
+              @open="openGroup"
+              @like="toggleLike"
+            />
           </section>
           <section class="app-section" aria-labelledby="tag-title">
             <div class="section-heading">
@@ -901,7 +1056,12 @@ function removeScrollListener() {
               <span class="section-heading__hint">{{ board.memberCount }} 个群</span>
             </div>
             <div v-if="board.enabled && boardGroups(board).length" class="board-carousel">
-              <Carousel :groups="boardGroups(board)" @open="openGroup" @like="toggleLike" />
+              <Carousel
+                :groups="boardGroups(board)"
+                :like-loading="(groupId) => isPending(`like:${groupId}`)"
+                @open="openGroup"
+                @like="toggleLike"
+              />
             </div>
             <div v-else class="app-empty">
               <span class="app-empty__icon">○</span><strong>这个板块正在整理中</strong
@@ -946,6 +1106,7 @@ function removeScrollListener() {
               v-for="group in filteredGroups"
               :key="group.id"
               :group="group"
+              :like-loading="isPending(`like:${group.id}`)"
               @open="openGroup"
               @like="toggleLike"
             />
@@ -997,6 +1158,8 @@ function removeScrollListener() {
                   label="管理端搜索"
                   placeholder="按标题查找"
                   clearable
+                  :status="adminDirectory.error.value ? 'error' : 'default'"
+                  :help-text="adminDirectory.error.value ?? ''"
                   @update:model-value="setAdminSearch"
                   @clear="setAdminSearch('')"
                 /><Select
@@ -1036,6 +1199,8 @@ function removeScrollListener() {
                 :sort-field="adminSortField"
                 :sort-direction="adminSortDirection"
                 :recycle-bin="showRecycleBin"
+                :loading="adminDirectory.loading.value"
+                :pending-actions="adminTablePendingActions"
                 @open="openAdminGroupEdit"
                 @remove="removeAdminGroup"
                 @restore="restoreAdminGroup"
@@ -1052,18 +1217,22 @@ function removeScrollListener() {
                   :disabled="adminPage <= 1"
                   @click="adminDirectory.goToPage(adminPage - 1)"
                 /><span class="pagination__current">{{ adminPage }}</span
-                ><button
+                ><Button
+                  variant="quiet"
+                  size="sm"
                   v-if="adminTotalPages > adminPage"
                   type="button"
+                  :disabled="false"
                   @click="adminDirectory.goToPage(adminPage + 1)"
-                >
-                  {{ adminPage + 1 }}</button
-                ><button
+                  >{{ adminPage + 1 }}</Button
+                ><Button
+                  variant="quiet"
+                  size="sm"
                   v-if="adminTotalPages > adminPage + 1"
                   type="button"
+                  :disabled="false"
                   @click="adminDirectory.goToPage(adminPage + 2)"
-                >
-                  {{ adminPage + 2 }}</button
+                  >{{ adminPage + 2 }}</Button
                 ><Button
                   variant="quiet"
                   size="sm"
@@ -1080,6 +1249,9 @@ function removeScrollListener() {
               :key="boardListVersion"
               :boards="boards"
               :groups="boardGroupPool"
+              :loading="adminBoards.loading.value"
+              :create-busy="isPending('board:create')"
+              :pending-actions="boardPendingActions"
               @reorder="applyBoards"
               @edit="openBoardEdit"
               @edit-group="openBoardMemberEdit"
@@ -1177,8 +1349,10 @@ function removeScrollListener() {
       <template #footer
         ><Button
           variant="quiet"
+          class="dialog-like-button"
           icon="heart"
           :aria-pressed="selectedGroup.liked"
+          :loading="isPending(`like:${selectedGroup.id}`)"
           @click="toggleLike(selectedGroup)"
           >{{ selectedGroup.liked ? "已点赞" : "点赞" }} · {{ selectedGroup.likes }}</Button
         ><Button variant="normal" icon="external" @click="shareGroup">分享</Button></template
@@ -1191,13 +1365,24 @@ function removeScrollListener() {
       labelled-by="public-submit-dialog-title"
       size="form"
       test-id="public-submit-dialog"
+      :busy="publicSubmitBusy"
       @close="closePublicSubmitDialog"
     >
+      <div v-if="publicSubmitSuccess" class="app-alert app-alert--success" role="status">
+        <Icon name="check" size="19" />
+        <span>
+          <strong>提交成功，等待审核</strong>
+          <small>你的群组已提交，审核完成后会出现在公开目录中。</small>
+        </span>
+        <Button variant="normal" @click="closePublicSubmitDialog">完成</Button>
+      </div>
       <AdminEditForm
+        v-else
         :group="publicSubmitGroup"
         :deletable="false"
         public-mode
         :busy="publicSubmitBusy"
+        :busy-action="publicSubmitBusy ? 'save' : null"
         @save="submitPublicGroup"
         @cancel="closePublicSubmitDialog"
         @toast="showToast($event, 'info')"
@@ -1210,12 +1395,14 @@ function removeScrollListener() {
       labelled-by="admin-create-dialog-title"
       size="form"
       test-id="admin-create-dialog"
+      :busy="adminCreateSaveBusy"
       @close="adminCreateGroup = null"
     >
       <AdminEditForm
         :group="adminCreateGroup"
         :deletable="false"
         :busy="adminCreateSaveBusy"
+        :busy-action="adminCreateSaveBusy ? 'save' : null"
         @save="saveAdminCreateGroup"
         @cancel="adminCreateGroup = null"
         @toast="showToast($event, 'info')"
@@ -1228,13 +1415,15 @@ function removeScrollListener() {
       labelled-by="admin-dialog-title"
       size="form"
       test-id="admin-edit-dialog"
+      :busy="Boolean(selectedAdminGroupBusyAction)"
       @close="closeAdminGroupEdit"
     >
       <AdminEditForm
         :group="selectedAdminGroup"
         :deletable="!selectedAdminGroupContext"
         :removable="Boolean(selectedAdminGroupContext)"
-        :busy="adminSaveBusy"
+        :busy="Boolean(selectedAdminGroupBusyAction)"
+        :busy-action="selectedAdminGroupBusyAction"
         @save="saveAdminGroup"
         @cancel="closeAdminGroupEdit"
         @delete="deleteAdminGroup(selectedAdminGroup)"
@@ -1249,9 +1438,15 @@ function removeScrollListener() {
       labelled-by="board-edit-dialog-title"
       size="form"
       test-id="board-edit-dialog"
+      :busy="Boolean(selectedBoard && isPending(boardActionKey(selectedBoard.id, 'edit')))"
       @close="selectedBoardId = null"
     >
-      <BoardEditForm :board="selectedBoard" @save="saveBoard" @cancel="selectedBoardId = null" />
+      <BoardEditForm
+        :board="selectedBoard"
+        :busy="Boolean(selectedBoard && isPending(boardActionKey(selectedBoard.id, 'edit')))"
+        @save="saveBoard"
+        @cancel="selectedBoardId = null"
+      />
     </Dialog>
 
     <Dialog
@@ -1260,11 +1455,13 @@ function removeScrollListener() {
       labelled-by="board-create-dialog-title"
       size="form"
       test-id="board-create-dialog"
+      :busy="isPending('board:create')"
       @close="boardCreateDraft = null"
     >
       <BoardEditForm
         :board="boardCreateDraft"
         create-mode
+        :busy="isPending('board:create')"
         @save="saveBoardCreate"
         @cancel="boardCreateDraft = null"
       />
@@ -1276,11 +1473,23 @@ function removeScrollListener() {
       labelled-by="board-add-group-dialog-title"
       size="form"
       test-id="board-add-group-dialog"
+      :busy="
+        Boolean(
+          selectedBoardAddGroup && isPending(boardActionKey(selectedBoardAddGroup.id, 'add-group')),
+        )
+      "
       @close="selectedBoardAddGroupId = null"
     >
       <BoardAddGroupForm
         :board="selectedBoardAddGroup"
         :groups="boardGroupPool"
+        :adding-group-id="boardAddGroupPendingGroupId"
+        :busy="
+          Boolean(
+            selectedBoardAddGroup &&
+            isPending(boardActionKey(selectedBoardAddGroup.id, 'add-group')),
+          )
+        "
         @add="addGroupToBoard"
         @cancel="selectedBoardAddGroupId = null"
       />
@@ -1292,14 +1501,29 @@ function removeScrollListener() {
       labelled-by="purge-confirm-dialog-title"
       size="form"
       test-id="purge-confirm-dialog"
+      :busy="isPending(groupActionKey(purgeConfirmGroup.id, 'purge'))"
       @close="purgeConfirmGroup = null"
     >
       <div class="purge-confirm">
         <p>该操作将删除群组及其全部关联数据（板块成员、标签、加群方式、点赞），不可恢复。</p>
         <p>删除 R2 中的头像与二维码资源（若存在引用）。</p>
         <div class="purge-confirm__actions">
-          <Button variant="quiet" @click="purgeConfirmGroup = null">取消</Button>
-          <Button variant="normal" tone="danger" icon="trash" @click="confirmPurgeGroup">
+          <Button
+            variant="quiet"
+            :disabled="isPending(groupActionKey(purgeConfirmGroup.id, 'purge'))"
+            :aria-busy="
+              isPending(groupActionKey(purgeConfirmGroup.id, 'purge')) ? 'true' : undefined
+            "
+            @click="purgeConfirmGroup = null"
+            >取消</Button
+          >
+          <Button
+            variant="normal"
+            tone="danger"
+            icon="trash"
+            :loading="isPending(groupActionKey(purgeConfirmGroup.id, 'purge'))"
+            @click="confirmPurgeGroup"
+          >
             确认永久删除
           </Button>
         </div>

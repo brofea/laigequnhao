@@ -1,6 +1,7 @@
 import type { SubmissionRequest } from "@shared/contracts/submission";
 import type { SubmissionReadyAssetInput } from "../repositories/group-repository";
 import type { R2Adapter } from "../adapters/r2-adapter";
+import { getAssetContentType } from "@shared/contracts/asset";
 
 /**
  * 由共享图片校验器返回的可信文件结果。
@@ -77,7 +78,7 @@ export function createSubmissionService(
       }
 
       const resourceId = crypto.randomUUID();
-      const resourceKey = `logo/submission/${resourceId}.webp`;
+      const resourceKey = `logo/submission/${resourceId}.png`;
       // Copy the view before handing it to R2 so a validator-backed subarray can
       // never upload bytes outside the validated file range.
       const uploadBytes = logo.bytes.slice();
@@ -92,7 +93,11 @@ export function createSubmissionService(
       };
 
       try {
-        await r2Adapter.upload(resourceKey, uploadBytes.buffer as ArrayBuffer, "image/webp");
+        await r2Adapter.upload(
+          resourceKey,
+          uploadBytes.buffer as ArrayBuffer,
+          getAssetContentType("logo"),
+        );
       } catch {
         throw new SubmissionDependencyError("R2_WRITE_FAILED");
       }

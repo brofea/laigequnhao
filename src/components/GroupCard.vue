@@ -2,9 +2,17 @@
 import { ref, watch } from "vue";
 import type { DemoGroup } from "../data/fixtures";
 import Badge from "./Badge.vue";
+import Button from "./Button.vue";
 import Icon from "./Icon.vue";
+import Spinner from "./Spinner.vue";
 
-const props = defineProps<{ group: DemoGroup }>();
+const props = withDefaults(
+  defineProps<{
+    group: DemoGroup;
+    likeLoading?: boolean;
+  }>(),
+  { likeLoading: false },
+);
 
 const emit = defineEmits<{
   open: [group: DemoGroup];
@@ -21,6 +29,11 @@ watch(
 
 function onAvatarError() {
   avatarFailed.value = true;
+}
+
+function requestLike() {
+  if (props.likeLoading) return;
+  emit("like", props.group);
 }
 </script>
 
@@ -64,21 +77,25 @@ function onAvatarError() {
           ># {{ tag }}</span
         >
       </span>
-      <button
+      <Button
         class="like-button"
         :class="{ 'like-button--active': props.group.liked }"
-        type="button"
         :aria-pressed="props.group.liked"
         :aria-label="
           props.group.liked
             ? `取消赞，当前 ${props.group.likes} 个赞`
             : `点赞，当前 ${props.group.likes} 个赞`
         "
-        @click.stop="emit('like', props.group)"
+        :loading="props.likeLoading"
+        @click.stop="requestLike"
       >
+        <template #loading>
+          <Icon name="heart" size="16" />
+          <Spinner />
+        </template>
         <Icon name="heart" size="16" />
         <span>{{ props.group.likes }}</span>
-      </button>
+      </Button>
     </span>
   </article>
 </template>

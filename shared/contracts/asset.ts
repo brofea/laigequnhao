@@ -7,30 +7,46 @@ export type AssetPurpose = z.infer<typeof assetPurposeSchema>;
 export const ASSET_SOURCE_MAX_BYTES = 5 * 1024 * 1024;
 
 /** 管理资源 multipart 请求的总字节上限，必须大于二维码最终字节上限及表单边界开销。 */
-export const ASSET_UPLOAD_REQUEST_MAX_BYTES = 512 * 1024;
+export const ASSET_UPLOAD_REQUEST_MAX_BYTES = 1_200 * 1024;
+
+/** 按用途定义最终资源 MIME，避免二维码继续复用头像的 PNG 契约。 */
+export const ASSET_CONTENT_TYPES = {
+  logo: "image/png",
+  qr_code: "image/jpeg",
+} as const;
+
+export const ASSET_FILE_EXTENSIONS = {
+  logo: "png",
+  qr_code: "jpg",
+} as const;
+
+export function getAssetContentType(purpose: AssetPurpose): AssetContentType {
+  return ASSET_CONTENT_TYPES[purpose];
+}
+
+export function getAssetFileExtension(purpose: AssetPurpose): AssetFileExtension {
+  return ASSET_FILE_EXTENSIONS[purpose];
+}
+
+export type AssetContentType = (typeof ASSET_CONTENT_TYPES)[AssetPurpose];
+export type AssetFileExtension = (typeof ASSET_FILE_EXTENSIONS)[AssetPurpose];
 
 export const ASSET_POLICIES = {
   logo: {
     purpose: "logo",
-    maxBytes: 80 * 1024,
+    maxBytes: 128 * 1024,
     maxDimension: 128,
     maxPixels: 128 * 128,
     preserveAlpha: true,
     opaque: false,
-    startQuality: 85,
-    minQuality: 45,
-    qualityStep: 20,
   },
   qr_code: {
     purpose: "qr_code",
-    maxBytes: 400 * 1024,
+    maxBytes: 1024 * 1024,
     maxDimension: 1024,
     maxPixels: 1024 * 1024,
     preserveAlpha: false,
     opaque: true,
-    startQuality: 95,
-    minQuality: 55,
-    qualityStep: 10,
   },
 } as const satisfies Record<
   AssetPurpose,
@@ -41,9 +57,6 @@ export const ASSET_POLICIES = {
     maxPixels: number;
     preserveAlpha: boolean;
     opaque: boolean;
-    startQuality: number;
-    minQuality: number;
-    qualityStep: number;
   }
 >;
 
@@ -54,9 +67,6 @@ export const assetPurposePolicySchema = z.object({
   maxPixels: z.number().int().positive(),
   preserveAlpha: z.boolean(),
   opaque: z.boolean(),
-  startQuality: z.number().int().min(1).max(100),
-  minQuality: z.number().int().min(1).max(100),
-  qualityStep: z.number().int().positive(),
 });
 
 export type AssetPurposePolicy = (typeof ASSET_POLICIES)[AssetPurpose];
@@ -67,13 +77,23 @@ export function getAssetPolicy(purpose: AssetPurpose): AssetPurposePolicy {
 
 // ─── 资源上传元数据 ──────────────────────────────────────
 
-export const assetUploadMetaSchema = z.object({
-  purpose: assetPurposeSchema,
-  contentType: z.literal("image/webp"),
-  byteLength: z.number().int().positive(),
-  width: z.number().int().positive(),
-  height: z.number().int().positive(),
-});
+export const assetUploadMetaSchema = z
+  .object({
+    purpose: assetPurposeSchema,
+    contentType: z.enum(["image/png", "image/jpeg"]),
+    byteLength: z.number().int().positive(),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.contentType !== getAssetContentType(value.purpose)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contentType"],
+        message: "资源 MIME 与用途不匹配。",
+      });
+    }
+  });
 export type AssetUploadMeta = z.infer<typeof assetUploadMetaSchema>;
 
 // ─── Logo 上传限制和压缩参数 ───────────────────────────────────────
@@ -82,9 +102,6 @@ export const LOGO_CODE_MAX_BYTES = ASSET_SOURCE_MAX_BYTES;
 export const LOGO_MAX_BYTES = ASSET_POLICIES.logo.maxBytes;
 export const LOGO_MAX_DIMENSION = ASSET_POLICIES.logo.maxDimension;
 export const LOGO_MAX_PIXELS = ASSET_POLICIES.logo.maxPixels;
-export const LOGO_START_QUALITY = ASSET_POLICIES.logo.startQuality;
-export const LOGO_MIN_QUALITY = ASSET_POLICIES.logo.minQuality;
-export const LOGO_QUALITY_STEP = ASSET_POLICIES.logo.qualityStep;
 
 // ─── 二维码上传限制和压缩参数 ───────────────────────────────────────
 
@@ -92,9 +109,6 @@ export const QR_CODE_MAX_BYTES = ASSET_SOURCE_MAX_BYTES;
 export const QR_CODE_TARGET_BYTES = ASSET_POLICIES.qr_code.maxBytes;
 export const QR_CODE_MAX_DIMENSION = ASSET_POLICIES.qr_code.maxDimension;
 export const QR_CODE_MAX_PIXELS = ASSET_POLICIES.qr_code.maxPixels;
-export const QR_START_QUALITY = ASSET_POLICIES.qr_code.startQuality;
-export const QR_MIN_QUALITY = ASSET_POLICIES.qr_code.minQuality;
-export const QR_QUALITY_STEP = ASSET_POLICIES.qr_code.qualityStep;
 
 export const assetUploadLimitsSchema = z.union([
   z.object({
@@ -144,28 +158,44 @@ export const assetPublicUrlSchema = z.string().refine(
 
 // ─── 资源信息（上传响应） ──────────────────────────────────
 
-export const assetInfoSchema = z.object({
+const assetInfoBaseSchema = z.object({
   id: z.string().uuid(),
   purpose: assetPurposeSchema,
   r2Key: z.string(),
-  contentType: z.literal("image/webp"),
+  contentType: z.enum(["image/png", "image/jpeg"]),
   byteLength: z.number().int().positive(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   status: z.enum(["staged", "ready", "delete_pending", "delete_failed"]),
   publicUrl: assetPublicUrlSchema,
 });
+
+function refineAssetPurposeContentType<T extends z.AnyZodObject>(schema: T): z.ZodEffects<T> {
+  return schema.superRefine((value, ctx) => {
+    if (value.contentType !== getAssetContentType(value.purpose as AssetPurpose)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contentType"],
+        message: "资源 MIME 与用途不匹配。",
+      });
+    }
+  });
+}
+
+export const assetInfoSchema = refineAssetPurposeContentType(assetInfoBaseSchema);
 export type AssetInfo = z.infer<typeof assetInfoSchema>;
 
 // ─── 管理员资源 DTO ───────────────────────────────────────
 
-export const adminAssetDtoSchema = assetInfoSchema.extend({
-  refCount: z.number().int().nonnegative(),
-  deleteAttempts: z.number().int().nonnegative(),
-  deleteLastError: z.string().nullable(),
-  deleteLastErrorCode: z.string().nullable(),
-  createdAt: z.string().datetime(),
-});
+export const adminAssetDtoSchema = refineAssetPurposeContentType(
+  assetInfoBaseSchema.extend({
+    refCount: z.number().int().nonnegative(),
+    deleteAttempts: z.number().int().nonnegative(),
+    deleteLastError: z.string().nullable(),
+    deleteLastErrorCode: z.string().nullable(),
+    createdAt: z.string().datetime(),
+  }),
+);
 export type AdminAssetDto = z.infer<typeof adminAssetDtoSchema>;
 
 // ─── 公开资源展示信息 ─────────────────────────────────────

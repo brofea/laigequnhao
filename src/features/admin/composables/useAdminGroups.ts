@@ -50,6 +50,7 @@ export function useAdminGroups(getCsrf: () => string, isActive: () => boolean = 
   const sortDir = ref<"asc" | "desc">("desc");
 
   let controller: AbortController | null = null;
+  let latestRequestId = 0;
 
   /** 从 URL query 恢复状态（前进/后退/刷新） */
   function readFromUrl() {
@@ -135,8 +136,10 @@ export function useAdminGroups(getCsrf: () => string, isActive: () => boolean = 
   async function fetchGroups() {
     // 非管理视图不请求管理接口（避免公开首页携带管理请求）
     if (!isActive()) return;
+    const requestId = ++latestRequestId;
     controller?.abort();
-    controller = new AbortController();
+    const requestController = new AbortController();
+    controller = requestController;
     loading.value = true;
     error.value = null;
 
@@ -146,7 +149,9 @@ export function useAdminGroups(getCsrf: () => string, isActive: () => boolean = 
     }
 
     try {
-      const result = await fetchAdminGroupsPage(buildQuery(controller.signal));
+      const result = await fetchAdminGroupsPage(buildQuery(requestController.signal));
+      if (requestId !== latestRequestId) return;
+
       if (result.ok) {
         groups.value = result.data.items;
         totalItems.value = result.data.totalItems;
@@ -157,10 +162,11 @@ export function useAdminGroups(getCsrf: () => string, isActive: () => boolean = 
         error.value = result.error.message;
       }
     } catch (e) {
+      if (requestId !== latestRequestId) return;
       if (e instanceof Error && e.name === "AbortError") return;
       error.value = "加载失败，请重试";
     } finally {
-      loading.value = false;
+      if (requestId === latestRequestId) loading.value = false;
     }
   }
 

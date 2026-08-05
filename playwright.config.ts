@@ -14,11 +14,28 @@ export default defineConfig({
   projects: [
     {
       name: "chromium-desktop",
+      testIgnore: /image-flows\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], channel: "chromium" },
     },
     {
       name: "chromium-mobile",
+      testIgnore: /image-flows\.spec\.ts/,
       use: { ...devices["Pixel 5"], channel: "chromium" },
+    },
+    {
+      name: "image-chromium",
+      testMatch: /image-flows\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], browserName: "chromium" },
+    },
+    {
+      name: "image-webkit",
+      testMatch: /image-flows\.spec\.ts/,
+      use: { ...devices["Desktop Safari"], browserName: "webkit" },
+    },
+    {
+      name: "image-firefox",
+      testMatch: /image-flows\.spec\.ts/,
+      use: { ...devices["Desktop Firefox"], browserName: "firefox" },
     },
   ],
   webServer: [

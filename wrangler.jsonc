@@ -30,51 +30,28 @@
       "bucket_name": "lgqh-dev",
     },
   ],
-  "vars": {
-    "ENVIRONMENT": "local",
-    "SECURE_COOKIE": "false",
-    "SUBMISSION_LIMIT_PER_HOUR": "1",
-  },
+  // 环境变量分布：pnpm dev 使用 env.develop；生产部署由
+  // scripts/cloudflare-resources.mjs 整体替换 vars；无顶层 vars（裸跑用代码默认值）。
   "env": {
-    "preview": {
-      "name": "laigequnhao-preview",
+    "develop": {
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "laigequnhao-preview",
+          "database_name": "lgqh-dev",
           "migrations_dir": "migrations",
         },
       ],
       "r2_buckets": [
         {
           "binding": "R2",
-          "bucket_name": "laigequnhao-assets-preview",
+          "bucket_name": "lgqh-dev",
         },
       ],
       "vars": {
-        "ENVIRONMENT": "preview",
-        "SECURE_COOKIE": "true",
-        "SUBMISSION_LIMIT_PER_HOUR": "1",
-      },
-    },
-    "production": {
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "laigequnhao-prod",
-          "migrations_dir": "migrations",
-        },
-      ],
-      "r2_buckets": [
-        {
-          "binding": "R2",
-          "bucket_name": "laigequnhao-assets-prod",
-        },
-      ],
-      "vars": {
-        "ENVIRONMENT": "production",
-        "SECURE_COOKIE": "true",
-        "SUBMISSION_LIMIT_PER_HOUR": "1",
+        "ENVIRONMENT": "develop",
+        "SECURE_COOKIE": "false",
+        "SUBMISSION_LIMIT_PER_HOUR": "10000",
+        "LIKE_LIMIT_PER_TEN_MINUTE": "1000",
       },
     },
   },

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"质量检查需覆盖前端 PNG 压缩、Worker 真实 PNG 解码、R2 响应体、seed SQL、资源生命周期和浏览器 smoke。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"检查阶段要验证 PNG MIME、扩展名、尺寸、alpha、字节上限从浏览器到 API、D1、R2 和展示链路没有分叉。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Worker 图片安全边界、完整解码、错误响应和运行时限制需要按后端质量门禁复核。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"检查 toast 精确文案、无预览/无上传失败行为、Blob URL 清理和 Playwright 浏览器覆盖。"}

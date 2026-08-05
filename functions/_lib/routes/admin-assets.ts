@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { assetInfoSchema, ASSET_UPLOAD_REQUEST_MAX_BYTES } from "@shared/contracts/asset";
+import {
+  assetInfoSchema,
+  ASSET_UPLOAD_REQUEST_MAX_BYTES,
+  getAssetContentType,
+} from "@shared/contracts/asset";
 import { assetPurposeSchema } from "@shared/domain/group";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
 import { createAssetService } from "../services/asset-service";
@@ -8,14 +12,14 @@ import {
   ImageValidationError,
   isUploadBodyTooLarge,
   isUploadRequestTooLarge,
-  validateWebpUpload,
+  validateImageUpload,
 } from "../services/image-validation";
 import { authRequired, csrfProtection } from "../middleware/auth";
 import type { Env } from "../env";
 
 type Vars = { requestId: string; sessionId: string };
 type AssetContext = Context<{ Bindings: Env; Variables: Vars }>;
-type UploadFile = { arrayBuffer: () => Promise<ArrayBuffer> };
+type UploadFile = { arrayBuffer: () => Promise<ArrayBuffer>; type?: string };
 export const adminAssetsRoute = new Hono<{ Bindings: Env; Variables: Vars }>();
 
 adminAssetsRoute.use("*", authRequired());
@@ -135,9 +139,21 @@ adminAssetsRoute.post("/assets", csrfProtection(), async (c) => {
     );
   }
 
+  const expectedContentType = getAssetContentType(purposeResult.data);
+  if (file.type?.toLowerCase() !== expectedContentType) {
+    return validationErrorResponse(
+      c,
+      new ImageValidationError(
+        "UNSUPPORTED_MEDIA_TYPE",
+        415,
+        `文件 MIME 类型必须是 ${expectedContentType}。`,
+      ),
+    );
+  }
+
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const validated = validateWebpUpload(bytes, purposeResult.data);
+    const validated = validateImageUpload(bytes, purposeResult.data);
     const assetService = createAssetService(c.env.DB, c.env.R2, c.env);
     const asset = await assetService.uploadStaged(validated);
 

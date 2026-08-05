@@ -1,0 +1,10 @@
+{"file":".trellis/spec/frontend/architecture.md","reason":"约束组件、composable、API 客户端之间的前端数据流和状态归属。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"约束 Vue 组件 props/events、异步加载、失败状态和无障碍反馈实现。"}
+{"file":".trellis/spec/frontend/composable-guidelines.md","reason":"约束 keyed pending、请求取消、过期响应和异步生命周期的实现方式。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"定义前端质量门禁、组件测试和无障碍复核要求。"}
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"定义 Vitest、Vue Test Utils、Playwright 分层测试和异步交互验收策略。"}
+{"step":"建立 keyed pending 工具并保护公开目录、管理群组、管理板块的过期请求 loading 生命周期。","status":"completed","files":["src/shared/composables/usePendingActions.ts","src/features/groups/composables/useGroupDirectory.ts","src/features/admin/composables/useAdminGroups.ts","src/features/admin/composables/useAdminBoards.ts"]}
+{"step":"为通用表单、表格、板块管理、Dialog、点赞卡片和 Select 接入 loading/disabled/aria-busy 契约。","status":"completed","files":["src/components/AdminEditForm.vue","src/components/AdminTable.vue","src/components/BoardAddGroupForm.vue","src/components/BoardEditForm.vue","src/components/BoardManagement.vue","src/components/Dialog.vue","src/components/GroupCard.vue","src/components/Select.vue"]}
+{"step":"在 VisualShell 接入公开投稿持久成功状态、点赞乐观更新和管理端/板块端资源级 pending 及分级成功反馈。","status":"completed","files":["src/components/VisualShell.vue","src/components/Carousel.vue"]}
+{"step":"完成运行时 src 全部按钮审计，保留纯本地/浏览器操作的即时语义，更新前端组件与质量规范。","status":"completed","files":[".trellis/spec/frontend/component-guidelines.md",".trellis/spec/frontend/quality-guidelines.md"]}
+{"step":"补充 pending 工具、异步组件、目录请求竞态和永久删除 Dialog 生命周期测试。","status":"completed","files":["src/shared/composables/usePendingActions.spec.ts","src/components/async-feedback.spec.ts","src/features/groups/composables/useGroupDirectory.spec.ts","src/features/admin/composables/useAdminGroups.spec.ts","src/features/admin/composables/useAdminBoards.spec.ts","tests/e2e/admin-flows.spec.ts"]}
