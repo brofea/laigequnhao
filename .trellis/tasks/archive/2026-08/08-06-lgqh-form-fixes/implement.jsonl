@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/08-06-lgqh-form-fixes/prd.md", "reason": "4 个子任务的需求、验收标准与全部已确认决策；子代理实现前必须通读"}
+{"file": ".trellis/tasks/08-06-lgqh-form-fixes/design.md", "reason": "Select.vue multiple 扩展、Combobox 新建、契约与后端变更的统一设计，避免 B/C 冲突"}
+{"file": ".trellis/tasks/08-06-lgqh-form-fixes/implement.md", "reason": "执行顺序（A→B→C→D）、验证命令、质量门与回滚点"}
+{"file": ".trellis/tasks/08-06-lgqh-form-fixes/research/form-issues-research.md", "reason": "代码研读锚点：VisualShell/AdminEditForm/Select/契约/后端的关键行号与现状结论"}
