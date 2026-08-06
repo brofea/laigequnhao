@@ -9,7 +9,7 @@ import { useTheme } from "@/features/theme/useTheme";
 
 const router = useRouter();
 const { isAuthenticated, loading, error, check, doLogin } = useAdminAuth();
-const { resolvedTheme } = useTheme();
+useTheme();
 const password = ref("");
 
 onMounted(async () => {
@@ -23,7 +23,7 @@ async function login() {
 </script>
 
 <template>
-  <main class="app-shell" :data-theme="resolvedTheme">
+  <main class="app-shell">
     <SiteHeader :show-add-group="false" />
     <div class="login-page">
       <div class="app-card login-card">

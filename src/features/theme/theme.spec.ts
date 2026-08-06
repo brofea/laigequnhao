@@ -139,6 +139,7 @@ describe("theme bootstrap", () => {
   beforeEach(() => {
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.style.removeProperty("color-scheme");
+    document.head.querySelector('meta[name="theme-color"]')?.remove();
     vi.restoreAllMocks();
   });
 
@@ -183,5 +184,30 @@ describe("theme bootstrap", () => {
     expect(result).toEqual({ preference: "system", effectiveTheme: "light" });
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     expect(document.documentElement.style.colorScheme).toBe("light");
+  });
+
+  it("syncs the theme-color meta with the applied theme", () => {
+    const storage = new MemoryThemeStorage();
+    writeThemePreference("dark", storage);
+
+    bootstrapTheme({
+      document,
+      storage,
+      matchMedia: () => ({ matches: false }),
+    });
+
+    const meta = document.head.querySelector('meta[name="theme-color"]');
+    expect(meta?.getAttribute("content")).toBe("#15171c");
+  });
+
+  it("writes the light theme-color value as the default", () => {
+    bootstrapTheme({
+      document,
+      storage: null,
+      matchMedia: null,
+    });
+
+    const meta = document.head.querySelector('meta[name="theme-color"]');
+    expect(meta?.getAttribute("content")).toBe("#f3f5f8");
   });
 });
