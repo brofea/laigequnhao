@@ -4,12 +4,14 @@ export type { GroupKind, GroupStatus, JoinMethod, AssetPurpose } from "./group";
 export {
   siteConfigSchema,
   headerConfigSchema,
+  heroConfigSchema,
   rotationConfigSchema,
   boardsConfigSchema,
 } from "./config";
 export type {
   SiteConfig,
   HeaderConfig,
+  HeroConfig,
   RotationConfig,
   BoardsConfig,
 } from "./config";

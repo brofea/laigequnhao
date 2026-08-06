@@ -22,6 +22,12 @@ const rawConfig: SiteConfig = {
     },
   },
 
+  hero: {
+    eyebrow: "A calmer way to find your people",
+    title: "找一个值得加入的群",
+    description: "用清晰的标签和真实的主题，发现下一场讨论、一次漫游，或一群同频的人。",
+  },
+
   rotation: {
     timezone: "Asia/Shanghai",
     times: ["04:01", "16:01"],

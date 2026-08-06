@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+// ─── 首页 Hero 配置 ─────────────────────────────────────
+export const heroConfigSchema = z.object({
+  eyebrow: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+});
+export type HeroConfig = z.infer<typeof heroConfigSchema>;
+
 // ─── 公共顶栏配置 ───────────────────────────────────────
 // 这些字段只描述正式前端的品牌和入口，不承载业务状态。
 export const headerConfigSchema = z.object({
@@ -74,6 +82,7 @@ export const siteConfigSchema = z.object({
   copyright: z.string().min(1),
 
   header: headerConfigSchema,
+  hero: heroConfigSchema,
   rotation: rotationConfigSchema,
   boards: boardsConfigSchema,
   platforms: z

@@ -982,9 +982,9 @@ function removeScrollListener() {
       <template v-if="view === 'home'">
         <section class="hero-section">
           <div class="hero-copy">
-            <p class="eyebrow">A calmer way to find your people</p>
-            <h1>找一个值得加入的群</h1>
-            <p>用清晰的标签和真实的主题，发现下一场讨论、一次漫游，或一群同频的人。</p>
+            <p class="eyebrow">{{ siteConfig.hero.eyebrow }}</p>
+            <h1>{{ siteConfig.hero.title }}</h1>
+            <p>{{ siteConfig.hero.description }}</p>
           </div>
           <div class="hero-orbit" aria-hidden="true">
             <span>发现</span><span>交流</span><span>同频</span>

@@ -14,6 +14,11 @@ const validConfig = {
     githubLabel: "GitHub",
     addGroup: { label: "添加新群" },
   },
+  hero: {
+    eyebrow: "Hero eyebrow",
+    title: "Hero title",
+    description: "Hero description",
+  },
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
   boards: { timezone: "Asia/Shanghai" },
   platforms: ["QQ"],
