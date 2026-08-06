@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/08-06-public-submit-qr/prd.md", "reason": "子任务 D 需求与验收标准（公开投稿二维码全链路）"}
+{"file": ".trellis/tasks/08-06-public-submit-qr/design.md", "reason": "技术设计：契约 qr 标记字段、多文件 multipart、后端双资产处理"}
+{"file": ".trellis/tasks/08-06-public-submit-qr/implement.md", "reason": "实施清单与验证顺序、repo 资产结构风险提示"}
+{"file": ".trellis/tasks/08-06-lgqh-form-fixes/research/form-issues-research.md", "reason": "代码锚点：AdminEditForm 4 处 qr 禁用、api.ts submitGroup、submission.ts、submission-service.ts"}
