@@ -16,12 +16,14 @@
 ## Requirements
 
 - R1：修复 format:check——对上述 12 个文件执行 `prettier --write`（只修这 12 个，禁止全仓 --write 以免行尾巨变），LF 复现环境验证 `prettier --check .` 全绿。
-- R2：workflow e2e job 改造：
-  - 分片：matrix `shard: [1, 2, 3]`（数字分片），运行时拼接 `--shard=${{ matrix.shard }}/3`；每个分片运行于**独立 runner**，独立初始化本地 API 与测试数据库（webServer + `.e2e-state` 各自独立）；
-  - **workers 固定为 1**（用户决策：共享 DB 约束下不启用分片内多 worker，三路并行完全来自 runner 分片）；
+- R2：workflow e2e job 改造（首轮实测后按内容分片，2026-08-06）：
+  - **两个 e2e job**：`e2e-main`（非图片 5 文件 × chromium-desktop/mobile，matrix 数字分片 `[1,2,3]`，`--shard=N/3 --project=chromium-desktop --project=chromium-mobile`）+ `e2e-image`（image-flows 按 project 维度 matrix `[image-chromium, image-webkit, image-firefox]`，`--project=<p>`）；
+  - 首轮观测：`--shard` 按 spec 文件切分导致 image-flows 整组失衡（44s / 78s / 210s，4.8:1），故按内容拆分；
+  - 每个 job 运行于**独立 runner**，独立初始化本地 API 与测试数据库（webServer + `.e2e-state` 各自独立）；
+  - **workers 固定为 1**（用户决策：共享 DB 约束下不启用分片内多 worker，并行完全来自 runner 分片）；
   - reporter 切换为 HTML + JSON（CI 时 `line + html + json`，JSON 输出到文件供机器解析），HTML 报告作为 artifact 上传；
   - `--with-deps` 保持（浏览器缓存不含 Linux 系统依赖，必须保留）；
-  - 浏览器缓存**审慎处理**（用户要求，不默认缓存更快）：各分片只是分别恢复同一缓存副本，**首次无缓存时三个并发分片可能全部 miss、各自完整下载，只有后续 workflow 才会命中**；缓存 key 统一为 `runner.os + Playwright 实际版本 + 浏览器集合`，**不使用宽泛 restore-keys**（避免跨版本恢复旧缓存）；是否保留缓存**以首轮/次轮实测对比为准**（直接下载 vs 缓存恢复的耗时/空间/稳定性），**不增加未经测量的串行准备 job**。
+  - 浏览器缓存**审慎处理**（用户要求，不默认缓存更快）：各分片只是分别恢复同一缓存副本，**首次无缓存时所有并发 job 可能全部 miss、各自完整下载，只有后续 workflow 才会命中**；缓存 key 统一为 `runner.os + Playwright 实际版本 + 浏览器集合`，**不使用宽泛 restore-keys**（避免跨版本恢复旧缓存）；是否保留缓存**以首轮/次轮实测对比为准**（直接下载 vs 缓存恢复的耗时/空间/稳定性），**不增加未经测量的串行准备 job**。
 - R3：**首轮运行观测**（用户要求，据数据后续决策）：
   - 分别记录：**缓存恢复耗时**、**浏览器安装耗时**、**浏览器准备总耗时**、**安装后缓存体积**（`du -sh`）、测试数量、测试时长；
   - 机器解析**不依赖 line reporter 文本**：优先使用 playwright JSON reporter 输出文件（`results-<shard>.json`，含 expected/unexpected/skipped/duration 等结构化数据）；
@@ -38,14 +40,14 @@
 ## Acceptance Criteria
 
 - [ ] AC1：LF 复现环境 `prettier --check .` 全绿；CI format:check 预期通过。
-- [ ] AC2：workflow e2e job 使用 3 个数字分片（matrix `[1,2,3]`，独立 runner），运行时 `--shard=N/3`，每分片独立初始化 API 与测试数据库，互不共享状态。
-- [ ] AC3：e2e `workers: 1` 保持不变（不启用分片内多 worker）；并行仅来自 3 个 runner 分片。
-- [ ] AC4：HTML 报告生成并作为 artifact 上传（命名 `playwright-report-<N>-of-3`，`if: always()`，不互相覆盖）。
+- [ ] AC2：e2e 按内容拆分为 `e2e-main`（matrix `[1,2,3]`，`--shard=N/3`，仅 chromium-desktop/mobile）与 `e2e-image`（matrix 三 image project，`--project=<p>`）两个 job；每个执行单元独立 runner 与 API/DB，互不共享状态。
+- [ ] AC3：e2e `workers: 1` 保持不变（不启用分片内多 worker）；并行仅来自 runner 分片。
+- [ ] AC4：HTML 报告生成并作为 artifact 上传（命名 `playwright-report-main-<N>-of-3` 与 `playwright-report-image-<project>`，`if: always()`，不互相覆盖）。
 - [ ] AC5：actionlint + `prettier --check .github` 通过。
 - [ ] AC6：本地 e2e 全量（5 project）保持通过，不受本次配置改动影响。
 - [ ] AC7：e2e job 输出首轮观测数据：缓存恢复耗时、浏览器安装耗时、浏览器准备总耗时、安装后缓存体积、测试数量与时长（JSON 结构化输出）；汇总/日志/报告上传步骤均 `if: always()`。
 - [ ] AC8：缓存 key = `runner.os + Playwright 实际版本 + 浏览器集合`，无宽泛 restore-keys；`--with-deps` 保留；未增加串行准备 job。
-- [ ] AC9：实施验证补齐全部本地门禁：`pnpm lint`、`pnpm format:check`（LF 复现）、`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm test:workers`；并执行 `pnpm exec playwright test --list --shard=N/3`（N=1,2,3）确认三个分片均非空。
+- [ ] AC9：实施验证补齐全部本地门禁：`pnpm lint`、`pnpm format:check`（LF 复现）、`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm test:workers`；并验证新分片结构：`playwright test --list --project=chromium-desktop --project=chromium-mobile --shard=N/3`（N=1,2,3）三片非空且和=非图片全量、`playwright test --list --project=image-<p>`（三个 project 各 = 4 个 image 测试）。
 
 ## Key Decisions
 

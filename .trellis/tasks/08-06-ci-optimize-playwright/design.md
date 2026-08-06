@@ -13,12 +13,21 @@
 - `workers` **保持 1 不变**（用户决策）：共享 e2e API DB 约束下，分片内多 worker 会破坏状态隔离；三路并行完全来自 3 个独立 runner 分片，每个分片内部仍串行。分片之间互不共享 webServer / `.e2e-state` / D1。
 - `reporter`：CI 时 `[["line"], ["html", { outputFolder: "playwright-report" }], ["json", { outputFile: "playwright-report/results-<shard>.json" }]]`，本地保持 `"line"`。JSON 输出供机器解析（expected/unexpected/skipped/duration），不依赖 line reporter 文本。
 
-## 工作流改造（ci.yml e2e job）
+## 工作流改造（ci.yml e2e job）——按测试内容分片（首轮实测后调整，2026-08-06）
 
-- matrix 数字分片：`strategy.matrix.shard: [1, 2, 3]`，`fail-fast: false`；运行命令 `pnpm exec playwright test --shard=${{ matrix.shard }}/3`。
-- 每分片独立 runner、独立 webServer（start-e2e-api + vite dev）、独立 `.e2e-state` → 状态天然隔离。
-- HTML 报告 artifact：`playwright-report-${{ matrix.shard }}-of-3`（避免 `/` 进名称），`if: always()`。
-- 分片日志与 JSON 结果一并上传（`if: always()`）。
+**首轮观测（playwright-report artifacts）**：`--shard` 按 spec 文件切分，image-flows.spec.ts（12 tests × 3 image project）整组落入单分片，三片墙钟 44s / 1.3m / 3.5m（失衡 4.8:1），并行收益被最长片抵消。
+
+**调整**：拆为两个 e2e job，按测试内容分片：
+
+1. `e2e-main`：非图片测试（a11y/admin/application/public/real 五个文件，仅 chromium-desktop/mobile 两个 project 执行）
+   - matrix 数字分片 `[1,2,3]`，命令 `pnpm exec playwright test --shard=${{ matrix.shard }}/3 --project=chromium-desktop --project=chromium-mobile`；
+   - 10 个执行组（5 文件 × 2 project）轮转 3 片，每片 3-4 组，预估 ~45s/片。
+2. `e2e-image`：image-flows.spec.ts 按 project 维度拆分
+   - matrix `project: [image-chromium, image-webkit, image-firefox]`，命令 `pnpm exec playwright test --project=${{ matrix.project }}`（playwright.config 的 testMatch 已限定该文件，其余文件被 image project 排除）；
+   - 每 project 4 tests，预估 ~70s。
+3. 两个 job 均：独立 runner / webServer / `.e2e-state`（状态天然隔离）；`fail-fast: false`；workers 固定 1（job 内共享 DB 约束不变）。
+4. 预期墙钟：`max(main 分片 ~45s, image job ~70s) ≈ 70s`（vs 首轮 210s，约 3 倍提升；**待测假设**）。
+5. 报告/观测/缓存结构在两个 job 复制：HTML artifact 命名 `playwright-report-main-<N>-of-3` 与 `playwright-report-image-<project>`（不含 `/`）；STEP_SUMMARY、日志、JSON 结果、时间戳观测均保留，`if: always()`。
 
 ## 浏览器缓存：审慎处理（不默认缓存更快）
 

@@ -19,12 +19,12 @@
 | `unit` | `pnpm test` | 15 min |
 | `workers` | `pnpm test:workers` | 15 min |
 | `build` | `pnpm build` | 15 min |
-| `e2e` | 3 个数字分片（matrix `[1,2,3]`，`--shard=N/3`）：浏览器安装 → 生成 `tests/e2e/.dev.vars` → `pnpm exec playwright test --shard=N/3` | 30 min |
+| `e2e` | 两个 job 按测试内容分片：`e2e-main`（非图片 5 文件 × chromium 双 project，matrix `[1,2,3]`，`--shard=N/3`）+ `e2e-image`（image-flows 按 project 维度，matrix 三 image project，`--project=<p>`） | 30 min |
 
 - 5 个 job 相互独立、并行执行；任一 step 失败即该 job 失败，合并检查整体失败。
 - concurrency 按 `github.ref` 分组并 `cancel-in-progress`，避免同一分支重复推送排队浪费。
-- **E2E 分片**：3 个分片运行于独立 runner，各自初始化独立 webServer 与 `.e2e-state`（API/D1/R2 状态天然隔离）；`fail-fast: false`；**`workers: 1` 固定不变**——测试共享同一 API DB，分片内多 worker 会破坏状态隔离，并行完全来自 runner 分片。
-- **报告与 artifact**：CI reporter 为 `line + html + json`（JSON 输出 `playwright-report/results.json` 供机器解析，不依赖 line 文本）；HTML 报告、分片日志、汇总（`$GITHUB_STEP_SUMMARY`）上传均 `if: always()`，artifact 命名 `playwright-report-<N>-of-3`（名称不含 `/`），保留 7 天；失败时另传 `test-results-<N>-of-3`。
+- **E2E 分片（按内容）**：首轮实测（2026-08-06）发现 `--shard` 按 spec 文件切分使 image-flows 整组失衡（44s / 78s / 210s），故拆为两个 job：`e2e-main`（轻量文件 3 分片）与 `e2e-image`（重操作 image-flows 按浏览器 project 拆 3 个并行 job）。所有执行单元运行于独立 runner，各自初始化独立 webServer 与 `.e2e-state`（API/D1/R2 状态天然隔离）；`fail-fast: false`；**`workers: 1` 固定不变**——测试共享同一 API DB，分片内多 worker 会破坏状态隔离，并行完全来自 runner 分片。
+- **报告与 artifact**：CI reporter 为 `line + html + json`（JSON 输出 `playwright-report/results.json` 供机器解析，不依赖 line 文本）；HTML 报告、分片日志、汇总（`$GITHUB_STEP_SUMMARY`）上传均 `if: always()`，artifact 命名 `playwright-report-main-<N>-of-3` / `playwright-report-image-<project>`（名称不含 `/`），保留 7 天；失败时另传 `test-results-main-<N>-of-3` / `test-results-image-<project>`。
 - action 版本必须固定到 major 标签（`@v4` 等），升级需单独提交并说明。
 
 ## 浏览器缓存约定

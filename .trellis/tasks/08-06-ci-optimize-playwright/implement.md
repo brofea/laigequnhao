@@ -10,18 +10,17 @@
 2. 调整 `playwright.config.ts`：
    - `workers` 保持不变（固定 1）；
    - CI reporter：`line + html + json`（json outputFile 含分片标记，供机器解析），本地保持 `line`。
-3. 改造 `.github/workflows/ci.yml` e2e job：
-   - matrix 数字分片 `[1, 2, 3]`（`fail-fast: false`），`--shard=${{ matrix.shard }}/3`；
-   - 浏览器版本步骤：读取 `@playwright/test` 实际版本写入 GITHUB_OUTPUT；缓存 key = `ms-playwright-${{ runner.os }}-<version>-chromium-webkit-firefox`，**无 restore-keys**；
-   - 运行步骤：`set -o pipefail` + `tee playwright-shard-<n>.log`；
-   - 时间戳步骤：记录缓存恢复、浏览器安装的起止时间（GITHUB_OUTPUT）；
-   - 汇总步骤（`if: always()`）：node 解析 JSON 结果 + 时间戳 + `cache-hit` + `du -sh ~/.cache/ms-playwright`（命中时），输出到 `$GITHUB_STEP_SUMMARY`；
-   - 上传步骤（`if: always()`）：HTML 报告 `playwright-report-<N>-of-3`、分片日志、JSON 结果；失败时另传 test-results；
-   - `--with-deps` 无条件保留。
+3. 改造 `.github/workflows/ci.yml` e2e job（**首轮实测后按内容分片**，2026-08-06）：
+   - 首轮观测（playwright-report artifacts）：`--shard` 按文件切分，image-flows 整组落单片 → 44s / 78s / 210s 失衡；
+   - 拆为两个 job：`e2e-main`（非图片 5 文件 × chromium 双 project，matrix `[1,2,3]`，`--shard=N/3 --project=chromium-desktop --project=chromium-mobile`）+ `e2e-image`（matrix 三 image project，`--project=<p>`）；
+   - 每个 job 内：浏览器版本步骤（读取 `@playwright/test` 版本）、缓存 key = `ms-playwright-${{ runner.os }}-<version>-chromium-webkit-firefox`（无 restore-keys）、时间戳步骤（缓存恢复/安装起止）、`--with-deps` 无条件保留；
+   - 运行步骤：`set -o pipefail` + `tee` 日志（main/image 各自命名）；
+   - 汇总步骤（`if: always()`）：node 解析 JSON + 时间戳 + `cache-hit` + `du -sh`，输出 `$GITHUB_STEP_SUMMARY`；
+   - 上传步骤（`if: always()`）：HTML 报告 `playwright-report-main-<N>-of-3` / `playwright-report-image-<project>`、日志、JSON；失败另传 test-results。
 4. 校验：actionlint（ci.yml）、`pnpm exec prettier --check .github`、YAML 解析。
 5. 本地验证补齐全部门禁：
    - `pnpm lint`、`pnpm format:check`（LF 复现）、`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm test:workers`；
-   - `pnpm exec playwright test --list --shard=1/3`、`--shard=2/3`、`--shard=3/3` 确认三个分片均非空（各分片测试数之和 = 全量）；
+   - 新分片结构验证：`playwright test --list --project=chromium-desktop --project=chromium-mobile --shard=1/3|2/3|3/3` 三片非空且和 = 70（全量）；`playwright test --list --project=image-<p>` 各 = 4（和 = 12）；
    - 本地全量 e2e（5 project，干净状态）回归。
 6. 更新 `.trellis/spec/ci/ci-guidelines.md`：
    - 分片结构（3 分片数字 matrix、独立 runner/API/DB、workers 固定 1 的原因）与报告/上传约定（均 always）；

@@ -72,8 +72,8 @@ jobs:
       - name: Build
         run: pnpm build
 
-  e2e:
-    name: E2E tests (Playwright, shard ${{ matrix.shard }}/3)
+  e2e-main:
+    name: E2E main (shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -144,14 +144,14 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pnpm exec playwright test --shard=${{ matrix.shard }}/3 2>&1 | tee playwright-shard-${{ matrix.shard }}.log
+          pnpm exec playwright test --shard=${{ matrix.shard }}/3 --project=chromium-desktop --project=chromium-mobile 2>&1 | tee playwright-main-${{ matrix.shard }}.log
 
       - name: Summarize shard run
         if: always()
         shell: bash
         run: |
           {
-            echo "## E2E shard ${{ matrix.shard }}/3"
+            echo "## E2E main shard ${{ matrix.shard }}/3"
             echo
             echo "| metric | value |"
             echo "|---|---|"
@@ -168,10 +168,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.shard }}-of-3
+          name: playwright-report-main-${{ matrix.shard }}-of-3
           path: |
             playwright-report/
-            playwright-shard-${{ matrix.shard }}.log
+            playwright-main-${{ matrix.shard }}.log
           if-no-files-found: ignore
           retention-days: 7
 
@@ -179,7 +179,119 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.shard }}-of-3
+          name: test-results-main-${{ matrix.shard }}-of-3
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  e2e-image:
+    name: E2E image (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [image-chromium, image-webkit, image-firefox]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm environment
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        shell: bash
+        run: |
+          version=$(node -p "require('./node_modules/@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Record cache restore start
+        id: cache-restore-start
+        shell: bash
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium-webkit-firefox
+
+      - name: Record cache restore end
+        id: cache-restore-end
+        shell: bash
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Record browser prep start
+        id: browser-prep-start
+        shell: bash
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Playwright browsers
+        shell: bash
+        run: pnpm exec playwright install --with-deps chromium webkit firefox
+
+      - name: Record browser prep end
+        id: browser-prep-end
+        shell: bash
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate E2E test env file
+        shell: bash
+        run: |
+          cat > tests/e2e/.dev.vars <<'EOF'
+          ADMIN_PASSWORD=test-admin-password
+          SESSION_SECRET=test-session-secret
+          LIKE_PEPPER=test-like-pepper
+          DEV_LIKE_PEPPER=test-like-pepper
+          TURNSTILE_SECRET_KEY=test-turnstile-secret
+          SKIP_TURNSTILE=true
+          SECURE_COOKIE=false
+          LOGIN_MAX_ATTEMPTS=100
+          LOGIN_WINDOW_MINUTES=5
+          EOF
+
+      - name: Run E2E image tests
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm exec playwright test --project=${{ matrix.project }} 2>&1 | tee playwright-image-${{ matrix.project }}.log
+
+      - name: Summarize project run
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## E2E image ${{ matrix.project }}"
+            echo
+            echo "| metric | value |"
+            echo "|---|---|"
+            echo "| cache-hit | ${{ steps.playwright-cache.outputs.cache-hit }} |"
+            echo "| cache-restore-seconds | $(( ${{ steps.cache-restore-end.outputs.ts }} - ${{ steps.cache-restore-start.outputs.ts }} )) |"
+            echo "| browser-install-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.browser-prep-start.outputs.ts }} )) |"
+            echo "| browser-prep-total-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.cache-restore-start.outputs.ts }} )) |"
+            echo "| browsers-size | $(du -sh ~/.cache/ms-playwright 2>/dev/null | cut -f1 || echo n/a) |"
+            node -e "const fs=require('fs');const p='./playwright-report/results.json';if(!fs.existsSync(p)){console.log('| json-report | missing |');process.exit(0)}const r=JSON.parse(fs.readFileSync(p,'utf8'));const s=r.stats||{};for(const [k,v] of Object.entries({passed:s.expected,failed:s.unexpected,skipped:s.skipped,duration_ms:s.duration}))console.log('| '+k+' | '+(v??'n/a')+' |')"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-image-${{ matrix.project }}
+          path: |
+            playwright-report/
+            playwright-image-${{ matrix.project }}.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-image-${{ matrix.project }}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
