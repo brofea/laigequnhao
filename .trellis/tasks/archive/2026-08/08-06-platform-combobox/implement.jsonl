@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/08-06-platform-combobox/prd.md", "reason": "子任务 C 需求与验收标准（输入框+下拉一体、管理端默认空、契约放行空值）"}
+{"file": ".trellis/tasks/08-06-lgqh-form-fixes/design.md", "reason": "统一设计：Combobox.vue 新建组件方案（API、行为、样式复用）与契约 platform 放行"}
+{"file": ".trellis/tasks/08-06-lgqh-form-fixes/research/form-issues-research.md", "reason": "代码锚点：AdminEditForm 106-109/457-462、site.config.ts:40、group.ts 254/325、submission.ts:38"}
