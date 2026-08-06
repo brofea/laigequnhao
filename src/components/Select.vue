@@ -9,24 +9,38 @@ export interface SelectOption {
 
 const props = withDefaults(
   defineProps<{
-    modelValue: string;
+    /** 单选模式为 string；multiple=true 时为 string[]。 */
+    modelValue: string | string[];
     label: string;
     options: SelectOption[];
+    /** 多选模式：可同时勾选多个选项，点击选项切换选中态且菜单不收起。 */
+    multiple?: boolean;
     description?: string;
     triggerLabel?: string;
     triggerIcon?: IconName;
     loading?: boolean;
     disabled?: boolean;
   }>(),
-  { description: "", loading: false, disabled: false },
+  { multiple: false, description: "", loading: false, disabled: false },
 );
 
-const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+const emit = defineEmits<{ "update:modelValue": [value: string | string[]] }>();
 const open = ref(false);
 const root = ref<HTMLElement | null>(null);
 const activeIndex = ref(0);
 
+function selectedValues(): string[] {
+  if (!props.multiple) return [props.modelValue as string];
+  return Array.isArray(props.modelValue) ? props.modelValue : [];
+}
+
+function isOptionSelected(value: string): boolean {
+  return selectedValues().includes(value);
+}
+
 function selectedLabel() {
+  // 多选模式不展示"已选项文本"，由 triggerLabel 提供静态文案。
+  if (props.multiple) return props.triggerLabel || "请选择";
   if (props.triggerLabel) return props.triggerLabel;
   return props.options.find((option) => option.value === props.modelValue)?.label ?? "请选择";
 }
@@ -36,12 +50,21 @@ function toggle() {
   open.value = !open.value;
   activeIndex.value = Math.max(
     0,
-    props.options.findIndex((option) => option.value === props.modelValue),
+    props.options.findIndex((option) => isOptionSelected(option.value)),
   );
 }
 
 function choose(value: string) {
   if (props.disabled || props.loading) return;
+  if (props.multiple) {
+    const current = selectedValues();
+    const next = current.includes(value)
+      ? current.filter((item) => item !== value)
+      : [...current, value];
+    emit("update:modelValue", next);
+    // 多选模式：点击选项后保持菜单展开，由外部点击 / ESC 收起。
+    return;
+  }
   emit("update:modelValue", value);
   open.value = false;
 }
@@ -122,15 +145,20 @@ onBeforeUnmount(() => {
         role="option"
         class="app-select__option"
         :class="{
-          'app-select__option--selected': props.modelValue === option.value,
+          'app-select__option--selected': isOptionSelected(option.value),
           'app-select__option--active': activeIndex === index,
         }"
-        :aria-selected="props.modelValue === option.value"
+        :aria-selected="isOptionSelected(option.value)"
         @mouseenter="activeIndex = index"
         @click="choose(option.value)"
       >
         <span>{{ option.label }}</span
-        ><Icon v-if="props.modelValue === option.value" name="check" size="15" />
+        ><Icon
+          v-if="isOptionSelected(option.value)"
+          class="app-select__check"
+          name="check"
+          size="15"
+        />
       </button>
     </div>
     <span v-if="props.description" class="app-select__description">{{ props.description }}</span>

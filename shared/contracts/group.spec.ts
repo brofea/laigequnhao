@@ -181,6 +181,20 @@ describe("groupCreateSchema", () => {
   it("接受 0 个标签", () => {
     expect(() => groupCreateSchema.parse({ ...validCreateInput, tags: [] })).not.toThrow();
   });
+
+  it("接受空平台（平台可为空）", () => {
+    expect(() => groupCreateSchema.parse({ ...validCreateInput, platform: "" })).not.toThrow();
+  });
+
+  it("接受列表外的自定义平台值", () => {
+    expect(() => groupCreateSchema.parse({ ...validCreateInput, platform: "OICQ" })).not.toThrow();
+  });
+
+  it("拒绝超过 50 字符的平台", () => {
+    expect(() =>
+      groupCreateSchema.parse({ ...validCreateInput, platform: "x".repeat(51) }),
+    ).toThrow();
+  });
 });
 
 describe("groupUpdateSchema", () => {
@@ -216,5 +230,15 @@ describe("groupUpdateSchema", () => {
         version: 2,
       }),
     ).not.toThrow();
+  });
+
+  it("接受空平台更新（平台可为空）", () => {
+    expect(() => groupUpdateSchema.parse({ ...validUpdate, platform: "" })).not.toThrow();
+  });
+
+  it("拒绝超过 50 字符的平台更新", () => {
+    expect(() =>
+      groupUpdateSchema.parse({ ...validUpdate, platform: "x".repeat(51) }),
+    ).toThrow();
   });
 });

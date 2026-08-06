@@ -1,0 +1,31 @@
+{
+  "id": "lgqh-form-fixes",
+  "name": "lgqh-form-fixes",
+  "title": "修复添加群组表单系列问题(#3 #4 #5 #20)",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "brofea",
+  "assignee": "brofea",
+  "createdAt": "2026-08-06",
+  "completedAt": "2026-08-06",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-06-default-values-cleanup",
+    "08-06-platform-combobox",
+    "08-06-join-method-select-fix",
+    "08-06-public-submit-qr"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import app from "../../functions/_lib/app";
 import type { Env } from "../../functions/_lib/env";
 import { env as testEnv } from "cloudflare:test";
-import { PNG_1X1 } from "./fixtures";
+import { JPEG_1X1, PNG_1X1 } from "./fixtures";
 import { SUBMISSION_MULTIPART_MAX_BYTES } from "../../shared/contracts/submission";
 import {
   createSubmissionService,
@@ -37,6 +37,7 @@ function multipartFetch(
   options: {
     ip?: string;
     logo?: Uint8Array;
+    qr?: Uint8Array;
     extraFiles?: Uint8Array[];
     totalBody?: Uint8Array;
   } = {},
@@ -45,6 +46,11 @@ function multipartFetch(
   form.append("payload", JSON.stringify(payload));
   if (options.logo) {
     form.append("logo", new Blob([options.logo], { type: "image/png" }), "logo.png");
+    form.append("filePurpose", "logo");
+  }
+  if (options.qr) {
+    form.append("qr", new Blob([options.qr], { type: "image/jpeg" }), "qr.jpg");
+    form.append("filePurpose", "qr");
   }
   for (const [index, file] of (options.extraFiles ?? []).entries()) {
     form.append(`extra-${String(index)}`, new Blob([file], { type: "image/png" }), "extra.png");
@@ -207,6 +213,180 @@ describe("POST /api/v1/submissions", () => {
   it("keeps no-image multipart submissions compatible", async () => {
     const response = await multipartFetch({ ...validBody }, { ip: crypto.randomUUID() });
     expect(response.status).toBe(201);
+  });
+
+  it("accepts only-qr submission (qr=true without groupNumber/url) with a qr JPEG", async () => {
+    const response = await multipartFetch(
+      { ...validBody, groupNumber: undefined, qr: true },
+      { qr: JPEG_1X1, ip: crypto.randomUUID() },
+    );
+    const json = (await response.json()) as {
+      ok: boolean;
+      data: { id: string; status: string };
+    };
+
+    expect(response.status).toBe(201);
+    expect(json.ok).toBe(true);
+    expect(json.data.status).toBe("pending");
+
+    const method = await env.DB.prepare(
+      "SELECT type, value, asset_id FROM join_methods WHERE group_id = ?",
+    )
+      .bind(json.data.id)
+      .all<{ type: string; value: string | null; asset_id: string | null }>();
+    expect(method.results).toHaveLength(1);
+    expect(method.results[0]).toMatchObject({
+      type: "qr_code",
+      value: null,
+      asset_id: expect.any(String) as unknown as string,
+    });
+
+    const asset = await env.DB.prepare(
+      "SELECT purpose, status, ref_count, content_type, byte_length, width, height, r2_key FROM assets WHERE id = ?",
+    )
+      .bind(method.results[0]!.asset_id)
+      .first<{
+        purpose: string;
+        status: string;
+        ref_count: number;
+        content_type: string;
+        byte_length: number;
+        width: number;
+        height: number;
+        r2_key: string;
+      }>();
+    expect(asset).toMatchObject({
+      purpose: "qr_code",
+      status: "ready",
+      ref_count: 1,
+      content_type: "image/jpeg",
+      byte_length: JPEG_1X1.byteLength,
+      width: 1,
+      height: 1,
+    });
+    expect(asset?.r2_key).toMatch(/^qr_code\/submission\/[0-9a-f-]+\.jpg$/);
+    expect(await env.R2.head(asset!.r2_key)).not.toBeNull();
+  });
+
+  it("accepts logo and qr together and atomically creates both ready assets", async () => {
+    const response = await multipartFetch(
+      { ...validBody, qr: true },
+      { logo: PNG_1X1, qr: JPEG_1X1, ip: crypto.randomUUID() },
+    );
+    const json = (await response.json()) as {
+      ok: boolean;
+      data: { id: string; status: string };
+    };
+
+    expect(response.status).toBe(201);
+
+    const group = await env.DB.prepare(
+      "SELECT logo_r2_key FROM groups WHERE id = ?",
+    )
+      .bind(json.data.id)
+      .first<{ logo_r2_key: string | null }>();
+    expect(group?.logo_r2_key).toMatch(/^logo\/submission\/[0-9a-f-]+\.png$/);
+
+    const methods = await env.DB.prepare(
+      "SELECT type, value, asset_id FROM join_methods WHERE group_id = ? ORDER BY sort_order ASC",
+    )
+      .bind(json.data.id)
+      .all<{ type: string; value: string | null; asset_id: string | null }>();
+    expect(methods.results).toHaveLength(2);
+    const textMethod = methods.results.find((m) => m.type === "group_number");
+    const qrMethod = methods.results.find((m) => m.type === "qr_code");
+    expect(textMethod).toMatchObject({ value: "123456", asset_id: null });
+    expect(qrMethod?.asset_id).not.toBeNull();
+
+    const qrAsset = await env.DB.prepare(
+      "SELECT purpose, status, content_type, r2_key FROM assets WHERE id = ?",
+    )
+      .bind(qrMethod!.asset_id)
+      .first<{ purpose: string; status: string; content_type: string; r2_key: string }>();
+    expect(qrAsset).toMatchObject({ purpose: "qr_code", status: "ready", content_type: "image/jpeg" });
+    expect(await env.R2.head(qrAsset!.r2_key)).not.toBeNull();
+    expect(await env.R2.head(group!.logo_r2_key!)).not.toBeNull();
+  });
+
+  it("accepts the legacy single-file format (file field + filePurpose=logo)", async () => {
+    const form = new FormData();
+    form.append("payload", JSON.stringify(validBody));
+    form.append("file", new Blob([PNG_1X1], { type: "image/png" }), "logo.png");
+    form.append("filePurpose", "logo");
+    const response = await app.fetch(
+      new Request("http://localhost/api/v1/submissions", {
+        method: "POST",
+        headers: {
+          "X-Request-Id": crypto.randomUUID(),
+          "CF-Connecting-IP": crypto.randomUUID(),
+        },
+        body: form,
+      }),
+      env,
+    );
+    const json = (await response.json()) as {
+      ok: boolean;
+      data: { id: string; status: string };
+    };
+
+    expect(response.status).toBe(201);
+    expect(json.ok).toBe(true);
+
+    const group = await env.DB.prepare("SELECT logo_r2_key FROM groups WHERE id = ?")
+      .bind(json.data.id)
+      .first<{ logo_r2_key: string | null }>();
+    expect(group?.logo_r2_key).toMatch(/^logo\/submission\/[0-9a-f-]+\.png$/);
+    expect(await env.R2.head(group!.logo_r2_key!)).not.toBeNull();
+  });
+
+  it("rejects qr flag without a qr file", async () => {
+    const response = await multipartFetch(
+      { ...validBody, groupNumber: undefined, qr: true },
+      { ip: crypto.randomUUID() },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+  });
+
+  it("rejects an invalid qr JPEG before writing R2 or D1", async () => {
+    const response = await multipartFetch(
+      { ...validBody, qr: true },
+      { qr: Uint8Array.from([0x52, 0x49, 0x46, 0x46]), ip: crypto.randomUUID() },
+    );
+    expect(response.status).toBe(415);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "UNSUPPORTED_MEDIA_TYPE" },
+    });
+  });
+
+  it("compensates both R2 objects when the D1 aggregate fails", async () => {
+    await env.DB.prepare(
+      `CREATE TRIGGER submission_qr_failure
+       BEFORE INSERT ON groups
+       WHEN NEW.title = '强制 D1 双资产投稿失败'
+       BEGIN SELECT RAISE(ABORT, 'forced submission failure'); END`,
+    ).run();
+
+    try {
+      const response = await multipartFetch(
+        { ...validBody, title: "强制 D1 双资产投稿失败", qr: true },
+        { logo: PNG_1X1, qr: JPEG_1X1, ip: crypto.randomUUID() },
+      );
+      expect(response.status).toBe(503);
+      expect(
+        await env.DB.prepare("SELECT id FROM groups WHERE title = ?")
+          .bind("强制 D1 双资产投稿失败")
+          .first(),
+      ).toBeNull();
+      expect((await env.R2.list({ prefix: "logo/submission/" })).objects).toHaveLength(0);
+      expect((await env.R2.list({ prefix: "qr_code/submission/" })).objects).toHaveLength(0);
+    } finally {
+      await env.DB.prepare("DROP TRIGGER submission_qr_failure").run();
+    }
   });
 
   it("rejects a second public image field", async () => {

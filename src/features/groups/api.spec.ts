@@ -34,7 +34,7 @@ describe("submitGroup 图片接线", () => {
         title: "测试群",
       });
       expect(form.get("filePurpose")).toBe("logo");
-      const file = form.get("file");
+      const file = form.get("logo");
       expect(file).toBeInstanceOf(File);
       expect((file as File).type).toBe("image/png");
       expect((file as File).name).toBe("logo.png");
@@ -55,6 +55,80 @@ describe("submitGroup 图片接线", () => {
         groupNumber: "123456",
       },
       new Blob(["final png"], { type: "image/png" }),
+    );
+
+    expect(result).toMatchObject({ ok: true, data: receipt.data });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("仅二维码时用 payload + qr 标记 + 单张 JPEG 组成 multipart", async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      expect(init.body).toBeInstanceOf(FormData);
+      const form = init.body as FormData;
+      const payload = form.get("payload");
+      if (typeof payload !== "string") throw new Error("payload 必须是 JSON 字符串");
+      expect(JSON.parse(payload)).toMatchObject({
+        title: "测试群",
+        qr: true,
+      });
+      expect(form.get("filePurpose")).toBe("qr");
+      expect(form.get("logo")).toBeNull();
+      const file = form.get("qr");
+      expect(file).toBeInstanceOf(File);
+      expect((file as File).type).toBe("image/jpeg");
+      expect((file as File).name).toBe("qr.png");
+      return Promise.resolve(
+        new Response(JSON.stringify(receipt), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await submitGroup(
+      {
+        title: "测试群",
+        kind: "interest",
+        platform: "微信",
+        qr: true,
+      },
+      undefined,
+      new Blob(["final jpeg"], { type: "image/jpeg" }),
+    );
+
+    expect(result).toMatchObject({ ok: true, data: receipt.data });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("头像 + 二维码同时存在时 multipart 携带两个文件", async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      expect(init.body).toBeInstanceOf(FormData);
+      const form = init.body as FormData;
+      expect(form.getAll("filePurpose")).toEqual(["logo", "qr"]);
+      const logo = form.get("logo");
+      const qr = form.get("qr");
+      expect(logo).toBeInstanceOf(File);
+      expect(qr).toBeInstanceOf(File);
+      return Promise.resolve(
+        new Response(JSON.stringify(receipt), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await submitGroup(
+      {
+        title: "测试群",
+        kind: "interest",
+        platform: "微信",
+        groupNumber: "123456",
+        qr: true,
+      },
+      new Blob(["final png"], { type: "image/png" }),
+      new Blob(["final jpeg"], { type: "image/jpeg" }),
     );
 
     expect(result).toMatchObject({ ok: true, data: receipt.data });

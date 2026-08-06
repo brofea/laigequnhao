@@ -5,6 +5,7 @@ import {
   groupStatusTones,
   type DemoGroup,
   type JoinMethod,
+  type JoinMethodType,
 } from "../data/fixtures";
 import { fetchPublicConfig } from "@/features/groups/api";
 import type { PendingAdminImages } from "@/features/admin/pending-images";
@@ -13,6 +14,7 @@ import { useDelayedLoading } from "@/shared/composables/useDelayedLoading";
 import siteConfig from "../../site.config";
 import Badge from "./Badge.vue";
 import Button from "./Button.vue";
+import Combobox from "./Combobox.vue";
 import Icon from "./Icon.vue";
 import Select from "./Select.vue";
 import Spinner from "./Spinner.vue";
@@ -25,6 +27,8 @@ const props = withDefaults(
     deletable?: boolean;
     removable?: boolean;
     publicMode?: boolean;
+    /** 管理端新建模式（区别于编辑已建群组）。 */
+    createMode?: boolean;
     /** 保存/提交中的状态，防止同一份待上传图片被重复提交。 */
     busy?: boolean;
     /** 当前正在执行的动作；比 busy 更细粒度，便于只给对应按钮显示 spinner。 */
@@ -36,6 +40,7 @@ const props = withDefaults(
     deletable: true,
     removable: false,
     publicMode: false,
+    createMode: false,
     busy: false,
     busyAction: null,
     disabled: false,
@@ -67,11 +72,12 @@ const draft = reactive({
   status: props.group.status,
   tags: [...props.group.tags],
   joinMethods: cloneJoinMethods(props.group.joinMethods),
-  contact: props.publicMode ? (props.group.contact ?? "") : "提交者仅在私密审核区可见",
-  auditNotes: "已完成基础内容审核，等待下一次公开复核。",
+  contact: props.group.contact ?? "",
+  auditNotes: props.group.auditNotes ?? "",
 });
 const newTag = ref("");
-const newJoinMethodType = ref<JoinMethod["type"]>("link");
+/** 加群方式下拉（multiple）的已选 type 集合，与 draft.joinMethods 一一对应。 */
+const selectedJoinMethodTypes = computed(() => draft.joinMethods.map((method) => method.type));
 const dirty = ref(false);
 const avatarPreview = ref<string | null>(null);
 const avatarPreviewOwned = ref(false);
@@ -112,15 +118,11 @@ const joinMethodOptions = [
   { value: "number" as const, label: "群号" },
   { value: "qr" as const, label: "二维码" },
 ];
-const visibleJoinMethodOptions = computed(() =>
-  props.publicMode
-    ? joinMethodOptions.filter((option) => option.value !== "qr")
-    : joinMethodOptions,
-);
+const visibleJoinMethodOptions = joinMethodOptions;
 const joinMethodConfig: Record<JoinMethod["type"], { label: string; value: string }> = {
-  link: { label: "邀请链接", value: "https://sample.invalid/new-link" },
-  number: { label: "群号", value: "待填写群号" },
-  qr: { label: "二维码", value: "二维码占位区域" },
+  link: { label: "邀请链接", value: "" },
+  number: { label: "群号", value: "" },
+  qr: { label: "二维码", value: "" },
 };
 
 watch(
@@ -202,21 +204,34 @@ function removeTag(tag: string) {
   draft.tags = draft.tags.filter((item) => item !== tag);
 }
 
-function addJoinMethod(type: JoinMethod["type"] = newJoinMethodType.value) {
+/** 加群方式本地 id 递增序列：移除后重新添加不复用旧 id，避免与现存条目 key 冲突。 */
+let joinMethodSeq = 0;
+
+function addJoinMethod(type: JoinMethodType) {
   // 每种加群方式最多一个：已存在同类型则忽略
-  if (props.publicMode && type === "qr") return;
   if (draft.joinMethods.some((method) => method.type === type)) return;
   const config = joinMethodConfig[type];
   draft.joinMethods.push({
-    id: `method-${String(draft.joinMethods.length + 1)}`,
+    id: `method-${String(++joinMethodSeq)}`,
     type,
     label: config.label,
     value: config.value,
   });
 }
 
-function chooseJoinMethod(value: string) {
-  if (value === "link" || value === "number" || value === "qr") addJoinMethod(value);
+/** 多选下拉的增量同步：新增的 type 走 addJoinMethod，移除的 type 走 removeJoinMethod。 */
+function syncJoinMethods(nextValue: string | string[]) {
+  const nextTypes = Array.isArray(nextValue) ? nextValue : [nextValue];
+  for (const type of nextTypes) {
+    // 选项来自固定 joinMethodOptions；对未知值做运行时守卫，避免污染 draft。
+    if (type !== "link" && type !== "number" && type !== "qr") continue;
+    if (!draft.joinMethods.some((method) => method.type === type)) {
+      addJoinMethod(type);
+    }
+  }
+  for (const method of [...draft.joinMethods]) {
+    if (!nextTypes.includes(method.type)) removeJoinMethod(method.id);
+  }
 }
 
 function removeJoinMethod(id: string) {
@@ -240,10 +255,6 @@ async function readImage(event: Event, method?: JoinMethod) {
   input.value = "";
   if (!file) return;
 
-  if (props.publicMode && method) {
-    uploadMessage.value = "公开投稿只支持一张头像图片。";
-    return;
-  }
   const requestKey = imageRequestKey(method);
   const requestVersion = nextImageRequestVersion(requestKey);
   activeUploadKey.value = requestKey;
@@ -256,23 +267,19 @@ async function readImage(event: Event, method?: JoinMethod) {
       return;
     }
 
-    if (props.publicMode) {
-      replaceAvatarPreview(compressed.previewUrl, true);
-      pendingLogoBlob.value = compressed.blob;
-      avatarRemoved.value = false;
-      uploadMessage.value = "头像已准备好，提交时会与表单一起上传。";
-      return;
-    }
-
     if (method) {
       replaceJoinPreview(method, compressed.previewUrl, true);
       pendingQrBlobs.set(method.id, compressed.blob);
-      uploadMessage.value = "二维码已准备好，保存时上传。";
+      uploadMessage.value = props.publicMode
+        ? "二维码已准备好，提交时会与表单一起上传。"
+        : "二维码已准备好，保存时上传。";
     } else {
       replaceAvatarPreview(compressed.previewUrl, true);
       pendingLogoBlob.value = compressed.blob;
       avatarRemoved.value = false;
-      uploadMessage.value = "头像已准备好，保存时上传。";
+      uploadMessage.value = props.publicMode
+        ? "头像已准备好，提交时会与表单一起上传。"
+        : "头像已准备好，保存时上传。";
     }
   } catch {
     if (!isCurrentImageRequest(requestKey, requestVersion)) return;
@@ -344,16 +351,15 @@ function save() {
     tags: [...draft.tags],
     joinMethods: cloneJoinMethods(draft.joinMethods),
     logoR2Key: logoR2Key.value,
-    contact: props.publicMode ? draft.contact : props.group.contact,
+    auditNotes: draft.auditNotes,
+    contact: props.publicMode || props.createMode ? draft.contact : props.group.contact,
   };
   const pendingImages: PendingAdminImages = {
     logo: pendingLogoBlob.value ?? undefined,
-    qr: props.publicMode
-      ? []
-      : draft.joinMethods.flatMap((method) => {
-          const blob = pendingQrBlobs.get(method.id);
-          return blob ? [{ methodId: method.id, blob }] : [];
-        }),
+    qr: draft.joinMethods.flatMap((method) => {
+      const blob = pendingQrBlobs.get(method.id);
+      return blob ? [{ methodId: method.id, blob }] : [];
+    }),
   };
   emit("save", next, pendingImages);
 }
@@ -454,12 +460,12 @@ function save() {
           :options="kindOptions"
           :loading="isBusy"
           :disabled="props.disabled"
-        /><Select
+        /><Combobox
           v-model="draft.platform"
           label="平台"
           :options="platformOptions"
-          :loading="isBusy"
-          :disabled="props.disabled"
+          placeholder="选择或输入平台"
+          :disabled="isDisabled"
         /><Select
           v-if="!props.publicMode"
           v-model="draft.status"
@@ -528,14 +534,15 @@ function save() {
           <h3>加群方式</h3>
         </div>
         <Select
-          v-model="newJoinMethodType"
+          :model-value="selectedJoinMethodTypes"
           label="加群方式"
           trigger-label="添加加群方式"
           trigger-icon="plus"
+          multiple
           :options="visibleJoinMethodOptions"
           :loading="isBusy"
           :disabled="props.disabled"
-          @update:model-value="chooseJoinMethod"
+          @update:model-value="syncJoinMethods"
         />
       </div>
       <div class="admin-edit-join-list">
@@ -549,7 +556,7 @@ function save() {
             method.type === "qr" ? "⌗" : method.type === "number" ? "#" : "↗"
           }}</span>
           <template v-if="method.type === 'qr'">
-            <div v-if="!props.publicMode" class="admin-edit-qr-editor">
+            <div class="admin-edit-qr-editor">
               <span class="admin-edit-join-label">{{ method.label }}</span>
               <div class="admin-edit-qr-preview">
                 <img
@@ -576,7 +583,6 @@ function save() {
               </label>
               <small>原图支持 PNG 或 JPEG，保存时转为白底 JPEG，最大 1MB。</small>
             </div>
-            <p v-else class="table-muted">公开投稿不支持二维码上传。</p>
           </template>
           <div v-else class="admin-edit-join-inputs">
             <span class="admin-edit-join-label">{{ method.label }}</span
@@ -618,7 +624,13 @@ function save() {
       <label class="admin-edit-field">
         <span>提交者联系方式</span>
         <span class="admin-edit-field__control">
-          <input :value="draft.contact" type="text" readonly />
+          <input
+            v-model="draft.contact"
+            type="text"
+            :placeholder="props.createMode ? '邮箱、QQ 或微信号' : undefined"
+            :readonly="!props.createMode"
+            :disabled="isDisabled"
+          />
         </span>
       </label>
       <label class="admin-edit-field">

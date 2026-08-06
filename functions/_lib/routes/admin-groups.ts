@@ -283,6 +283,7 @@ adminGroupsRoute.post("/", csrfProtection(), async (c) => {
       sortOrder: i,
     })),
     auditNotes: input.auditNotes,
+    contact: input.contact ?? null,
     logoR2Key: input.logoR2Key ?? null,
     logoUrl: createLogo?.publicUrl ?? null,
     logoMeta: createLogo

@@ -407,18 +407,19 @@ function closePublicSubmitDialog() {
 
 function openAdminCreateDialog() {
   adminCreateGroup.value = {
-    id: "admin-create-sample",
-    title: "待编辑的新群组",
-    platform: "微信",
+    id: `admin-create-${String(Date.now())}`,
+    title: "",
+    platform: "",
     kind: "兴趣",
-    description: "这是管理工作台添加入口的本地编辑样例。",
-    tags: ["待审核"],
+    description: "",
+    tags: [],
     likes: 0,
     liked: false,
     avatarState: "missing",
     status: "published",
     inRecycleBin: false,
-    joinMethods: [{ id: "admin-create-number", type: "number", label: "群号", value: "待填写" }],
+    joinMethods: [],
+    contact: "",
   };
 }
 
@@ -428,6 +429,8 @@ async function submitPublicGroup(next: DemoGroup, pendingImages: PendingAdminIma
   try {
     const groupNumber = next.joinMethods.find((method) => method.type === "number")?.value;
     const url = next.joinMethods.find((method) => method.type === "link")?.value;
+    // 公开投稿每种加群方式最多一个，二维码 Blob 取第一项即可。
+    const qrImage = pendingImages.qr[0]?.blob;
     const result = await submitGroup(
       {
         title: next.title,
@@ -438,8 +441,10 @@ async function submitPublicGroup(next: DemoGroup, pendingImages: PendingAdminIma
         tags: next.tags.length ? next.tags : undefined,
         description: next.description || undefined,
         contact: next.contact?.trim() || undefined,
+        qr: qrImage ? true : undefined,
       },
       pendingImages.logo,
+      qrImage,
     );
     if (!result.ok) {
       showToast(result.error.message, "warning");
@@ -666,10 +671,14 @@ function toAdminPayload(
     status: group.status,
     tags: group.tags,
     joinMethods: toJoinMethodPayload(group),
-    auditNotes: null,
+    auditNotes: group.auditNotes ?? null,
     logoR2Key: group.logoR2Key ?? null,
   };
-  return version === undefined ? payload : { ...payload, version };
+  if (version === undefined) {
+    // 创建：携带联系方式（编辑场景不提交 contact，创建后不可修改）
+    return { ...payload, contact: group.contact?.trim() || undefined };
+  }
+  return { ...payload, version };
 }
 
 function applyStagedAdminImages(next: DemoGroup, staged: { ok: true; data: StagedAdminImages }) {
@@ -1412,6 +1421,7 @@ function removeScrollListener() {
       <AdminEditForm
         :group="adminCreateGroup"
         :deletable="false"
+        create-mode
         :busy="adminCreateSaveBusy"
         :busy-action="adminCreateSaveBusy ? 'save' : null"
         @save="saveAdminCreateGroup"
