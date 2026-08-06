@@ -158,8 +158,6 @@ Cloudflare Cron，应继续复用同一清理服务，并保留 D1/R2 失败可�
 
 日常更新只需向连接的 `main` 分支推送代码，Workers 会自动构建部署。若要修改密码或密钥，请在 **Settings → Variables and Secrets** 中更新并点击 **Deploy** 重新构建
 
-更多运维问题请参考 [Cloudflare 部署维护 Runbook](docs/runbooks/cloudflare-deployment.md)
-
 ### 为中国大陆用户解决 DNS 污染
 
 对于中国大陆用户，Cloudflare Workers 默认域名可能被 DNS 污染，导致无法访问，可以通过购买并绑定自定义域名的方式解决。具体步骤如下：
