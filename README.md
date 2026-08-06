@@ -203,8 +203,6 @@ pnpm test:e2e --project=image-firefox tests/e2e/image-flows.spec.ts
 ```ts
 const siteConfig: SiteConfig = {
   name: "你的机构名称",
-  shortName: "简称",
-  theme: { primaryColor: "#你的主色", ... },
   platforms: [ /* 你的平台列表 */ ],
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
 };

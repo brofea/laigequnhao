@@ -1,13 +1,5 @@
 import { z } from "zod";
 
-// ─── 主题配置 ────────────────────────────────────────────
-export const themeConfigSchema = z.object({
-  primaryColor: z.string().min(1),
-  accentColor: z.string().min(1),
-  defaultMode: z.enum(["system", "light", "dark"]),
-});
-export type ThemeConfig = z.infer<typeof themeConfigSchema>;
-
 // ─── 公共顶栏配置 ───────────────────────────────────────
 // 这些字段只描述正式前端的品牌和入口，不承载业务状态。
 export const headerConfigSchema = z.object({
@@ -17,8 +9,6 @@ export const headerConfigSchema = z.object({
   githubLabel: z.string().min(1),
   addGroup: z.object({
     label: z.string().min(1),
-    target: z.enum(["submission-dialog", "route"]),
-    route: z.string().startsWith("/").optional(),
   }),
 });
 export type HeaderConfig = z.infer<typeof headerConfigSchema>;
@@ -75,23 +65,14 @@ export const boardsConfigSchema = z.object({
 });
 export type BoardsConfig = z.infer<typeof boardsConfigSchema>;
 
-// ─── 功能开关 ────────────────────────────────────────────
-//
-// 二维码与群号、URL 一样始终作为公开加群方式。
-// features 保留为扩展点，当前为空。
-export const featuresConfigSchema = z.object({}).strict();
-export type FeaturesConfig = z.infer<typeof featuresConfigSchema>;
-
 // ─── 站点配置 ────────────────────────────────────────────
 export const siteConfigSchema = z.object({
   name: z.string().min(1),
-  shortName: z.string().min(1),
   title: z.string().min(1),
   description: z.string().min(1),
   contactEmail: z.string().email(),
   copyright: z.string().min(1),
 
-  theme: themeConfigSchema,
   header: headerConfigSchema,
   rotation: rotationConfigSchema,
   boards: boardsConfigSchema,
@@ -99,7 +80,5 @@ export const siteConfigSchema = z.object({
     .array(z.string().min(1))
     .min(1)
     .refine((p) => new Set(p).size === p.length, "平台名不可重复"),
-
-  features: featuresConfigSchema,
 });
 export type SiteConfig = z.infer<typeof siteConfigSchema>;

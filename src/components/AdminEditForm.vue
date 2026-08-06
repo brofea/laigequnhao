@@ -10,6 +10,7 @@ import { fetchPublicConfig } from "@/features/groups/api";
 import type { PendingAdminImages } from "@/features/admin/pending-images";
 import { compressImage, revokeImagePreview } from "@/shared/browser/image-compression";
 import { useDelayedLoading } from "@/shared/composables/useDelayedLoading";
+import siteConfig from "../../site.config";
 import Badge from "./Badge.vue";
 import Button from "./Button.vue";
 import Icon from "./Icon.vue";
@@ -102,12 +103,10 @@ const statusOptions = [
   { value: "pending", label: "待审核" },
   { value: "rejected", label: "已拒绝" },
 ];
-const platformOptions = [
-  { value: "QQ", label: "QQ" },
-  { value: "微信群", label: "微信群" },
-  { value: "Telegram", label: "Telegram" },
-  { value: "Discord", label: "Discord" },
-];
+const platformOptions = siteConfig.platforms.map((platform) => ({
+  value: platform,
+  label: platform,
+}));
 const joinMethodOptions = [
   { value: "link" as const, label: "链接" },
   { value: "number" as const, label: "群号" },

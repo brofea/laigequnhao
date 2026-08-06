@@ -3,23 +3,20 @@ import { siteConfigSchema } from "./config";
 
 const validConfig = {
   name: "测试大学",
-  shortName: "测试",
   title: "测试站点",
   description: "测试描述",
   contactEmail: "admin@test.edu.cn",
   copyright: "© 2026",
-  theme: { primaryColor: "#2563eb", accentColor: "#f59e0b", defaultMode: "light" as const },
   header: {
     brandLabel: "测试站点",
     brandMark: "测",
     githubUrl: "https://github.com/example/project",
     githubLabel: "GitHub",
-    addGroup: { label: "添加新群", target: "submission-dialog" as const },
+    addGroup: { label: "添加新群" },
   },
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
   boards: { timezone: "Asia/Shanghai" },
   platforms: ["QQ"],
-  features: {},
 };
 
 describe("siteConfigSchema", () => {

@@ -1885,6 +1885,30 @@ h3 {
   color: var(--text-muted);
   font-size: 0.7rem;
 }
+.app-footer__brand,
+.app-footer__meta {
+  display: grid;
+  gap: 4px;
+}
+.app-footer__brand strong {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.app-footer__brand span {
+  max-width: 52ch;
+}
+.app-footer__meta {
+  justify-items: end;
+  text-align: right;
+}
+.app-footer__meta a {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.app-footer__meta a:hover {
+  color: var(--text-secondary);
+}
 
 .stats-page {
   display: grid;
@@ -2866,6 +2890,10 @@ h3 {
   .app-footer {
     flex-direction: column;
     width: min(100% - 24px, 480px);
+  }
+  .app-footer__meta {
+    justify-items: start;
+    text-align: left;
   }
   .hero-section {
     padding: 20px 15px;

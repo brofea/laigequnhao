@@ -1269,10 +1269,19 @@ function removeScrollListener() {
     </main>
 
     <footer class="app-footer">
-      <span>{{ siteConfig.title }}</span
-      ><span
-        >当前主题 <strong>{{ resolvedTheme }}</strong> · reduced motion ready</span
-      >
+      <div class="app-footer__brand">
+        <strong>{{ siteConfig.name }}</strong>
+        <span>{{ siteConfig.description }}</span>
+      </div>
+      <div class="app-footer__meta">
+        <span
+          ><a :href="`mailto:${siteConfig.contactEmail}`">{{ siteConfig.contactEmail }}</a
+          > · {{ siteConfig.copyright }}</span
+        ><span
+          >{{ siteConfig.title }} · 当前主题 <strong>{{ resolvedTheme }}</strong> · reduced motion
+          ready</span
+        >
+      </div>
     </footer>
 
     <Dialog
