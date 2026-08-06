@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/08-06-join-method-select-fix/prd.md", "reason": "子任务 B 需求与验收标准（Select multiple、勾选切换、默认空）"}
+{"file": ".trellis/tasks/08-06-lgqh-form-fixes/design.md", "reason": "统一设计：Select.vue multiple 扩展方案（勾选标记、菜单不收起、单选零回归）"}
+{"file": ".trellis/tasks/08-06-lgqh-form-fixes/research/form-issues-research.md", "reason": "代码锚点：Select.vue props/菜单模板、AdminEditForm 110-119/205-220/530-539、样式 1135-1203"}
