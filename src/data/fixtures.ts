@@ -89,7 +89,7 @@ export const demoGroups: DemoGroup[] = [
   {
     id: "city-walk",
     title: "周末城市漫游 · Weekend City Walkers",
-    platform: "微信群",
+    platform: "微信",
     kind: "同城",
     description:
       "在城市里散步、拍照、寻找小店。标题特意保留中英文混排，观察长标题在卡片中的截断与详情页中的完整阅读体验。",
@@ -173,7 +173,7 @@ export const demoGroups: DemoGroup[] = [
   {
     id: "gardeners",
     title: "阳台植物观察员",
-    platform: "微信群",
+    platform: "微信",
     kind: "同城",
     description: "交换阳台种植经验，记录每一片新叶子。",
     tags: ["植物", "阳台", "生活记录"],
@@ -201,7 +201,7 @@ export const demoGroups: DemoGroup[] = [
   {
     id: "morning-runners",
     title: "清晨跑步与城市散步小组",
-    platform: "微信群",
+    platform: "微信",
     kind: "同城",
     description: "不追配速，记录每一次出门。欢迎在日出前后一起跑几公里。",
     tags: ["跑步", "城市散步", "同城活动"],
@@ -271,7 +271,7 @@ export const demoGroups: DemoGroup[] = [
   {
     id: "open-source-camp",
     title: "开源项目周末营",
-    platform: "微信群",
+    platform: "微信",
     kind: "工具",
     description: "找搭档、看 issue、做发布，给正在维护中的开源项目留一块安静的工作台。",
     tags: ["开源", "协作", "项目管理"],
@@ -285,7 +285,7 @@ export const demoGroups: DemoGroup[] = [
   {
     id: "review-queue",
     title: "待审核：周末手作交换",
-    platform: "微信群",
+    platform: "微信",
     kind: "兴趣",
     description: "用于展示待审核状态的固定样例，不出现在公开页面。",
     tags: ["手作", "交换"],
@@ -341,7 +341,7 @@ export const demoGroups: DemoGroup[] = [
   {
     id: "recycle-published",
     title: "回收站：旧活动群",
-    platform: "微信群",
+    platform: "微信",
     kind: "同城",
     description: "用于证明回收站与发布状态独立的固定样例。",
     tags: ["旧活动"],

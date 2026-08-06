@@ -385,7 +385,7 @@ function openPublicSubmitDialog() {
   publicSubmitGroup.value = {
     id: "public-submit-sample",
     title: "",
-    platform: "微信群",
+    platform: "微信",
     kind: "兴趣",
     description: "",
     tags: [],
@@ -409,7 +409,7 @@ function openAdminCreateDialog() {
   adminCreateGroup.value = {
     id: "admin-create-sample",
     title: "待编辑的新群组",
-    platform: "微信群",
+    platform: "微信",
     kind: "兴趣",
     description: "这是管理工作台添加入口的本地编辑样例。",
     tags: ["待审核"],
@@ -1277,9 +1277,8 @@ function removeScrollListener() {
         <span
           ><a :href="`mailto:${siteConfig.contactEmail}`">{{ siteConfig.contactEmail }}</a
           > · {{ siteConfig.copyright }}</span
-        ><span
-          >{{ siteConfig.title }} · 当前主题 <strong>{{ resolvedTheme }}</strong> · reduced motion
-          ready</span
+        >        <span
+          >{{ siteConfig.title }} · 当前主题 <strong>{{ resolvedTheme }}</strong></span
         >
       </div>
     </footer>

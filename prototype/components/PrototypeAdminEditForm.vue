@@ -66,7 +66,7 @@ const statusOptions = [
 ];
 const platformOptions = [
   { value: "QQ", label: "QQ" },
-  { value: "微信群", label: "微信群" },
+  { value: "微信", label: "微信" },
   { value: "Telegram", label: "Telegram" },
   { value: "Discord", label: "Discord" },
 ];
