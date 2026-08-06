@@ -1,4 +1,5 @@
 import type { AdminGroupDto } from "@shared/contracts/group";
+import { getAssetContentType } from "@shared/contracts/asset";
 import type { GroupStatus } from "@shared/domain";
 import { normalizeSearchQuery } from "@shared/domain";
 
@@ -57,7 +58,7 @@ interface SubmissionDetailRow {
 }
 
 /**
- * 投稿 service 经过文件校验后生成的内部 Logo 资源。
+ * 投稿 service 经过文件校验后生成的内部资源（logo 或 qr_code）。
  *
  * 这个类型不接受来自 HTTP 的 asset ID、key 或元数据；调用方必须先生成
  * 资源 ID/key，并把共享图片校验器产出的实际尺寸和字节数传入。
@@ -65,7 +66,7 @@ interface SubmissionDetailRow {
 export interface SubmissionReadyAssetInput {
   id: string;
   r2Key: string;
-  purpose: "logo";
+  purpose: "logo" | "qr_code";
   byteLength: number;
   width: number;
   height: number;
@@ -457,8 +458,11 @@ export function createGroupRepository(db: D1Database) {
       contact?: string | null;
       /** 提交者备注（用户提交入口使用） */
       notes?: string | null;
-      /** 投稿 service 传入的已校验、已写入 R2 的内部 ready Logo。 */
-      readyAsset?: SubmissionReadyAssetInput;
+      /**
+       * 投稿 service 传入的已校验、已写入 R2 的内部 ready 资源。
+       * 兼容单值（旧调用）与数组（logo + qr_code 多资产）。
+       */
+      readyAsset?: SubmissionReadyAssetInput | SubmissionReadyAssetInput[];
     }): Promise<AdminGroupDto> {
       const id = crypto.randomUUID();
       const rotationKey = crypto.randomUUID();
@@ -467,11 +471,18 @@ export function createGroupRepository(db: D1Database) {
       // 新建后直接发布：写入服务端时间；其余状态保持 NULL
       const lastPublishedAt = status === "published" ? now : null;
 
+      const readyAssets = Array.isArray(input.readyAsset)
+        ? input.readyAsset
+        : input.readyAsset
+          ? [input.readyAsset]
+          : [];
+      const logoReadyAsset = readyAssets.find((asset) => asset.purpose === "logo");
+
       const batch: D1PreparedStatement[] = [];
 
       // 投稿资源和 pending 群组必须在同一个 D1 batch 中完成聚合写入。
       // 这里的 asset 记录只能来自 service 内部的已校验对象，不能由请求字段构造。
-      if (input.readyAsset) {
+      for (const readyAsset of readyAssets) {
         batch.push(
           db
             .prepare(
@@ -479,14 +490,16 @@ export function createGroupRepository(db: D1Database) {
                  id, r2_key, purpose, content_type, byte_length, width, height,
                  status, ref_count
                )
-               VALUES (?, ?, 'logo', 'image/png', ?, ?, ?, 'ready', 1)`,
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', 1)`,
             )
             .bind(
-              input.readyAsset.id,
-              input.readyAsset.r2Key,
-              input.readyAsset.byteLength,
-              input.readyAsset.width,
-              input.readyAsset.height,
+              readyAsset.id,
+              readyAsset.r2Key,
+              readyAsset.purpose,
+              getAssetContentType(readyAsset.purpose),
+              readyAsset.byteLength,
+              readyAsset.width,
+              readyAsset.height,
             ),
         );
       }
@@ -509,11 +522,11 @@ export function createGroupRepository(db: D1Database) {
             input.platform,
             status,
             rotationKey,
-            input.readyAsset?.r2Key ?? input.logoR2Key ?? null,
-            input.readyAsset ? null : (input.logoUrl ?? null),
-            input.readyAsset?.width ?? input.logoMeta?.width ?? null,
-            input.readyAsset?.height ?? input.logoMeta?.height ?? null,
-            input.readyAsset?.byteLength ?? input.logoMeta?.byteLength ?? null,
+            logoReadyAsset?.r2Key ?? input.logoR2Key ?? null,
+            logoReadyAsset ? null : (input.logoUrl ?? null),
+            logoReadyAsset?.width ?? input.logoMeta?.width ?? null,
+            logoReadyAsset?.height ?? input.logoMeta?.height ?? null,
+            logoReadyAsset?.byteLength ?? input.logoMeta?.byteLength ?? null,
             now,
             now,
             lastPublishedAt,
@@ -617,7 +630,7 @@ export function createGroupRepository(db: D1Database) {
              id, r2_key, purpose, content_type, byte_length, width, height,
              status, ref_count, delete_attempts, delete_last_error, delete_last_error_code
            )
-           VALUES (?, ?, 'logo', 'image/png', ?, ?, ?, 'delete_failed', 0, 1, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'delete_failed', 0, 1, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              status = 'delete_failed',
              ref_count = 0,
@@ -629,6 +642,8 @@ export function createGroupRepository(db: D1Database) {
         .bind(
           input.id,
           input.r2Key,
+          input.purpose,
+          getAssetContentType(input.purpose),
           input.byteLength,
           input.width,
           input.height,

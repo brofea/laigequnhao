@@ -48,6 +48,8 @@ export interface DemoGroup {
   logoUrl?: string | null;
   /** 提交者联系方式（仅提交/管理私密区，不公开展示） */
   contact?: string | null;
+  /** 审核备注（仅管理私密区，不公开展示） */
+  auditNotes?: string | null;
 }
 
 export interface DemoBoard {

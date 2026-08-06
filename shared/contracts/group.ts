@@ -251,7 +251,8 @@ export const groupCreateSchema = z
       .optional()
       .default(""),
     kind: groupKindSchema,
-    platform: z.string().min(1, "平台不能为空"),
+    /** 平台可为空字符串（管理端允许不填平台） */
+    platform: z.string().max(50, "平台不能超过 50 个字符"),
     status: groupStatusSchema,
     tags: z
       .array(z.string().transform((s) => s.trim()))
@@ -260,6 +261,8 @@ export const groupCreateSchema = z
       .default([]),
     joinMethods: z.array(joinMethodInputSchema).min(1, "至少需要一个加群方式"),
     auditNotes: z.string().max(2000).nullable().optional().default(null),
+    /** 提交者联系方式（管理端创建时填写；创建后不可修改，编辑场景不提交） */
+    contact: z.string().max(200).optional(),
     /** Logo R2 key（上传后由服务端校验） */
     logoR2Key: z.string().nullable().optional(),
     /** 需要 adopt 的 staged asset ID 列表 */
@@ -322,7 +325,8 @@ export const groupUpdateSchema = z
       )
       .optional(),
     kind: groupKindSchema.optional(),
-    platform: z.string().min(1, "平台不能为空").optional(),
+    /** 平台可为空字符串（管理端允许清空平台） */
+    platform: z.string().max(50, "平台不能超过 50 个字符").optional(),
     status: groupStatusSchema.optional(),
     tags: z
       .array(z.string().transform((s) => s.trim()))

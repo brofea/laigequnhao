@@ -61,6 +61,8 @@ export function toDemoGroup(
     logoUrl: group.logoUrl ?? null,
     status: group.status,
     inRecycleBin: "deletedAt" in group ? group.deletedAt !== null : false,
+    contact: "submissionContact" in group ? group.submissionContact : undefined,
+    auditNotes: "auditNotes" in group ? group.auditNotes : undefined,
     joinMethods,
   };
 }

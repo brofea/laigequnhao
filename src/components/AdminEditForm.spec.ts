@@ -85,3 +85,79 @@ describe("AdminEditForm 图片压缩失败反馈", () => {
     wrapper.unmount();
   });
 });
+
+describe("AdminEditForm 加群方式多选下拉", () => {
+  it("点击未勾选的加群方式时添加并保持菜单展开，再次点击移除", async () => {
+    const wrapper = mount(AdminEditForm, {
+      props: { group: { ...group, joinMethods: [] } },
+    });
+
+    await wrapper.get('button[aria-label="加群方式"]').trigger("click");
+    const numberOption = wrapper
+      .findAll(".app-select__option")
+      .find((option) => option.text().includes("群号"));
+    if (!numberOption) throw new Error("缺少加群方式选项。");
+
+    await numberOption.trigger("click");
+    expect(wrapper.find(".app-select__menu").exists()).toBe(true);
+    expect(wrapper.findAll(".admin-edit-join-row")).toHaveLength(1);
+    expect(numberOption.find(".app-select__check").exists()).toBe(true);
+
+    await numberOption.trigger("click");
+    expect(wrapper.findAll(".admin-edit-join-row")).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it("草稿已有加群方式时下拉显示勾选标记", async () => {
+    const wrapper = mount(AdminEditForm, {
+      props: {
+        group: {
+          ...group,
+          joinMethods: [{ id: "number-method", type: "number", label: "群号", value: "12345" }],
+        },
+      },
+    });
+
+    await wrapper.get('button[aria-label="加群方式"]').trigger("click");
+    const options = wrapper.findAll(".app-select__option");
+    const numberOption = options.find((option) => option.text().includes("群号"));
+    const linkOption = options.find((option) => option.text().includes("链接"));
+    if (!numberOption || !linkOption) throw new Error("缺少加群方式选项。");
+    expect(numberOption.find(".app-select__check").exists()).toBe(true);
+    expect(linkOption.find(".app-select__check").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("移除后重新添加时 id 不复用，行内删除只删目标行", async () => {
+    const wrapper = mount(AdminEditForm, {
+      props: { group: { ...group, joinMethods: [] } },
+    });
+
+    const clickOption = async (text: string) => {
+      const option = wrapper
+        .findAll(".app-select__option")
+        .find((item) => item.text().includes(text));
+      if (!option) throw new Error(`缺少加群方式选项：${text}`);
+      await option.trigger("click");
+    };
+
+    await wrapper.get('button[aria-label="加群方式"]').trigger("click");
+    await clickOption("链接");
+    await clickOption("群号");
+    expect(wrapper.findAll(".admin-edit-join-row")).toHaveLength(2);
+
+    // 移除链接（保持菜单展开），再重新添加
+    await clickOption("链接");
+    expect(wrapper.findAll(".admin-edit-join-row")).toHaveLength(1);
+    await clickOption("链接");
+    expect(wrapper.findAll(".admin-edit-join-row")).toHaveLength(2);
+
+    // 删除第一行（群号）：若新加行的 id 复用了已删行的旧 id，会误删链接行
+    const firstRowRemove = wrapper
+      .findAll(".admin-edit-join-row")[0]
+      ?.get('button[aria-label="移除加群方式"]');
+    await firstRowRemove?.trigger("click");
+    expect(wrapper.findAll(".admin-edit-join-row")).toHaveLength(1);
+    wrapper.unmount();
+  });
+});

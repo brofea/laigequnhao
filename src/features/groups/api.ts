@@ -86,14 +86,22 @@ export async function toggleLike(
 export async function submitGroup(
   input: SubmissionRequest,
   logoBlob?: Blob,
+  qrBlob?: Blob,
 ): Promise<ApiOkResult<{ id: string; title: string; status: string }> | ApiErrorResult> {
   const validated = submissionRequestSchema.parse(input);
-  if (logoBlob) {
+  if (logoBlob || qrBlob) {
     const formData = new FormData();
-    // Blob 不进入 JSON schema；multipart 只承载最终压缩后的 PNG。
+    // Blob 不进入 JSON schema；multipart 只承载最终压缩后的文件。
+    // 字段名即用途：logo 字段 → 头像 PNG，qr 字段 → 二维码 JPEG。
     formData.append("payload", JSON.stringify(validated));
-    formData.append("file", logoBlob, "logo.png");
-    formData.append("filePurpose", "logo");
+    if (logoBlob) {
+      formData.append("logo", logoBlob, "logo.png");
+      formData.append("filePurpose", "logo");
+    }
+    if (qrBlob) {
+      formData.append("qr", qrBlob, "qr.png");
+      formData.append("filePurpose", "qr");
+    }
     return api.postForm("/submissions", submissionReceiptSchema, formData);
   }
   return api.post("/submissions", submissionReceiptSchema, validated);

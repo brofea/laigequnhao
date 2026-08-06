@@ -15,8 +15,12 @@ import {
  */
 export const SUBMISSION_MULTIPART_MAX_BYTES = ASSET_UPLOAD_REQUEST_MAX_BYTES;
 
-/** 公开投稿最多接收一个 Logo 文件，二维码仍由管理端独立维护。 */
+/**
+ * 公开投稿最多接收两个文件：一个 Logo（PNG）与一个二维码（JPEG）。
+ * 两个文件均为可选；至少存在一个文件时才走 multipart。
+ */
 export const SUBMISSION_LOGO_FORM_FIELD = "logo";
+export const SUBMISSION_QR_FORM_FIELD = "qr";
 
 // ─── 访客提交请求 ────────────────────────────────────────
 
@@ -63,9 +67,14 @@ export const submissionRequestSchema = z
     notes: z.string().max(1000).optional(),
     /** 提交者联系方式（仅管理员可见） */
     contact: z.string().max(200).optional(),
+    /**
+     * 二维码上传标记（图片本体走 multipart 文件，不进入 JSON）。
+     * 仅传二维码（无群号/链接）也可提交，二维码本身承载群信息。
+     */
+    qr: z.boolean().optional(),
   })
-  .refine((data) => data.groupNumber || data.url, {
-    message: "至少需要群号或 HTTPS 链接",
+  .refine((data) => data.groupNumber || data.url || data.qr, {
+    message: "至少需要群号、HTTPS 链接或二维码",
     path: ["groupNumber"],
   })
   .refine((data) => !data.url || data.url.startsWith("https://"), {

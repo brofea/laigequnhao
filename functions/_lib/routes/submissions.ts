@@ -4,6 +4,7 @@ import {
   submissionReceiptSchema,
   SUBMISSION_LOGO_FORM_FIELD,
   SUBMISSION_MULTIPART_MAX_BYTES,
+  SUBMISSION_QR_FORM_FIELD,
 } from "@shared/contracts/submission";
 import { getAssetContentType } from "@shared/contracts/asset";
 import { apiSuccessSchema, apiErrorSchema } from "@shared/contracts/api";
@@ -15,7 +16,11 @@ import {
   type ValidatedSubmissionLogo,
 } from "../services/submission-service";
 import { createR2Adapter } from "../adapters/r2-adapter";
-import { ImageValidationError, validatePngUpload } from "../services/image-validation";
+import {
+  ImageValidationError,
+  validateImageUpload,
+  validatePngUpload,
+} from "../services/image-validation";
 import { dependencyUnavailable } from "../api-error";
 import { getSubmissionLimitPerHour } from "../env";
 import type { Env } from "../env";
@@ -27,6 +32,8 @@ type ParsedSubmission = {
   payload: unknown;
   logoBytes?: Uint8Array;
   logoContentType?: string;
+  qrBytes?: Uint8Array;
+  qrContentType?: string;
 };
 
 function validationError(
@@ -139,63 +146,95 @@ async function parseRequest(
     });
   }
 
-  const purpose = formData.get("filePurpose");
-  if (purpose !== null && (typeof purpose !== "string" || purpose !== "logo")) {
-    return validationError(requestId, "Only logo images are accepted.", {
-      filePurpose: ["Must be logo"],
-    });
+  const purposes = formData.getAll("filePurpose");
+  for (const purpose of purposes) {
+    if (purpose !== SUBMISSION_LOGO_FORM_FIELD && purpose !== SUBMISSION_QR_FORM_FIELD) {
+      return validationError(requestId, "Unsupported file purpose.", {
+        filePurpose: ["Must be logo or qr"],
+      });
+    }
   }
 
+  // 字段名即用途：logo/file 字段 → 头像，qr 字段 → 二维码。
+  // 每种用途最多一个文件；未知字段名拒绝，避免绕过用途校验。
   const fileEntries: Array<[string, File]> = [];
   for (const [field, value] of formData.entries()) {
     if (isFileEntry(value)) fileEntries.push([field, value]);
   }
-  if (fileEntries.length > 1) {
-    return validationError(requestId, "Only one logo image may be submitted.", {
-      logo: ["Only one file is allowed"],
-    });
+
+  let logoFile: File | undefined;
+  let qrFile: File | undefined;
+  for (const [field, value] of fileEntries) {
+    if (field === SUBMISSION_LOGO_FORM_FIELD || field === "file") {
+      if (logoFile) {
+        return validationError(requestId, "Only one logo image may be submitted.", {
+          logo: ["Only one file is allowed"],
+        });
+      }
+      logoFile = value;
+    } else if (field === SUBMISSION_QR_FORM_FIELD) {
+      if (qrFile) {
+        return validationError(requestId, "Only one QR image may be submitted.", {
+          qr: ["Only one file is allowed"],
+        });
+      }
+      qrFile = value;
+    } else {
+      return validationError(requestId, "Unsupported file field.", {
+        logo: ["Unsupported file field"],
+      });
+    }
   }
 
   let logoBytes: Uint8Array | undefined;
   let logoContentType: string | undefined;
-  if (fileEntries.length === 1) {
-    const [field, value] = fileEntries[0]!;
-    if (field !== SUBMISSION_LOGO_FORM_FIELD && field !== "file") {
-      return validationError(requestId, "Only a logo image is accepted.", {
-        logo: ["Unsupported file field"],
-      });
-    }
-
-    logoContentType = value.type.toLowerCase();
-    logoBytes = new Uint8Array(await value.arrayBuffer());
+  if (logoFile) {
+    logoContentType = logoFile.type.toLowerCase();
+    logoBytes = new Uint8Array(await logoFile.arrayBuffer());
   }
 
-  return { payload, logoBytes, logoContentType };
+  let qrBytes: Uint8Array | undefined;
+  let qrContentType: string | undefined;
+  if (qrFile) {
+    qrContentType = qrFile.type.toLowerCase();
+    qrBytes = new Uint8Array(await qrFile.arrayBuffer());
+  }
+
+  return { payload, logoBytes, logoContentType, qrBytes, qrContentType };
 }
 
-function imageValidationError(requestId: string, error: unknown): Response {
+function imageValidationError(
+  requestId: string,
+  error: unknown,
+  purpose: "logo" | "qr",
+): Response {
   const code =
     typeof error === "object" && error !== null && "code" in error
       ? (error as { code?: unknown }).code
       : undefined;
   if (code === "PAYLOAD_TOO_LARGE") return payloadTooLargeError(requestId);
 
+  const unsupported = code === "UNSUPPORTED_MEDIA_TYPE";
   return new Response(
     JSON.stringify(
       apiErrorSchema.parse({
         ok: false,
         error: {
-          code: code === "UNSUPPORTED_MEDIA_TYPE" ? "UNSUPPORTED_MEDIA_TYPE" : "VALIDATION_FAILED",
+          code: unsupported ? "UNSUPPORTED_MEDIA_TYPE" : "VALIDATION_FAILED",
           message:
-            code === "UNSUPPORTED_MEDIA_TYPE"
-              ? "Logo must be a valid PNG image."
-              : "Logo image metadata is invalid.",
+            purpose === "qr"
+              ? unsupported
+                ? "QR must be a valid JPEG image."
+                : "QR image metadata is invalid."
+              : unsupported
+                ? "Logo must be a valid PNG image."
+                : "Logo image metadata is invalid.",
         },
         requestId,
       }),
     ),
     {
-      status: code === "UNSUPPORTED_MEDIA_TYPE" ? 415 : 400,
+      status: unsupported ? 415 : 400,
       headers: { "Content-Type": "application/json" },
     },
   );
@@ -242,8 +281,37 @@ submissionsRoute.post("/", async (c) => {
         height: validated.height,
       };
     } catch (error) {
-      return imageValidationError(requestId, error);
+      return imageValidationError(requestId, error, "logo");
     }
+  }
+
+  let qr: ValidatedSubmissionLogo | undefined;
+  if (parsedRequest.qrBytes) {
+    try {
+      if (parsedRequest.qrContentType && parsedRequest.qrContentType !== getAssetContentType("qr_code")) {
+        throw new ImageValidationError(
+          "UNSUPPORTED_MEDIA_TYPE",
+          415,
+          "二维码文件 MIME 类型必须是 image/jpeg。",
+        );
+      }
+      const validated = validateImageUpload(parsedRequest.qrBytes, "qr_code");
+      qr = {
+        bytes: validated.bytes,
+        width: validated.width,
+        height: validated.height,
+      };
+    } catch (error) {
+      return imageValidationError(requestId, error, "qr");
+    }
+  }
+
+  // 契约允许 qr=true 无群号/链接提交，但图片本体走 multipart：
+  // 标记存在却没有二维码文件时拒绝，避免落库出"声称有二维码"的群。
+  if (input.qr && !qr) {
+    return validationError(requestId, "QR flag requires a QR image file.", {
+      qr: ["QR image is required when qr is true"],
+    });
   }
 
   const groupRepo = createGroupRepository(c.env.DB);
@@ -258,6 +326,7 @@ submissionsRoute.post("/", async (c) => {
   try {
     const result = await service.submit(input, clientKey, getSubmissionLimitPerHour(c.env), {
       logo,
+      qr,
       requestId,
     });
     c.header("Cache-Control", "no-store");

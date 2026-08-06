@@ -1201,6 +1201,93 @@ h3 {
   color: var(--text-primary);
   background: var(--surface-muted);
 }
+.app-select__check {
+  flex: 0 0 auto;
+  margin-left: 10px;
+}
+.app-select__option--selected .app-select__check {
+  color: var(--accent);
+}
+.app-combobox {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 7px;
+  min-width: 132px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 740;
+}
+.app-combobox--open {
+  z-index: 2;
+}
+.app-combobox__label {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 740;
+}
+.app-combobox__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised);
+  transition:
+    box-shadow var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+.app-combobox__control:focus-within,
+.app-combobox--open .app-combobox__control {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-hover);
+}
+.app-combobox--disabled .app-combobox__control {
+  opacity: 0.6;
+}
+.app-combobox__input {
+  width: 100%;
+  min-width: 0;
+  padding: 0 4px 0 12px;
+  border: 0;
+  outline: 0;
+  color: var(--text-primary);
+  background: transparent;
+  font-size: 0.78rem;
+}
+.app-combobox__input:focus-visible {
+  outline: 0 !important;
+  outline-offset: 0;
+}
+.app-combobox__input::placeholder {
+  color: var(--text-muted);
+}
+.app-combobox__arrow {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  margin-right: 5px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+}
+.app-combobox__arrow:hover,
+.app-combobox--open .app-combobox__arrow {
+  color: var(--text-primary);
+  background: var(--surface-muted);
+}
+.app-combobox__empty {
+  padding: 8px 9px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
 .admin-summary {
   display: flex;
   align-items: center;
