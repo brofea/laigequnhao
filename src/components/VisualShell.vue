@@ -1288,7 +1288,7 @@ function removeScrollListener() {
       :title="selectedGroup.title"
       labelled-by="group-dialog-title"
       test-id="group-detail-dialog"
-      eyebrow="群组详情"
+      eyebrow="Group details"
       @close="closeGroupDialog"
     >
       <div class="group-dialog-summary">
@@ -1374,7 +1374,7 @@ function removeScrollListener() {
       labelled-by="public-submit-dialog-title"
       size="form"
       test-id="public-submit-dialog"
-      eyebrow="提交新群"
+      eyebrow="Submit a group"
       :busy="publicSubmitBusy"
       @close="closePublicSubmitDialog"
     >
@@ -1405,7 +1405,7 @@ function removeScrollListener() {
       labelled-by="admin-create-dialog-title"
       size="form"
       test-id="admin-create-dialog"
-      eyebrow="添加群组"
+      eyebrow="Add group"
       :busy="adminCreateSaveBusy"
       @close="adminCreateGroup = null"
     >
@@ -1422,11 +1422,11 @@ function removeScrollListener() {
 
     <Dialog
       v-if="selectedAdminGroup"
-      title="编辑群组 · 窄屏抽屉样例"
+      title="编辑群组"
       labelled-by="admin-dialog-title"
       size="form"
       test-id="admin-edit-dialog"
-      eyebrow="编辑群组"
+      eyebrow="Edit group"
       :busy="Boolean(selectedAdminGroupBusyAction)"
       @close="closeAdminGroupEdit"
     >
@@ -1450,7 +1450,7 @@ function removeScrollListener() {
       labelled-by="board-edit-dialog-title"
       size="form"
       test-id="board-edit-dialog"
-      eyebrow="编辑板块"
+      eyebrow="Edit board"
       :busy="Boolean(selectedBoard && isPending(boardActionKey(selectedBoard.id, 'edit')))"
       @close="selectedBoardId = null"
     >
@@ -1468,7 +1468,7 @@ function removeScrollListener() {
       labelled-by="board-create-dialog-title"
       size="form"
       test-id="board-create-dialog"
-      eyebrow="新增板块"
+      eyebrow="New board"
       :busy="isPending('board:create')"
       @close="boardCreateDraft = null"
     >
@@ -1487,7 +1487,6 @@ function removeScrollListener() {
       labelled-by="board-add-group-dialog-title"
       size="form"
       test-id="board-add-group-dialog"
-      eyebrow="板块内添加新群"
       :busy="
         Boolean(
           selectedBoardAddGroup && isPending(boardActionKey(selectedBoardAddGroup.id, 'add-group')),

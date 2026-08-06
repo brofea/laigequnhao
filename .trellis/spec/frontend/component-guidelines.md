@@ -67,7 +67,8 @@ Props 是只读输入。组件应发出用户意图事件；子组件不得修�
 
 ### Dialog 结构与滚动契约
 
-- `eyebrow` 是可选 prop（`eyebrow?: string`），不传则不渲染副标题元素；调用方按语义传入（如"群组详情""添加群组"），禁止在 Dialog 内部硬编码样例文案。
+- `eyebrow` 是可选 prop（`eyebrow?: string`），不传则不渲染副标题元素；调用方按语义传入，禁止在 Dialog 内部硬编码样例文案。
+- **文案语言约定**（2026-08）：Dialog 大标题（`title`）使用中文，eyebrow 一律使用英文（如 "Group details"、"Edit group"、"Add group"），避免与中文标题重复；eyebrow 与标题语义重复时（如表单内部已有同义 eyebrow 的 `BoardAddGroupForm`），Dialog 层不传 eyebrow。Dialog 标题不得携带"样例/抽屉"等开发标记后缀。
 - 滚动条与圆角冲突的统一解法（issue #2，2026-08）：外壳 `.app-dialog` 负责圆角裁切（`border-radius` + `overflow: hidden`），内层 `.app-dialog__body` 独立滚动（`flex: 1; min-height: 0; overflow-y: auto`）。保留原生滚动条，不隐藏、不自定义外观。
 
 点赞是明确的非乐观例外：响应返回前不改变数字或 `aria-pressed`，慢请求只在 150ms 后把数字位置替换为 Spinner，成功或失败后再更新/保留状态并显示对应 Toast。
