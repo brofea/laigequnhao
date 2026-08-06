@@ -1,0 +1,6 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "site.config.ts", "reason": "字段使用调研结论"}
+{"file": "shared/domain/config.ts", "reason": "siteConfigSchema 需同步删字段"}
+{"file": "shared/domain/config.spec.ts", "reason": "测试需同步调整"}
+{"file": "src/components/VisualShell.vue", "reason": "footer 补齐机构信息"}
+{"file": "src/components/AdminEditForm.vue", "reason": "platformOptions 改读 siteConfig.platforms"}

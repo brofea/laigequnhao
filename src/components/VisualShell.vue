@@ -385,7 +385,7 @@ function openPublicSubmitDialog() {
   publicSubmitGroup.value = {
     id: "public-submit-sample",
     title: "",
-    platform: "微信群",
+    platform: "微信",
     kind: "兴趣",
     description: "",
     tags: [],
@@ -409,7 +409,7 @@ function openAdminCreateDialog() {
   adminCreateGroup.value = {
     id: "admin-create-sample",
     title: "待编辑的新群组",
-    platform: "微信群",
+    platform: "微信",
     kind: "兴趣",
     description: "这是管理工作台添加入口的本地编辑样例。",
     tags: ["待审核"],
@@ -947,7 +947,7 @@ function removeScrollListener() {
 </script>
 
 <template>
-  <div class="app-shell" :data-theme="resolvedTheme">
+  <div class="app-shell">
     <header class="app-header">
       <RouterLink class="app-brand" to="/" aria-label="回到公开首页">
         <span class="app-brand__mark">{{ siteConfig.header.brandMark }}</span>
@@ -982,9 +982,9 @@ function removeScrollListener() {
       <template v-if="view === 'home'">
         <section class="hero-section">
           <div class="hero-copy">
-            <p class="eyebrow">A calmer way to find your people</p>
-            <h1>找一个值得加入的群</h1>
-            <p>用清晰的标签和真实的主题，发现下一场讨论、一次漫游，或一群同频的人。</p>
+            <p class="eyebrow">{{ siteConfig.hero.eyebrow }}</p>
+            <h1>{{ siteConfig.hero.title }}</h1>
+            <p>{{ siteConfig.hero.description }}</p>
           </div>
           <div class="hero-orbit" aria-hidden="true">
             <span>发现</span><span>交流</span><span>同频</span>
@@ -1269,10 +1269,18 @@ function removeScrollListener() {
     </main>
 
     <footer class="app-footer">
-      <span>{{ siteConfig.title }}</span
-      ><span
-        >当前主题 <strong>{{ resolvedTheme }}</strong> · reduced motion ready</span
-      >
+      <div class="app-footer__brand">
+        <strong>{{ siteConfig.name }}</strong>
+        <span>{{ siteConfig.description }}</span>
+      </div>
+      <div class="app-footer__meta">
+        <span
+          ><a :href="`mailto:${siteConfig.contactEmail}`">{{ siteConfig.contactEmail }}</a
+          > · {{ siteConfig.copyright }}</span
+        >        <span
+          >{{ siteConfig.title }} · 当前主题 <strong>{{ resolvedTheme }}</strong></span
+        >
+      </div>
     </footer>
 
     <Dialog
@@ -1280,6 +1288,7 @@ function removeScrollListener() {
       :title="selectedGroup.title"
       labelled-by="group-dialog-title"
       test-id="group-detail-dialog"
+      eyebrow="Group details"
       @close="closeGroupDialog"
     >
       <div class="group-dialog-summary">
@@ -1365,6 +1374,7 @@ function removeScrollListener() {
       labelled-by="public-submit-dialog-title"
       size="form"
       test-id="public-submit-dialog"
+      eyebrow="Submit a group"
       :busy="publicSubmitBusy"
       @close="closePublicSubmitDialog"
     >
@@ -1395,6 +1405,7 @@ function removeScrollListener() {
       labelled-by="admin-create-dialog-title"
       size="form"
       test-id="admin-create-dialog"
+      eyebrow="Add group"
       :busy="adminCreateSaveBusy"
       @close="adminCreateGroup = null"
     >
@@ -1411,10 +1422,11 @@ function removeScrollListener() {
 
     <Dialog
       v-if="selectedAdminGroup"
-      title="编辑群组 · 窄屏抽屉样例"
+      title="编辑群组"
       labelled-by="admin-dialog-title"
       size="form"
       test-id="admin-edit-dialog"
+      eyebrow="Edit group"
       :busy="Boolean(selectedAdminGroupBusyAction)"
       @close="closeAdminGroupEdit"
     >
@@ -1438,6 +1450,7 @@ function removeScrollListener() {
       labelled-by="board-edit-dialog-title"
       size="form"
       test-id="board-edit-dialog"
+      eyebrow="Edit board"
       :busy="Boolean(selectedBoard && isPending(boardActionKey(selectedBoard.id, 'edit')))"
       @close="selectedBoardId = null"
     >
@@ -1455,6 +1468,7 @@ function removeScrollListener() {
       labelled-by="board-create-dialog-title"
       size="form"
       test-id="board-create-dialog"
+      eyebrow="New board"
       :busy="isPending('board:create')"
       @close="boardCreateDraft = null"
     >

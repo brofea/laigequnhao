@@ -251,6 +251,15 @@ type ThemePreference = "system" | "light" | "dark";
 
 原型使用 `matchMedia("(prefers-color-scheme: dark)")` 跟随系统，不写入正式 localStorage。浅色和深色共用同一语义 Token 名称；深色页面背景始终为深灰 `#15171c` 候选值，禁止 `#000000` 主背景。Skeleton、二维码占位、焦点环、状态徽标和 Dialog 遮罩都要有独立深色映射。
 
+正式主题机制（2026-08 起，issue #17/#12 修复后确立）：
+
+- 主题 CSS 变量定义在根层：浅色默认值在 `:root`，深色覆盖在 `:root[data-theme="dark"]`。`html` 元素上的 `data-theme` 属性是唯一可靠的主题源，由 `bootstrapTheme()`（模块加载时）与 `useTheme().setPreference()`（`syncRoot → applyThemeToDocument`）共同维护。
+- 视图组件**不得**再在 `.app-shell` 上绑定 `:data-theme`——根层变量已按 html 属性响应，组件级绑定是重复且易失步的（旧约定，已移除）。
+- `html` / `body` 背景必须使用 `var(--background)`，禁止硬编码浅色值，否则深色模式滚动回弹会露出白色背景。
+- `<meta name="theme-color">` 由 `applyThemeToDocument` 在每次主题应用时同步（浅色 `#f3f5f8` / 深色 `#15171c`，见 `THEME_COLOR_META_VALUES`）；`index.html` 的静态值仅作无 JS 首帧兜底。
+- `color-scheme` 由 `applyThemeToRoot` 设置在根元素上，随主题切换。
+- 保留浏览器原生滚动回弹，禁止禁用。
+
 状态优先级：语义属性/文字 > 边框/图标 > 背景 > 阴影。任何 Selected、Disabled、Loading、Error、Success 都不能只靠颜色或阴影。
 
 动效使用 120ms 的快速反馈和 180ms 的普通过渡；Carousel 可平滑滚动，Dialog/Toast 保持简洁。Carousel 两侧渐变挡板只覆盖卡片内容高度，不遮挡 Section heading hint，并继续完全覆盖卡片。`@media (prefers-reduced-motion: reduce)` 下取消滚动动画、shimmer、位移和长过渡，只保留必要的状态切换。

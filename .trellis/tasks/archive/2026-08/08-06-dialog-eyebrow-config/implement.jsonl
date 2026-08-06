@@ -1,0 +1,3 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "src/components/Dialog.vue", "reason": "hardcoded eyebrow 所在组件"}
+{"file": "src/components/VisualShell.vue", "reason": "8 个 Dialog 调用实例需传 eyebrow"}

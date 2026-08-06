@@ -1,0 +1,30 @@
+{
+  "id": "frontend-visual-theme-fixes",
+  "name": "frontend-visual-theme-fixes",
+  "title": "前端视觉与主题问题修复 (issue 2/10/12/17)",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "brofea",
+  "assignee": "brofea",
+  "createdAt": "2026-08-06",
+  "completedAt": "2026-08-06",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-06-dialog-eyebrow-config",
+    "08-06-overscroll-bg-fix",
+    "08-06-dialog-scrollbar-radius"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

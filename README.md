@@ -13,13 +13,22 @@
     </p>
 </div>
 
+
 在大学、企业或社区中，新成员想要快速找到新群，老成员希望发掘更多新群，但群聊往往分散在聊天记录、公告栏或私下传播中，缺少统一的发现渠道
 
-本项目希望打造一个部署简单，操作便捷的开源网站解决上述问题，任何新手开发者都可在 **10 分钟内** 在 Cloudflare 上线一个属于自己的版本供你的团体使用
+本项目希望打造一个部署简单，操作便捷的开源网站解决上述问题，任何新手开发者都可在 **30 分钟内** 在 Cloudflare 上线一个属于自己的版本供你的团体使用
 
 <div align="center">
-    <img width="2800" alt="image" src="https://github.com/user-attachments/assets/e8594c6e-aa86-4ca3-94ec-396a4011856f" />
+    <img width="1000" alt="image" src="https://github.com/user-attachments/assets/aae89d5a-eb20-402d-be31-e02bc6abbc71" />
+    <img width="1000" alt="image" src="https://github.com/user-attachments/assets/aeb0636e-56a4-481b-8b6a-39297bc8201b" />
 </div>
+
+## 设计语言
+
+项目以 [HeroUI v3](https://heroui.com/) 的组件设计为基础，结合 [Neumorphism 新拟物主义](https://zh.wikipedia.org/wiki/%E6%96%B0%E6%93%AC%E7%89%A9%E8%A8%AD%E8%A8%88) 进行 Vue 化改造
+
+强调柔和阴影、清晰层级、圆润边界与克制的动效，保持现代感的同时兼顾可读性、操作反馈和深浅色切换下的一致体验
+
 
 ## 技术栈
 
@@ -61,13 +70,13 @@
 
 本节针对本地开发环境，若要部署到 Cloudflare，请跳过本节，直接阅读下一节
 
-### 0. 前置条件
+### 前置条件
 
 - [Node.js](https://nodejs.org/) >= 22
 - [pnpm](https://pnpm.io/) >= 9 （`corepack enable pnpm`）
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)（`npx wrangler`）
 
-### 1. 克隆并安装依赖
+### 克隆并安装依赖
 
 ```bash
 git clone git@github.com:brofea/laigequnhao.git
@@ -75,7 +84,7 @@ cd laigequnhao
 pnpm install
 ```
 
-### 2. 配置环境变量
+### 配置环境变量
 
 ```bash
 cp .dev.vars.example .dev.vars
@@ -84,7 +93,7 @@ cp .dev.vars.example .dev.vars
 
 `.dev.vars` 不会提交到 Git（已加入 `.gitignore` 中）
 
-### 3. 初始化本地数据库
+### 初始化本地数据库
 
 ```bash
 pnpm db:migrate
@@ -98,13 +107,9 @@ pnpm dev
 
 访问 http://localhost:5173。需要开发数据时运行 `pnpm seed`；该命令只写本地 D1/R2，重复执行前会拒绝非空数据库，不会隐式清理
 
-`pnpm seed` 默认访问 `pnpm dev` 的 `http://localhost:5173` 单地址；它不会启动任何服务，必须先启动
-`pnpm dev`。若只启动 `pnpm worker:dev` 或使用其他本地端口，请明确设置 loopback 地址，例如
-`SEED_API_BASE=http://127.0.0.1:8788/api/v1`。API 连接失败时命令会以非零状态退出并提示下一步
-
 如需清理本地数据，运行 `pnpm clean` 并完成二次确认。它会清理本地 D1 应用数据和本地 R2 对象，但保留 schema、数据库实例和 `d1_migrations`
 
-纯前端调试使用 `pnpm vite:dev`；只调试本地 Worker 使用 `pnpm worker:dev`。这两个命令都不会连接生产资源
+纯前端调试使用 `pnpm vite:dev`；只调试本地 Worker 使用 `pnpm worker:dev`
 
 ### 资源清理维护
 
@@ -153,7 +158,15 @@ Cloudflare Cron，应继续复用同一清理服务，并保留 D1/R2 失败可�
 
 日常更新只需向连接的 `main` 分支推送代码，Workers 会自动构建部署。若要修改密码或密钥，请在 **Settings → Variables and Secrets** 中更新并点击 **Deploy** 重新构建
 
-更多运维问题请参考 [Cloudflare 部署维护 Runbook](docs/runbooks/cloudflare-deployment.md)。
+### 为中国大陆用户解决 DNS 污染
+
+对于中国大陆用户，Cloudflare Workers 默认域名可能被 DNS 污染，导致无法访问，可以通过购买并绑定自定义域名的方式解决。具体步骤如下：
+
+1. 在第三方平台或 Cloudflare 注册一个域名
+2. 在 Cloudflare Dashboard 搜索 **Domains → Add domain → Connect a domain**，将域名添加到 Cloudflare
+3. 添加一条 DNS 记录，类型为 AAAA，名称为 `@`，内容可为 `100::`
+4. 在域名购买处将域名的 DNS 服务器修改为 Cloudflare 提供的两个服务器地址
+5. 在 **Workers & Pages → Overview → Domains → Routes → Add a domain** 中添加自定义域名，选择刚才添加的域名，并绑定到 Worker
 
 ## 可用命令
 
@@ -196,12 +209,10 @@ pnpm test:e2e --project=image-firefox tests/e2e/image-flows.spec.ts
 
 ```ts
 const siteConfig: SiteConfig = {
-  name: "你的大学",
-  shortName: "简称",
-  theme: { primaryColor: "#你的主色", ... },
+  name: "你的机构名称",
   platforms: [ /* 你的平台列表 */ ],
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
 };
 ```
 
-修改后重新构建部署即可，无需修改业务代码。
+修改后重新构建部署即可

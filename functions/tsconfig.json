@@ -12,9 +12,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "baseUrl": "..",
     "paths": {
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["../shared/*"]
     },
     "types": ["@cloudflare/workers-types"]
   },

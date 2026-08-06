@@ -187,7 +187,7 @@ function openPublicSubmitDialog() {
   publicSubmitGroup.value = {
     id: "public-submit-sample",
     title: "",
-    platform: "微信群",
+    platform: "微信",
     kind: "兴趣",
     description: "",
     tags: [],
@@ -204,7 +204,7 @@ function openAdminCreateDialog() {
   adminCreateGroup.value = {
     id: "admin-create-sample",
     title: "待编辑的新群组",
-    platform: "微信群",
+    platform: "微信",
     kind: "兴趣",
     description: "这是管理工作台添加入口的本地编辑样例。",
     tags: ["待审核"],

@@ -84,7 +84,7 @@ const topGroups = [
         </div>
         <div class="platform-legend">
           <span><i class="platform-dot platform-dot--qq"></i>QQ <b>42%</b></span
-          ><span><i class="platform-dot platform-dot--wechat"></i>微信群 <b>31%</b></span
+          ><span><i class="platform-dot platform-dot--wechat"></i>微信 <b>31%</b></span
           ><span><i class="platform-dot platform-dot--telegram"></i>Telegram <b>18%</b></span
           ><span><i class="platform-dot platform-dot--other"></i>其他 <b>9%</b></span>
         </div>

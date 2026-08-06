@@ -51,7 +51,7 @@ describe("submitGroup 图片接线", () => {
       {
         title: "测试群",
         kind: "interest",
-        platform: "微信群",
+        platform: "微信",
         groupNumber: "123456",
       },
       new Blob(["final png"], { type: "image/png" }),
@@ -67,7 +67,7 @@ describe("submitGroup 图片接线", () => {
       if (typeof init.body !== "string") throw new Error("JSON 投稿必须使用字符串 body");
       expect(JSON.parse(init.body)).toMatchObject({
         title: "测试群",
-        platform: "微信群",
+        platform: "微信",
       });
       return Promise.resolve(
         new Response(JSON.stringify(receipt), {
@@ -81,7 +81,7 @@ describe("submitGroup 图片接线", () => {
     const result = await submitGroup({
       title: "测试群",
       kind: "interest",
-      platform: "微信群",
+      platform: "微信",
       groupNumber: "123456",
     });
 
