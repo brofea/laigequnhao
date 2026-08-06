@@ -203,11 +203,7 @@ async function parseRequest(
   return { payload, logoBytes, logoContentType, qrBytes, qrContentType };
 }
 
-function imageValidationError(
-  requestId: string,
-  error: unknown,
-  purpose: "logo" | "qr",
-): Response {
+function imageValidationError(requestId: string, error: unknown, purpose: "logo" | "qr"): Response {
   const code =
     typeof error === "object" && error !== null && "code" in error
       ? (error as { code?: unknown }).code
@@ -267,7 +263,10 @@ submissionsRoute.post("/", async (c) => {
   let logo: ValidatedSubmissionLogo | undefined;
   if (parsedRequest.logoBytes) {
     try {
-      if (parsedRequest.logoContentType && parsedRequest.logoContentType !== getAssetContentType("logo")) {
+      if (
+        parsedRequest.logoContentType &&
+        parsedRequest.logoContentType !== getAssetContentType("logo")
+      ) {
         throw new ImageValidationError(
           "UNSUPPORTED_MEDIA_TYPE",
           415,
@@ -288,7 +287,10 @@ submissionsRoute.post("/", async (c) => {
   let qr: ValidatedSubmissionLogo | undefined;
   if (parsedRequest.qrBytes) {
     try {
-      if (parsedRequest.qrContentType && parsedRequest.qrContentType !== getAssetContentType("qr_code")) {
+      if (
+        parsedRequest.qrContentType &&
+        parsedRequest.qrContentType !== getAssetContentType("qr_code")
+      ) {
         throw new ImageValidationError(
           "UNSUPPORTED_MEDIA_TYPE",
           415,

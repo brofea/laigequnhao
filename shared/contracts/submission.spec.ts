@@ -19,14 +19,16 @@ describe("submissionRequestSchema · 群号 / 链接 / 二维码 refine", () => 
 
   it("接受仅 HTTPS 链接提交", () => {
     expect(() =>
-      submissionRequestSchema.parse({ ...validBody, groupNumber: undefined, url: "https://example.com/join" }),
+      submissionRequestSchema.parse({
+        ...validBody,
+        groupNumber: undefined,
+        url: "https://example.com/join",
+      }),
     ).not.toThrow();
   });
 
   it("拒绝无群号、无链接、无二维码的提交", () => {
-    expect(() =>
-      submissionRequestSchema.parse({ ...validBody, groupNumber: undefined }),
-    ).toThrow();
+    expect(() => submissionRequestSchema.parse({ ...validBody, groupNumber: undefined })).toThrow();
   });
 
   it("拒绝 qr=false 且无群号/链接的提交", () => {

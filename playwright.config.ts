@@ -6,7 +6,13 @@ export default defineConfig({
   forbidOnly: Boolean(process.env["CI"]),
   retries: process.env["CI"] ? 2 : 0,
   workers: 1,
-  reporter: "line",
+  reporter: process.env["CI"]
+    ? [
+        ["line"],
+        ["html", { outputFolder: "playwright-report" }],
+        ["json", { outputFile: "playwright-report/results.json" }],
+      ]
+    : "line",
   use: {
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",

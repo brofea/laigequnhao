@@ -8,13 +8,7 @@ export {
   rotationConfigSchema,
   boardsConfigSchema,
 } from "./config";
-export type {
-  SiteConfig,
-  HeaderConfig,
-  HeroConfig,
-  RotationConfig,
-  BoardsConfig,
-} from "./config";
+export type { SiteConfig, HeaderConfig, HeroConfig, RotationConfig, BoardsConfig } from "./config";
 
 export { normalizeSearchQuery } from "./search";
 

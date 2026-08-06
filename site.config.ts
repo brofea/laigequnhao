@@ -37,7 +37,18 @@ const rawConfig: SiteConfig = {
     timezone: "Asia/Shanghai",
   },
 
-  platforms: ["QQ", "微信", "钉钉", "飞书", "小红书", "抖音", "百度贴吧", "QQ频道", "Telegram", "Discord"],
+  platforms: [
+    "QQ",
+    "微信",
+    "钉钉",
+    "飞书",
+    "小红书",
+    "抖音",
+    "百度贴吧",
+    "QQ频道",
+    "Telegram",
+    "Discord",
+  ],
 };
 
 /** 经 Zod 校验的站点配置 */

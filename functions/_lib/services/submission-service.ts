@@ -35,7 +35,11 @@ export function createSubmissionService(
       input: SubmissionRequest,
       clientKey: string,
       limitPerHour = 1,
-      submission?: { logo?: ValidatedSubmissionLogo; qr?: ValidatedSubmissionLogo; requestId?: string },
+      submission?: {
+        logo?: ValidatedSubmissionLogo;
+        qr?: ValidatedSubmissionLogo;
+        requestId?: string;
+      },
     ): Promise<{ id: string; title: string }> {
       // 频率限制（PRD：单个 IP/设备每小时最多成功提交新群组 limitPerHour 次）
       const limited = await rateLimitRepo.checkLimit(
@@ -117,13 +121,7 @@ export function createSubmissionService(
           });
         }
       } catch {
-        await compensateAssets(
-          groupRepo,
-          r2Adapter,
-          readyAssets,
-          requestId,
-          "R2_WRITE_FAILED",
-        );
+        await compensateAssets(groupRepo, r2Adapter, readyAssets, requestId, "R2_WRITE_FAILED");
       }
 
       const qrAsset = readyAssets.find((asset) => asset.purpose === "qr_code");
@@ -147,13 +145,7 @@ export function createSubmissionService(
 
         return { id: result.id, title: result.title };
       } catch {
-        await compensateAssets(
-          groupRepo,
-          r2Adapter,
-          readyAssets,
-          requestId,
-          "D1_WRITE_FAILED",
-        );
+        await compensateAssets(groupRepo, r2Adapter, readyAssets, requestId, "D1_WRITE_FAILED");
       }
 
       // 不可达：补偿删除恒抛出 SubmissionDependencyError。保留以帮助类型收窄。

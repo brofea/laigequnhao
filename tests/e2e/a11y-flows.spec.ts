@@ -50,16 +50,16 @@ async function seedPublishedGroup(
   return group.id;
 }
 
-test("键盘 Tab 完成核心公开流程：卡片聚焦 + Enter 打开详情 + Escape 关闭并恢复焦点", async ({ page }) => {
+test("键盘 Tab 完成核心公开流程：卡片聚焦 + Enter 打开详情 + Escape 关闭并恢复焦点", async ({
+  page,
+}) => {
   const auth = await loginViaApi(page);
   const title = `键盘流程群-${String(Date.now())}`;
   await seedPublishedGroup(page, auth, title);
 
   await page.goto("/");
   // 等待种子群组卡片渲染完成，避免异步列表加载期间开始 Tab 导致焦点序列错过卡片
-  await expect(
-    page.getByRole("button", { name: new RegExp(title) }).first(),
-  ).toBeAttached();
+  await expect(page.getByRole("button", { name: new RegExp(title) }).first()).toBeAttached();
   // Tab 到搜索框 → 继续 Tab 到达 group-card 主体按钮（跳过样例状态条/轮播控件）
   await page.getByRole("searchbox", { name: "搜索群组" }).focus();
   let found = false;
@@ -73,7 +73,11 @@ test("键盘 Tab 完成核心公开流程：卡片聚焦 + Enter 打开详情 + 
         text: el?.textContent ?? "",
       };
     });
-    if (active.tag === "BUTTON" && active.cls.includes("group-card__body") && active.text.includes(title)) {
+    if (
+      active.tag === "BUTTON" &&
+      active.cls.includes("group-card__body") &&
+      active.text.includes(title)
+    ) {
       found = true;
       break;
     }
@@ -89,7 +93,9 @@ test("键盘 Tab 完成核心公开流程：卡片聚焦 + Enter 打开详情 + 
   const initialFocus = await page.evaluate(() => {
     const el = document.activeElement;
     const label = el instanceof HTMLElement ? (el.getAttribute("aria-label") ?? "") : "";
-    const inDialog = Boolean(document.querySelector('[data-dialog="group-detail-dialog"]')?.contains(el));
+    const inDialog = Boolean(
+      document.querySelector('[data-dialog="group-detail-dialog"]')?.contains(el),
+    );
     return { label, inDialog };
   });
   expect(initialFocus.inDialog).toBe(true);
@@ -98,7 +104,11 @@ test("键盘 Tab 完成核心公开流程：卡片聚焦 + Enter 打开详情 + 
   for (let index = 0; index < 10; index++) {
     await page.keyboard.press(index % 2 === 0 ? "Tab" : "Shift+Tab");
     const inDialog = await page.evaluate(() =>
-      Boolean(document.querySelector('[data-dialog="group-detail-dialog"]')?.contains(document.activeElement)),
+      Boolean(
+        document
+          .querySelector('[data-dialog="group-detail-dialog"]')
+          ?.contains(document.activeElement),
+      ),
     );
     expect(inDialog).toBe(true);
   }
@@ -126,7 +136,10 @@ test("Dialog 关闭按钮可键盘操作，点赞按钮独立可聚焦", async (
   await likeInDialog.focus();
   const pressedBefore = await likeInDialog.getAttribute("aria-pressed");
   await page.keyboard.press("Enter");
-  await expect(likeInDialog).toHaveAttribute("aria-pressed", pressedBefore === "true" ? "false" : "true");
+  await expect(likeInDialog).toHaveAttribute(
+    "aria-pressed",
+    pressedBefore === "true" ? "false" : "true",
+  );
 
   // 关闭按钮可键盘操作
   await dialog.getByRole("button", { name: "关闭弹窗" }).focus();
@@ -161,12 +174,16 @@ test("Toast 错误提示可被辅助技术感知（aria-live）", async ({ page 
 test("表格语义：表头 scope 与单元格结构正确", async ({ page }) => {
   const auth = await loginViaApi(page);
   await seedPublishedGroup(page, auth, `表格语义群-${String(Date.now())}`);
-  await page.context().addCookies([{ name: "session", value: auth.cookie, url: "http://localhost:5173" }]);
+  await page
+    .context()
+    .addCookies([{ name: "session", value: auth.cookie, url: "http://localhost:5173" }]);
   await page.goto("/admin");
   await expect(page.locator(".admin-table")).toBeVisible();
-  const headerScopes = await page.locator(".admin-table thead th").evaluateAll((ths) =>
-    ths.map((th) => ({ text: th.textContent, scope: th.getAttribute("scope") })),
-  );
+  const headerScopes = await page
+    .locator(".admin-table thead th")
+    .evaluateAll((ths) =>
+      ths.map((th) => ({ text: th.textContent, scope: th.getAttribute("scope") })),
+    );
   const headerCols = headerScopes.filter(
     (h) => h.text.startsWith("标题") || h.text.startsWith("状态") || h.text.startsWith("操作"),
   );
@@ -226,7 +243,11 @@ test("对比度抽查：浅色/深色主题主要文字组合", async ({ page })
           return { r: parts[0] ?? 0, g: parts[1] ?? 0, b: parts[2] ?? 0 };
         }
         const hex = color.replace("#", "");
-        return { r: parseInt(hex.slice(0, 2), 16), g: parseInt(hex.slice(2, 4), 16), b: parseInt(hex.slice(4, 6), 16) };
+        return {
+          r: parseInt(hex.slice(0, 2), 16),
+          g: parseInt(hex.slice(2, 4), 16),
+          b: parseInt(hex.slice(4, 6), 16),
+        };
       };
       const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
         const f = (v: number) => {

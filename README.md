@@ -13,7 +13,6 @@
     </p>
 </div>
 
-
 在大学、企业或社区中，新成员想要快速找到新群，老成员希望发掘更多新群，但群聊往往分散在聊天记录、公告栏或私下传播中，缺少统一的发现渠道
 
 本项目希望打造一个部署简单，操作便捷的开源网站解决上述问题，任何新手开发者都可在 **30 分钟内** 在 Cloudflare 上线一个属于自己的版本供你的团体使用
@@ -28,7 +27,6 @@
 项目以 [HeroUI v3](https://heroui.com/) 的组件设计为基础，结合 [Neumorphism 新拟物主义](https://zh.wikipedia.org/wiki/%E6%96%B0%E6%93%AC%E7%89%A9%E8%A8%AD%E8%A8%88) 进行 Vue 化改造
 
 强调柔和阴影、清晰层级、圆润边界与克制的动效，保持现代感的同时兼顾可读性、操作反馈和深浅色切换下的一致体验
-
 
 ## 技术栈
 
@@ -210,7 +208,7 @@ pnpm test:e2e --project=image-firefox tests/e2e/image-flows.spec.ts
 ```ts
 const siteConfig: SiteConfig = {
   name: "你的机构名称",
-  platforms: [ /* 你的平台列表 */ ],
+  platforms: [/* 你的平台列表 */],
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
 };
 ```

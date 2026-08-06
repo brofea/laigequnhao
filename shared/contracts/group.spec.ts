@@ -237,8 +237,6 @@ describe("groupUpdateSchema", () => {
   });
 
   it("拒绝超过 50 字符的平台更新", () => {
-    expect(() =>
-      groupUpdateSchema.parse({ ...validUpdate, platform: "x".repeat(51) }),
-    ).toThrow();
+    expect(() => groupUpdateSchema.parse({ ...validUpdate, platform: "x".repeat(51) })).toThrow();
   });
 });
