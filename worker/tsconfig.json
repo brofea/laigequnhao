@@ -12,9 +12,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "types": ["@cloudflare/workers-types"],
-    "baseUrl": "..",
     "paths": {
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["../shared/*"]
     }
   },
   "include": ["./index.ts"]
