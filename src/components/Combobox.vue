@@ -26,6 +26,9 @@ const open = ref(false);
 const root = ref<HTMLElement | null>(null);
 const activeIndex = ref(0);
 
+let menuSeq = 0;
+const menuId = `app-combobox-menu-${String(++menuSeq)}`;
+
 /** 过滤后展示的选项：输入非空时仅显示包含输入内容的选项；不匹配时允许输入任意值。 */
 const visibleOptions = computed(() => {
   const keyword = props.modelValue.trim().toLowerCase();
@@ -71,7 +74,10 @@ function onKeydown(event: KeyboardEvent) {
   }
   if (event.key === "ArrowDown") {
     event.preventDefault();
-    activeIndex.value = Math.min(activeIndex.value + 1, visibleOptions.value.length - 1);
+    activeIndex.value = Math.min(
+      activeIndex.value + 1,
+      Math.max(visibleOptions.value.length - 1, 0),
+    );
   } else if (event.key === "ArrowUp") {
     event.preventDefault();
     activeIndex.value = Math.max(activeIndex.value - 1, 0);
@@ -123,7 +129,7 @@ onBeforeUnmount(() => {
         role="combobox"
         :aria-expanded="open && !props.disabled"
         :aria-label="props.label || undefined"
-        :aria-controls="open ? 'app-combobox-menu' : undefined"
+        :aria-controls="open ? menuId : undefined"
         @focus="openMenu"
         @input="onInput"
         @keydown="onKeydown"
@@ -140,7 +146,7 @@ onBeforeUnmount(() => {
     </div>
     <div
       v-if="open"
-      id="app-combobox-menu"
+      :id="menuId"
       class="app-select__menu"
       role="listbox"
       :aria-label="props.label || undefined"

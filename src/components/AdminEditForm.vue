@@ -270,7 +270,9 @@ async function readImage(event: Event, method?: JoinMethod) {
     if (method) {
       replaceJoinPreview(method, compressed.previewUrl, true);
       pendingQrBlobs.set(method.id, compressed.blob);
-      uploadMessage.value = "二维码已准备好，提交时会与表单一起上传。";
+      uploadMessage.value = props.publicMode
+        ? "二维码已准备好，提交时会与表单一起上传。"
+        : "二维码已准备好，保存时上传。";
     } else {
       replaceAvatarPreview(compressed.previewUrl, true);
       pendingLogoBlob.value = compressed.blob;
