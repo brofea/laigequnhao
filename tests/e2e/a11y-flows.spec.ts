@@ -56,6 +56,10 @@ test("键盘 Tab 完成核心公开流程：卡片聚焦 + Enter 打开详情 + 
   await seedPublishedGroup(page, auth, title);
 
   await page.goto("/");
+  // 等待种子群组卡片渲染完成，避免异步列表加载期间开始 Tab 导致焦点序列错过卡片
+  await expect(
+    page.getByRole("button", { name: new RegExp(title) }).first(),
+  ).toBeAttached();
   // Tab 到搜索框 → 继续 Tab 到达 group-card 主体按钮（跳过样例状态条/轮播控件）
   await page.getByRole("searchbox", { name: "搜索群组" }).focus();
   let found = false;

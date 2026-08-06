@@ -1,0 +1,18 @@
+name: Setup pnpm environment
+description: 安装 pnpm（随 packageManager 解析版本）与 Node 22，并带缓存安装依赖。
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
