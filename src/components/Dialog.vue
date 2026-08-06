@@ -8,6 +8,7 @@ const props = withDefaults(
     size?: "detail" | "submit" | "form";
     testId?: string;
     busy?: boolean;
+    eyebrow?: string;
   }>(),
   {
     size: "detail",
@@ -107,7 +108,7 @@ onBeforeUnmount(() => {
     >
       <header class="app-dialog__header">
         <div>
-          <p class="eyebrow">视觉样例 · 模拟数据</p>
+          <p v-if="props.eyebrow" class="eyebrow">{{ props.eyebrow }}</p>
           <h2 :id="props.labelledBy">{{ props.title }}</h2>
         </div>
         <button

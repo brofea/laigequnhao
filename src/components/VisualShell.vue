@@ -1280,6 +1280,7 @@ function removeScrollListener() {
       :title="selectedGroup.title"
       labelled-by="group-dialog-title"
       test-id="group-detail-dialog"
+      eyebrow="群组详情"
       @close="closeGroupDialog"
     >
       <div class="group-dialog-summary">
@@ -1365,6 +1366,7 @@ function removeScrollListener() {
       labelled-by="public-submit-dialog-title"
       size="form"
       test-id="public-submit-dialog"
+      eyebrow="提交新群"
       :busy="publicSubmitBusy"
       @close="closePublicSubmitDialog"
     >
@@ -1395,6 +1397,7 @@ function removeScrollListener() {
       labelled-by="admin-create-dialog-title"
       size="form"
       test-id="admin-create-dialog"
+      eyebrow="添加群组"
       :busy="adminCreateSaveBusy"
       @close="adminCreateGroup = null"
     >
@@ -1415,6 +1418,7 @@ function removeScrollListener() {
       labelled-by="admin-dialog-title"
       size="form"
       test-id="admin-edit-dialog"
+      eyebrow="编辑群组"
       :busy="Boolean(selectedAdminGroupBusyAction)"
       @close="closeAdminGroupEdit"
     >
@@ -1438,6 +1442,7 @@ function removeScrollListener() {
       labelled-by="board-edit-dialog-title"
       size="form"
       test-id="board-edit-dialog"
+      eyebrow="编辑板块"
       :busy="Boolean(selectedBoard && isPending(boardActionKey(selectedBoard.id, 'edit')))"
       @close="selectedBoardId = null"
     >
@@ -1455,6 +1460,7 @@ function removeScrollListener() {
       labelled-by="board-create-dialog-title"
       size="form"
       test-id="board-create-dialog"
+      eyebrow="新增板块"
       :busy="isPending('board:create')"
       @close="boardCreateDraft = null"
     >
@@ -1473,6 +1479,7 @@ function removeScrollListener() {
       labelled-by="board-add-group-dialog-title"
       size="form"
       test-id="board-add-group-dialog"
+      eyebrow="板块内添加新群"
       :busy="
         Boolean(
           selectedBoardAddGroup && isPending(boardActionKey(selectedBoardAddGroup.id, 'add-group')),
