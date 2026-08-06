@@ -1,0 +1,6 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "src/styles/index.css", "reason": "主题变量定义与 html/body 背景"}
+{"file": "src/features/theme/dom.ts", "reason": "applyThemeToDocument 设置 html data-theme"}
+{"file": "src/views/admin/AdminView.vue", "reason": "验证分支缺 data-theme"}
+{"file": "index.html", "reason": "theme-color meta 硬编码"}
+{"file": "src/features/theme/theme.spec.ts", "reason": "主题机制现有测试"}
