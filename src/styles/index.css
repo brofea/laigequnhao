@@ -1637,6 +1637,7 @@ h3 {
   width: min(100%, 640px);
   max-height: min(760px, calc(100vh - 48px));
   flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
   color: var(--text-primary);
@@ -1685,6 +1686,7 @@ h3 {
 }
 .app-dialog__body {
   min-height: 0;
+  flex: 1;
   overflow-y: auto;
   padding: 23px 25px;
 }
