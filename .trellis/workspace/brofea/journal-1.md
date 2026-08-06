@@ -470,3 +470,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 修复添加群组表单系列问题(#3 #4 #5 #20)
+
+**Date**: 2026-08-06
+**Task**: 修复添加群组表单系列问题(#3 #4 #5 #20)
+**Branch**: `fix/uiux2`
+
+### Summary
+
+排查 4 个 GitHub issue：清理添加新群 Dialog 占位默认值并修复审核备注清空 bug（#3）；Select.vue 扩展 multiple 模式实现加群方式勾选切换（#5）；新建 Combobox 支持平台自定义输入（#4）；主页投稿二维码全链路打通（#20）。4 子任务经 trellis-implement/check 完成，前端 173 + worker 135 测试全绿。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `95a1c4a` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
