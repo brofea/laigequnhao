@@ -16,7 +16,7 @@
 
 | job | 命令 | 超时 |
 |---|---|---|
-| `quality` | `pnpm lint` → `pnpm format:check` → `pnpm typecheck` | 15 min |
+| `quality` | `pnpm lint` → `pnpm format:check` → `pnpm typecheck` → Trellis 任务归档检查 | 15 min |
 | `unit` | `pnpm test` | 15 min |
 | `workers` | `pnpm test:workers` | 15 min |
 | `build` | `pnpm build` | 15 min |
@@ -51,6 +51,13 @@
   - `push main`：仅 seed matrix，建立/刷新 main key。
 - **Bootstrap 语义**：首次迁移 PR（main 无缓存）双 key 全 miss 属正常路径，自行安装、writer 保存 PR key 后同 PR 后续 run 命中；合并后 push main 建立 main key，之后新 PR 直接命中。cache miss 永远是正常降级路径，不得导致 CI 失败。
 - 每分片在 STEP_SUMMARY 输出：main-cache-hit、pr-cache-hit（跳过时为 n/a）、缓存恢复耗时、浏览器准备耗时（install-deps + install + save）、浏览器体积、JSON 解析的测试数与时长。
+
+## Trellis 任务归档检查
+
+- **规则**：`.trellis/tasks/` 下除 `archive/` 外不得存在其他一级目录；Trellis 任务必须归档后才能提交至仓库。
+- 由 CI `quality` job 的 `Check Trellis tasks are archived` 步骤强制：`find .trellis/tasks -mindepth 1 -maxdepth 1 -type d ! -name archive` 非空即失败（`::error::` + 非零退出）。`.trellis/tasks/` 不存在时不误报。
+- **本地约定**：进行中任务目录处于 untracked 状态，不得 `git add .trellis/tasks/`；任务完成必须经 `task.py archive` 归档（自动移动至 `archive/` 并产生 `chore(task)` 提交）后才允许随 PR 进入仓库。
+- 该检查在 `push main` 时不运行（quality job 仅 PR/dispatch 触发），main 的结构已由 PR 检查把关。
 
 ## 门禁命令（7 条，必须全量运行）
 

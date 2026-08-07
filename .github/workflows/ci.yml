@@ -33,6 +33,18 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Check Trellis tasks are archived
+        shell: bash
+        run: |
+          unarchived=$(find .trellis/tasks -mindepth 1 -maxdepth 1 -type d ! -name archive 2>/dev/null || true)
+          if [ -n "$unarchived" ]; then
+            echo "::error::.trellis/tasks/ 下除 archive/ 外不得存在其他一级目录；Trellis 任务必须归档后才能提交至仓库"
+            echo "未归档任务目录："
+            printf '%s\n' "$unarchived"
+            exit 1
+          fi
+          echo "OK: .trellis/tasks/ 仅包含 archive/"
+
   unit:
     name: Unit tests (Vitest)
     runs-on: ubuntu-latest
