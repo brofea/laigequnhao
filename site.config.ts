@@ -6,11 +6,8 @@ export type { SiteConfig, JoinMethod, GroupKind, GroupStatus };
 
 /** 默认示例配置 — 部署时替换为实际机构 */
 const rawConfig: SiteConfig = {
-  name: "示例机构完整名称",
+  // 标签页标题
   title: "来个群号",
-  description: "发现并加入群聊",
-  contactEmail: "admin@example.com",
-  copyright: "© 2026 示例机构",
 
   header: {
     brandLabel: "来个群号",
@@ -26,6 +23,13 @@ const rawConfig: SiteConfig = {
     eyebrow: "A calmer way to find your people",
     title: "找一个值得加入的群",
     description: "用清晰的标签和真实的主题，发现下一场讨论、一次漫游，或一群同频的人。",
+  },
+
+  footer: {
+    name: "示例机构完整名称",
+    description: "发现并加入群聊",
+    contactEmail: "admin@example.com",
+    copyright: "© 2026 示例机构",
   },
 
   rotation: {

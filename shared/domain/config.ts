@@ -21,6 +21,15 @@ export const headerConfigSchema = z.object({
 });
 export type HeaderConfig = z.infer<typeof headerConfigSchema>;
 
+// ─── 页脚配置 ────────────────────────────────────────────
+export const footerConfigSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  contactEmail: z.string().email(),
+  copyright: z.string().min(1),
+});
+export type FooterConfig = z.infer<typeof footerConfigSchema>;
+
 // ─── 轮换配置 ────────────────────────────────────────────
 const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
@@ -75,14 +84,11 @@ export type BoardsConfig = z.infer<typeof boardsConfigSchema>;
 
 // ─── 站点配置 ────────────────────────────────────────────
 export const siteConfigSchema = z.object({
-  name: z.string().min(1),
   title: z.string().min(1),
-  description: z.string().min(1),
-  contactEmail: z.string().email(),
-  copyright: z.string().min(1),
 
   header: headerConfigSchema,
   hero: heroConfigSchema,
+  footer: footerConfigSchema,
   rotation: rotationConfigSchema,
   boards: boardsConfigSchema,
   platforms: z

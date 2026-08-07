@@ -2,11 +2,7 @@ import { describe, it, expect } from "vitest";
 import { siteConfigSchema } from "./config";
 
 const validConfig = {
-  name: "测试大学",
   title: "测试站点",
-  description: "测试描述",
-  contactEmail: "admin@test.edu.cn",
-  copyright: "© 2026",
   header: {
     brandLabel: "测试站点",
     brandMark: "测",
@@ -19,6 +15,12 @@ const validConfig = {
     title: "Hero title",
     description: "Hero description",
   },
+  footer: {
+    name: "测试大学",
+    description: "测试描述",
+    contactEmail: "admin@test.edu.cn",
+    copyright: "© 2026",
+  },
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
   boards: { timezone: "Asia/Shanghai" },
   platforms: ["QQ"],
@@ -30,11 +32,18 @@ describe("siteConfigSchema", () => {
   });
 
   it("拒绝空名称", () => {
-    expect(() => siteConfigSchema.parse({ ...validConfig, name: "" })).toThrow();
+    expect(() =>
+      siteConfigSchema.parse({ ...validConfig, footer: { ...validConfig.footer, name: "" } }),
+    ).toThrow();
   });
 
   it("拒绝无效邮箱", () => {
-    expect(() => siteConfigSchema.parse({ ...validConfig, contactEmail: "not-email" })).toThrow();
+    expect(() =>
+      siteConfigSchema.parse({
+        ...validConfig,
+        footer: { ...validConfig.footer, contactEmail: "not-email" },
+      }),
+    ).toThrow();
   });
 
   it("拒绝重复平台 ID", () => {
