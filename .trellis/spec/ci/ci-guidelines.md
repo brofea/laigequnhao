@@ -77,7 +77,7 @@ CI 覆盖全部 41 个门禁测试文件：vitest（`src/**`、`shared/**`）、
 2. **`.e2e-state` 清空失败**：Windows 文件锁导致 `start-e2e-api.mjs` 的 `rmSync` 无法删除 sqlite 文件，跨轮次数据累积污染断言（如板块/群组重复）。处理：先 `Stop-Process` 杀净 `laigequnhao` 相关 node 进程再删除。
 3. **`pnpm format:check` 本地假阳性**：`core.autocrlf=true` 且仓库无 `.gitattributes`，工作区文件为 CRLF，Prettier（`endOfLine: lf`）全部报错；CI 检出为 LF，不受影响。**长期治理（未执行）**：评估新增 `.gitattributes` 强制 LF（`* text=auto eol=lf`）根治假阳性；该治理会触发全仓 renormalize，须另开任务单独评估，不得顺带制造无关行尾 diff。
 4. **`pnpm build` 脚本本体**：`scripts/build.mjs` 的 `spawn("pnpm")` 在 Windows 因 pnpm 是 shim 报 `ENOENT`；其组成命令（vue-tsc + vite build）本地已验证通过，CI 为 Linux 无此问题。
-5. **`image-webkit:165` 保存点击偶发超时**：探针（720px 视口、等价流程）无法复现，Windows 本地多轮偶发失败（2026-08-06 观测：82 全绿一轮后下一轮复现 1 例失败）；CI 由 `retries: 2`（playwright.config.ts 的 CI 分支）兜底。若 CI 上稳定复现，另开任务定位，禁止盲目本地 debug。
+5. **`image-webkit:165` 保存点击超时（已修复，2026-08-06）**：CI 上稳定复现（retry 3 次全挂），二分定位根因为**逐元素 `expect()` 循环**（16384 次/个 × 2 个循环）的海量断言开销阻塞 Node 主线程，使后续 CDP 操作（click/expect/waitForTimeout）在 WebKit 下 30s 超时。修复：循环改批量断言（`every()` + 单次 expect）、`readImagePreview` 移除页面内 canvas（改 Node 侧 sharp 解码）、编辑表单 footer sticky。**约定**：e2e 断言禁止逐元素 `expect()` 大循环，必须一次批量断言；页面内 canvas 像素读取必须移到 Node 侧。
 
 ## 新增测试接入约定
 

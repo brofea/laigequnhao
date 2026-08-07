@@ -177,9 +177,7 @@ test.describe("管理端图片上传跨浏览器流程", () => {
     await expect(dialog.getByRole("status")).toContainText("二维码已准备好");
     const preview = await readImagePreview(page, "已上传的二维码预览");
     await assertPreviewJpeg(preview, { maxDimension: 1024, maxBytes: 1024 * 1024 });
-    for (let index = 3; index < preview.pixels.length; index += 4) {
-      expect(preview.pixels[index]).toBe(255);
-    }
+    expect(preview.pixels.every((value, index) => index % 4 !== 3 || value === 255)).toBe(true);
     await assertQrJpeg(Uint8Array.from(preview.bytes), QR_EXPECTED_VALUE);
 
     const assetResponses: string[] = [];

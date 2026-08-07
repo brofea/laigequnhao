@@ -23,25 +23,31 @@ export type PngInfo = Readonly<{
 export async function readImagePreview(page: Page, alt: string): Promise<PreviewImage> {
   const image = page.getByAltText(alt);
   await expect(image).toBeVisible();
-  return image.evaluate(async (element) => {
+  const { contentType, base64 } = await image.evaluate(async (element) => {
     const img = element as HTMLImageElement;
     const source = img.currentSrc || img.src;
     const response = await fetch(source);
-    const bytes = Array.from(new Uint8Array(await response.arrayBuffer()));
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) throw new Error("无法读取图片预览像素。");
-    context.drawImage(img, 0, 0);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
     return {
       contentType: response.headers.get("content-type"),
-      bytes,
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-      pixels: Array.from(context.getImageData(0, 0, canvas.width, canvas.height).data),
+      base64: btoa(binary),
     };
   });
+  // 页面内不做 canvas 绘制/像素读取：WebKit 下 canvas 软件光栅化会间歇性
+  // 阻塞页面主线程，导致其后的 CDP 操作（click/expect/waitForTimeout）超时。
+  // 像素在 Node 侧用 sharp 异步解码（libuv 线程池，不阻塞测试主线程）。
+  const bytes = Buffer.from(base64, "base64");
+  const metadata = await sharp(bytes).metadata();
+  const { data } = await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  return {
+    contentType,
+    bytes: Array.from(bytes),
+    width: metadata.width,
+    height: metadata.height,
+    pixels: Array.from(data),
+  };
 }
 
 export function parsePng(bytes: Uint8Array): PngInfo {
@@ -128,7 +134,8 @@ export async function assertLogoPng(bytes: Uint8Array) {
 
 export async function assertQrPng(bytes: Uint8Array, expectedValue: string) {
   const { data, info } = await inspectPng(bytes);
-  for (let index = 3; index < data.length; index += 4) expect(data[index]).toBe(255);
+  // 逐元素 expect 会触发海量断言开销阻塞 Node 主线程，改为一次批量断言
+  expect(data.every((value, index) => index % 4 !== 3 || value === 255)).toBe(true);
   expect(jsQR(new Uint8ClampedArray(data), info.width, info.height)?.data).toBe(expectedValue);
 }
 
@@ -139,6 +146,6 @@ export async function assertQrJpeg(bytes: Uint8Array, expectedValue: string) {
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  for (let index = 3; index < data.length; index += 4) expect(data[index]).toBe(255);
+  expect(data.every((value, index) => index % 4 !== 3 || value === 255)).toBe(true);
   expect(jsQR(new Uint8ClampedArray(data), info.width, info.height)?.data).toBe(expectedValue);
 }

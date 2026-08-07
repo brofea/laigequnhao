@@ -31,6 +31,12 @@
   - 环境准备时长由各步骤耗时观测（GitHub UI 天然展示）；
   - 首轮 CI 后汇总数据，决定：缓存去留、分片数、worker 数量等后续调整。
 
+- R5（2026-08-06，CI 首轮实测后追加）：**`image-webkit:165` 在 CI（Linux WebKit）稳定复现**（retry 3 次全挂，推翻"仅 Windows 偶发"假设），本地经二分复现定位根因：**逐元素 `expect()` 循环（16384 次/个，主测试 alpha 循环 + assertQrJpeg 内部循环叠加 32768 次）的海量断言开销阻塞 Node 主线程，导致其后的 CDP 操作（click/expect/waitForTimeout）在 WebKit 下 30s 超时**。修复（均验证通过）：
+  1. 逐元素 expect 循环全部改为一次批量断言（`every(...)` + 单次 expect）——image-flows alpha 循环、assertQrJpeg、assertQrPng；
+  2. `readImagePreview` 移除页面内 canvas 绘制/像素读取（WebKit 软件光栅化干扰），改为页面仅 fetch + base64 回传、Node 侧 sharp 异步解码像素；
+  3. `.admin-edit-form__footer` 加 `position: sticky; bottom: 0`（操作区固定可见，消除滚动依赖，保留为合理 UI 改进）。
+  修复后本地全量 e2e 82 passed（时长 6.2m → 4.0m），165 连续多轮通过；CI 待重跑验证。
+
 ## Out of Scope
 
 - 不重构测试的 DB 隔离（如 per-test 独立 D1）——那是消除串行约束的长期方案，另开任务。
