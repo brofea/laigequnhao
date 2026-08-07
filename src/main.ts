@@ -8,6 +8,17 @@ import "./styles/index.css";
 
 document.title = siteConfig.title;
 
+const faviconType = siteConfig.faviconUrl.endsWith(".svg")
+  ? "image/svg+xml"
+  : siteConfig.faviconUrl.endsWith(".png")
+    ? "image/png"
+    : "image/jpeg";
+const faviconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+if (faviconLink) {
+  faviconLink.href = siteConfig.faviconUrl;
+  faviconLink.type = faviconType;
+}
+
 const app = createApp(App);
 const router = createRouter({ history: createWebHistory(), routes });
 

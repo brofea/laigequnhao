@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -14,6 +16,7 @@ jobs:
     name: Quality (lint / format / typecheck)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: github.event_name != 'push'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,10 +33,23 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Check Trellis tasks are archived
+        shell: bash
+        run: |
+          unarchived=$(find .trellis/tasks -mindepth 1 -maxdepth 1 -type d ! -name archive 2>/dev/null || true)
+          if [ -n "$unarchived" ]; then
+            echo "::error::.trellis/tasks/ 下除 archive/ 外不得存在其他一级目录；Trellis 任务必须归档后才能提交至仓库"
+            echo "未归档任务目录："
+            printf '%s\n' "$unarchived"
+            exit 1
+          fi
+          echo "OK: .trellis/tasks/ 仅包含 archive/"
+
   unit:
     name: Unit tests (Vitest)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: github.event_name != 'push'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,6 +64,7 @@ jobs:
     name: Worker integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: github.event_name != 'push'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,6 +79,7 @@ jobs:
     name: Production build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: github.event_name != 'push'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -72,14 +90,57 @@ jobs:
       - name: Build
         run: pnpm build
 
+  e2e-browser-cache:
+    name: E2E browser cache seed (${{ matrix.browser }})
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit, firefox]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm environment
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        shell: bash
+        run: |
+          version=$(node -p "require('./node_modules/@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore main browser cache
+        id: cache-main
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-main-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
+
+      - name: Install Playwright browser
+        shell: bash
+        run: pnpm exec playwright install ${{ matrix.browser }}
+
+      - name: Save main browser cache
+        if: steps.cache-main.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-main-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
+
   e2e-main:
     name: E2E main (shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
+        browser: [chromium]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -99,12 +160,20 @@ jobs:
         shell: bash
         run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
+      - name: Restore main browser cache
+        id: cache-main
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ms-playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium-webkit-firefox
+          key: ms-playwright-main-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
+
+      - name: Restore PR browser cache
+        id: cache-pr
+        if: steps.cache-main.outputs.cache-hit != 'true' && github.event_name == 'pull_request'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-pr-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
 
       - name: Record cache restore end
         id: cache-restore-end
@@ -116,9 +185,21 @@ jobs:
         shell: bash
         run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      - name: Install Playwright browsers
+      - name: Install system dependencies
         shell: bash
-        run: pnpm exec playwright install --with-deps chromium webkit firefox
+        run: pnpm exec playwright install-deps ${{ matrix.browser }}
+
+      - name: Install Playwright browser
+        if: steps.cache-main.outputs.cache-hit != 'true' && steps.cache-pr.outputs.cache-hit != 'true'
+        shell: bash
+        run: pnpm exec playwright install ${{ matrix.browser }}
+
+      - name: Save PR browser cache
+        if: github.event_name == 'pull_request' && steps.cache-main.outputs.cache-hit != 'true' && steps.cache-pr.outputs.cache-hit != 'true' && matrix.shard == 1
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-pr-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
 
       - name: Record browser prep end
         id: browser-prep-end
@@ -155,9 +236,10 @@ jobs:
             echo
             echo "| metric | value |"
             echo "|---|---|"
-            echo "| cache-hit | ${{ steps.playwright-cache.outputs.cache-hit }} |"
+            echo "| main-cache-hit | ${{ steps.cache-main.outputs.cache-hit }} |"
+            echo "| pr-cache-hit | ${{ steps.cache-pr.outputs.cache-hit || 'n/a' }} |"
             echo "| cache-restore-seconds | $(( ${{ steps.cache-restore-end.outputs.ts }} - ${{ steps.cache-restore-start.outputs.ts }} )) |"
-            echo "| browser-install-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.browser-prep-start.outputs.ts }} )) |"
+            echo "| browser-prep-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.browser-prep-start.outputs.ts }} )) |"
             echo "| browser-prep-total-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.cache-restore-start.outputs.ts }} )) |"
             echo "| browsers-size | $(du -sh ~/.cache/ms-playwright 2>/dev/null | cut -f1 || echo n/a) |"
             node -e "const fs=require('fs');const p='./playwright-report/results.json';if(!fs.existsSync(p)){console.log('| json-report | missing |');process.exit(0)}const r=JSON.parse(fs.readFileSync(p,'utf8'));const s=r.stats||{};for(const [k,v] of Object.entries({passed:s.expected,failed:s.unexpected,skipped:s.skipped,duration_ms:s.duration}))console.log('| '+k+' | '+(v??'n/a')+' |')"
@@ -188,10 +270,17 @@ jobs:
     name: E2E image (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
-        project: [image-chromium, image-webkit, image-firefox]
+        include:
+          - project: image-chromium
+            browser: chromium
+          - project: image-webkit
+            browser: webkit
+          - project: image-firefox
+            browser: firefox
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -211,12 +300,20 @@ jobs:
         shell: bash
         run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
+      - name: Restore main browser cache
+        id: cache-main
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ms-playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium-webkit-firefox
+          key: ms-playwright-main-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
+
+      - name: Restore PR browser cache
+        id: cache-pr
+        if: steps.cache-main.outputs.cache-hit != 'true' && github.event_name == 'pull_request'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-pr-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
 
       - name: Record cache restore end
         id: cache-restore-end
@@ -228,9 +325,21 @@ jobs:
         shell: bash
         run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      - name: Install Playwright browsers
+      - name: Install system dependencies
         shell: bash
-        run: pnpm exec playwright install --with-deps chromium webkit firefox
+        run: pnpm exec playwright install-deps ${{ matrix.browser }}
+
+      - name: Install Playwright browser
+        if: steps.cache-main.outputs.cache-hit != 'true' && steps.cache-pr.outputs.cache-hit != 'true'
+        shell: bash
+        run: pnpm exec playwright install ${{ matrix.browser }}
+
+      - name: Save PR browser cache
+        if: github.event_name == 'pull_request' && steps.cache-main.outputs.cache-hit != 'true' && steps.cache-pr.outputs.cache-hit != 'true' && matrix.browser != 'chromium'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-pr-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
 
       - name: Record browser prep end
         id: browser-prep-end
@@ -267,9 +376,10 @@ jobs:
             echo
             echo "| metric | value |"
             echo "|---|---|"
-            echo "| cache-hit | ${{ steps.playwright-cache.outputs.cache-hit }} |"
+            echo "| main-cache-hit | ${{ steps.cache-main.outputs.cache-hit }} |"
+            echo "| pr-cache-hit | ${{ steps.cache-pr.outputs.cache-hit || 'n/a' }} |"
             echo "| cache-restore-seconds | $(( ${{ steps.cache-restore-end.outputs.ts }} - ${{ steps.cache-restore-start.outputs.ts }} )) |"
-            echo "| browser-install-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.browser-prep-start.outputs.ts }} )) |"
+            echo "| browser-prep-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.browser-prep-start.outputs.ts }} )) |"
             echo "| browser-prep-total-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.cache-restore-start.outputs.ts }} )) |"
             echo "| browsers-size | $(du -sh ~/.cache/ms-playwright 2>/dev/null | cut -f1 || echo n/a) |"
             node -e "const fs=require('fs');const p='./playwright-report/results.json';if(!fs.existsSync(p)){console.log('| json-report | missing |');process.exit(0)}const r=JSON.parse(fs.readFileSync(p,'utf8'));const s=r.stats||{};for(const [k,v] of Object.entries({passed:s.expected,failed:s.unexpected,skipped:s.skipped,duration_ms:s.duration}))console.log('| '+k+' | '+(v??'n/a')+' |')"

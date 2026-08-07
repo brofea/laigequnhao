@@ -509,7 +509,7 @@ describe("GET /api/v1/config", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       ok: true,
-      data: { submissionLimitPerHour: 1 },
+      data: { submissionLimitPerHour: 10 },
     });
   });
 
@@ -531,7 +531,7 @@ describe("GET /api/v1/config", () => {
     });
     expect(await response.json()).toMatchObject({
       ok: true,
-      data: { submissionLimitPerHour: 1 },
+      data: { submissionLimitPerHour: 10 },
     });
   });
 });

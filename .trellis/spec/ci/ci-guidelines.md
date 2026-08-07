@@ -6,8 +6,9 @@
 
 ## 触发条件
 
-- `pull_request`：目标分支为 `main` 时自动触发。
-- `workflow_dispatch`：任意分支可手动触发（由 GitHub UI 选择分支）。
+- `push`：`main` 分支推送时触发，**只运行 `e2e-browser-cache`（浏览器缓存 seed，browser matrix）**，全量检查全部跳过。
+- `pull_request`：目标分支为 `main` 时自动触发，运行全量检查；不运行 seed。
+- `workflow_dispatch`：任意分支可手动触发（由 GitHub UI 选择分支），运行全量检查（手动全量检查语义），**不创建任何 `pr-*` fallback 缓存**。
 
 ## 工作流结构
 
@@ -15,13 +16,14 @@
 
 | job | 命令 | 超时 |
 |---|---|---|
-| `quality` | `pnpm lint` → `pnpm format:check` → `pnpm typecheck` | 15 min |
+| `quality` | `pnpm lint` → `pnpm format:check` → `pnpm typecheck` → Trellis 任务归档检查 | 15 min |
 | `unit` | `pnpm test` | 15 min |
 | `workers` | `pnpm test:workers` | 15 min |
 | `build` | `pnpm build` | 15 min |
+| `e2e-browser-cache` | push-main-only seed：browser matrix（chromium/webkit/firefox 并行），restore → miss 时 `playwright install <browser>` → save 对应 main key；无 `--with-deps`、无 `install-deps` | 15 min |
 | `e2e` | 两个 job 按测试内容分片：`e2e-main`（非图片 5 文件 × chromium 双 project，matrix `[1,2,3]`，`--shard=N/3`）+ `e2e-image`（image-flows 按 project 维度，matrix 三 image project，`--project=<p>`） | 30 min |
 
-- 5 个 job 相互独立、并行执行；任一 step 失败即该 job 失败，合并检查整体失败。
+- `quality`/`unit`/`workers`/`build` 相互独立、并行执行；6 个 E2E 执行单元与它们**完全并行，无 `needs` 依赖**。任一 step 失败即该 job 失败，合并检查整体失败。
 - concurrency 按 `github.ref` 分组并 `cancel-in-progress`，避免同一分支重复推送排队浪费。
 - **E2E 分片（按内容）**：首轮实测（2026-08-06）发现 `--shard` 按 spec 文件切分使 image-flows 整组失衡（44s / 78s / 210s），故拆为两个 job：`e2e-main`（轻量文件 3 分片）与 `e2e-image`（重操作 image-flows 按浏览器 project 拆 3 个并行 job）。所有执行单元运行于独立 runner，各自初始化独立 webServer 与 `.e2e-state`（API/D1/R2 状态天然隔离）；`fail-fast: false`；**`workers: 1` 固定不变**——测试共享同一 API DB，分片内多 worker 会破坏状态隔离，并行完全来自 runner 分片。
 - **报告与 artifact**：CI reporter 为 `line + html + json`（JSON 输出 `playwright-report/results.json` 供机器解析，不依赖 line 文本）；HTML 报告、分片日志、汇总（`$GITHUB_STEP_SUMMARY`）上传均 `if: always()`，artifact 命名 `playwright-report-main-<N>-of-3` / `playwright-report-image-<project>`（名称不含 `/`），保留 7 天；失败时另传 `test-results-main-<N>-of-3` / `test-results-image-<project>`。
@@ -29,11 +31,33 @@
 
 ## 浏览器缓存约定
 
-- 缓存 key 唯一标准：`ms-playwright-${{ runner.os }}-<@playwright/test 实际版本>-chromium-webkit-firefox`（版本由步骤读取 package.json 输出），**不使用宽泛 restore-keys**，避免跨 Playwright 版本恢复不兼容浏览器。
-- 各分片运行于独立 runner，只是**分别恢复同一份缓存副本**，并非共享磁盘；**首次无缓存时三个并发分片可能全部 miss、各自完整下载，只有后续 workflow 才会命中**。
-- 浏览器缓存**不含 Linux 系统依赖**，`--with-deps` 必须无条件保留。
-- **缓存去留 = 实测决策**：不默认缓存更快。首轮（直接下载）与次轮（缓存恢复）对比恢复耗时、安装耗时、准备总耗时、安装后体积（`du -sh`）与稳定性后再决定；**未经测量不得引入串行准备 job**。
-- 每分片在 STEP_SUMMARY 输出：cache-hit、缓存恢复耗时、浏览器安装耗时、浏览器准备总耗时、浏览器体积、JSON 解析的测试数与时长。
+- **缓存粒度 = 浏览器粒度**：key 格式为 `ms-playwright-{main|pr}-${{ runner.os }}-<@playwright/test 实际版本>-{chromium|webkit|firefox}`（版本由步骤读取 package.json 输出），**不使用宽泛 restore-keys**，避免跨 Playwright 版本恢复不兼容浏览器。
+  - main key（3 个）：`ms-playwright-main-<os>-<version>-<browser>`，长期、权威共享缓存，由 push main 的 seed matrix 建立/刷新；
+  - PR key（3 个）：`ms-playwright-pr-<os>-<version>-<browser>`，当前 PR 的 bootstrap / fallback 缓存。
+- **key 与内容一一对应**：GitHub Actions 缓存是 immutable，同一 key 并发 save 先到先得、不可合并；若多个浏览器共用同一 key，先成功写入的内容可能只含部分浏览器且无法补充。因此每个缓存条目只含对应浏览器二进制（+ ffmpeg，Playwright 随任一浏览器附带安装，体积小），每个 job 也只恢复自己浏览器对应的 key，不恢复三浏览器全集（单浏览器约 160MB，全集约 490MB）。
+- **缓存按分支/PR 合并 ref 作用域隔离**：`pull_request` 运行只能读本 PR（`refs/pull/N/merge`）与基础分支（main）的缓存，读不到其他分支保存的同 key 缓存。每个 PR 的首次运行在 main 无缓存时必然 miss。
+- **main 常驻策略（2026-08-07 决策）**：push main 时由 `e2e-browser-cache`（browser matrix，chromium/webkit/firefox 三个实例并行）负责建立/刷新 main key；实例只装自己的浏览器、只 save 自己的 main key，无并发竞争。实测：正常 runner 单浏览器安装约 40s，缓存恢复约 5s。
+- **PR fallback 缓存指定唯一 writer**：
+  - `ms-playwright-pr-*-chromium` → 仅 `e2e-main` shard 1 保存（shard 2/3、image-chromium 只 restore）；
+  - `ms-playwright-pr-*-webkit` → 仅 `e2e-image`（image-webkit）保存；
+  - `ms-playwright-pr-*-firefox` → 仅 `e2e-image`（image-firefox）保存。
+  - save 紧跟 install 步骤之后、跑测试之前：浏览器成功下载安装即保存，不依赖测试最终是否通过；save 仅在"本次为全新安装"（main key 与 PR key 均 miss）时执行，天然规避 `actions/cache/save` 对已存在 key 报错。
+- **浏览器二进制与系统依赖职责分离**（2026-08-07 最终决策）：
+  - **browser binary download**：仅当本浏览器 main key 与 PR key 均 miss 时执行 `playwright install <browser>`（纯下载，无 `--with-deps`）；cache hit 后下载 0 次；
+  - **system dependency install/check**：每个 E2E runner 无条件执行 `playwright install-deps <browser>`（apt 包不属于缓存，每台 runner 必须独立准备；实测曾出现 apt 停滞 9 分钟，属 runner 环境波动，不因缓存命中而免除）。
+- **事件语义差异**：
+  - `pull_request`：main key → miss 后 PR key → 再 miss 才下载 → writer 保存 PR key；
+  - `workflow_dispatch`：只尝试恢复 main key，miss 时正常下载保证测试可跑，**不 restore 也不创建 `pr-*` 缓存**；
+  - `push main`：仅 seed matrix，建立/刷新 main key。
+- **Bootstrap 语义**：首次迁移 PR（main 无缓存）双 key 全 miss 属正常路径，自行安装、writer 保存 PR key 后同 PR 后续 run 命中；合并后 push main 建立 main key，之后新 PR 直接命中。cache miss 永远是正常降级路径，不得导致 CI 失败。
+- 每分片在 STEP_SUMMARY 输出：main-cache-hit、pr-cache-hit（跳过时为 n/a）、缓存恢复耗时、浏览器准备耗时（install-deps + install + save）、浏览器体积、JSON 解析的测试数与时长。
+
+## Trellis 任务归档检查
+
+- **规则**：`.trellis/tasks/` 下除 `archive/` 外不得存在其他一级目录；Trellis 任务必须归档后才能提交至仓库。
+- 由 CI `quality` job 的 `Check Trellis tasks are archived` 步骤强制：`find .trellis/tasks -mindepth 1 -maxdepth 1 -type d ! -name archive` 非空即失败（`::error::` + 非零退出）。`.trellis/tasks/` 不存在时不误报。
+- **本地约定**：进行中任务目录处于 untracked 状态，不得 `git add .trellis/tasks/`；任务完成必须经 `task.py archive` 归档（自动移动至 `archive/` 并产生 `chore(task)` 提交）后才允许随 PR 进入仓库。
+- 该检查在 `push main` 时不运行（quality job 仅 PR/dispatch 触发），main 的结构已由 PR 检查把关。
 
 ## 门禁命令（7 条，必须全量运行）
 

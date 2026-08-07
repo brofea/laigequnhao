@@ -6,15 +6,19 @@ export type { SiteConfig, JoinMethod, GroupKind, GroupStatus };
 
 /** 默认示例配置 — 部署时替换为实际机构 */
 const rawConfig: SiteConfig = {
-  name: "示例机构完整名称",
+  /** Page Title（浏览器标签页标题，见 src/main.ts） */
   title: "来个群号",
-  description: "发现并加入群聊",
-  contactEmail: "admin@example.com",
-  copyright: "© 2026 示例机构",
+  /**
+   * Favicon 图片（png/jpg/svg，以 / 开头或绝对 URL）。
+   * 默认图片放在 public/ 文件夹，如 public/favicon.svg → /favicon.svg。
+   */
+  faviconUrl: "/favicon.svg",
 
   header: {
+    /** 顶栏 Logo 图片（png/jpg/svg，以 / 开头或绝对 URL）。默认图片放在 public/ 文件夹，如 public/logo.svg → /logo.svg */
+    logoUrl: "/logo.svg",
+    /** 顶栏 Logo 旁的文字 */
     brandLabel: "来个群号",
-    brandMark: "群",
     githubUrl: "https://github.com/brofea/laigequnhao",
     githubLabel: "GitHub",
     addGroup: {
@@ -26,6 +30,13 @@ const rawConfig: SiteConfig = {
     eyebrow: "A calmer way to find your people",
     title: "找一个值得加入的群",
     description: "用清晰的标签和真实的主题，发现下一场讨论、一次漫游，或一群同频的人。",
+  },
+
+  footer: {
+    name: "示例机构完整名称",
+    description: "发现并加入群聊",
+    contactEmail: "admin@example.com",
+    copyright: "© 2026 示例机构",
   },
 
   rotation: {

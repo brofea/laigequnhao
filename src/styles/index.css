@@ -36,6 +36,8 @@
   --focus-ring: #1d58d6;
   --focus-offset: #f7f9fb;
   --shadow-raised: 5px 5px 11px rgba(160, 171, 187, 0.25), -5px -5px 11px rgba(255, 255, 255, 0.78);
+  --shadow-logo-filter: drop-shadow(5px 5px 11px rgba(160, 171, 187, 0.25))
+    drop-shadow(-5px -5px 11px rgba(255, 255, 255, 0.78));
   --shadow-hover: 6px 6px 13px rgba(160, 171, 187, 0.3), -6px -6px 13px rgba(255, 255, 255, 0.86);
   --shadow-pressed:
     inset 4px 4px 9px rgba(166, 177, 192, 0.3), inset -4px -4px 9px rgba(255, 255, 255, 0.8);
@@ -127,6 +129,8 @@ button[aria-busy="true"]:disabled {
   --focus-ring: #b3c8ff;
   --focus-offset: #1c1f26;
   --shadow-raised: 5px 5px 11px rgba(4, 6, 10, 0.32), -4px -4px 10px rgba(65, 72, 85, 0.16);
+  --shadow-logo-filter: drop-shadow(5px 5px 11px rgba(4, 6, 10, 0.32))
+    drop-shadow(-4px -4px 10px rgba(65, 72, 85, 0.16));
   --shadow-hover: 6px 6px 13px rgba(4, 6, 10, 0.38), -5px -5px 12px rgba(65, 72, 85, 0.2);
   --shadow-pressed:
     inset 4px 4px 9px rgba(6, 9, 14, 0.38), inset -4px -4px 9px rgba(77, 85, 100, 0.15);
@@ -205,22 +209,15 @@ h3 {
   align-items: center;
   gap: var(--space-3);
 }
-.app-brand__mark {
-  display: grid;
+.app-brand__logo {
+  display: block;
   width: 40px;
   height: 40px;
-  place-items: center;
-  border: 1px solid var(--border-default);
-  border-radius: 13px;
-  color: var(--accent-foreground);
-  background: var(--accent);
-  box-shadow: var(--shadow-raised);
-  font-weight: 900;
+  object-fit: contain;
+  filter: var(--shadow-logo-filter);
 }
 .app-brand strong {
   display: block;
-}
-.app-brand strong {
   font-size: 1.05rem;
 }
 .app-nav {
