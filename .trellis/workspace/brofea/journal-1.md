@@ -503,3 +503,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: 顶栏 Logo 与 Favicon 可配置化
+
+**Date**: 2026-08-07
+**Task**: 顶栏 Logo 与 Favicon 可配置化
+**Branch**: `feat/uiux1`
+
+### Summary
+
+新增 header.logoUrl 与顶层 faviconUrl 配置项（png/jpg/svg，路径以 / 或 http(s) 开头）；顶栏品牌区改为纯图片并移除 brandMark/brandLabel；main.ts 运行时写入 favicon link；新增 # 符号默认 logo.svg/favicon.svg；同步 schema 测试与前端架构 spec。typecheck/lint/176 测试/构建全通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ce80428` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

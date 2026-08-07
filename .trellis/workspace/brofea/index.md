@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
-- **Last Active**: 2026-08-06
+- **Total Sessions**: 16
+- **Last Active**: 2026-08-07
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~505 | Active |
+| `journal-1.md` | ~538 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-08-07 | 顶栏 Logo 与 Favicon 可配置化 | `ce80428` | `feat/uiux1` |
 | 15 | 2026-08-06 | 修复添加群组表单系列问题(#3 #4 #5 #20) | `95a1c4a` | `fix/uiux2` |
 | 14 | 2026-07-30 | 平台与加群方式解耦 + 压缩参数同步 + 种子脚本完善 | `b92f354`, `f06894f`, `1b4de39` | `main` |
 | 13 | 2026-07-30 | 修复群组头像上传 — R2 serve + 压缩标准化 | `b4d99d1` | `main` |
