@@ -70,9 +70,85 @@
 └── .dev.vars.example       # 本地 secrets 模板
 ```
 
+## 快速部署在 Cloudflare
+
+本节针对快速部署上线，想要贡献此仓库的开发者，请跳过本节，直接阅读下一节
+
+### 四步上线
+
+1. Fork 本仓库
+2. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)，搜索 **Workers & Pages → Create application**，连接 GitHub 并选择 Fork 后的仓库
+3. 填写 Build command 为 `pnpm build`，填写 Deploy command 为 `pnpm deploy`，关闭 `Builds for non-production branches`
+4. 点击 Deploy
+
+完成后，Workers Builds 会安装依赖、构建前端、自动创建或复用 Worker `laigequnhao`、D1 `laigequnhao-prod` 和 R2 `laigequnhao-assets-prod`，执行 migrations，并发布网站
+
+此时访问 URL 应该能看见无群聊的网站首页，但点赞和管理功能尚未启用。请继续阅读下一节配置 Runtime secret 以启用
+
+### 配置密码与密钥
+
+⚠️ 所有密码和密钥在填入后无法查看，请务必保存好原值
+
+1. 使用 [1Password 随机密码生成器](https://1password.com/zh-cn/password-generator) 生成两串至少 32 位的随机字符串密码
+
+2. 回到 **Workers & Pages** 页面，在详情页找到 **Settings → Variables and Secrets**，添加三个 Type 为 `Secret` 的变量，Variable name 和 Value 如下：
+
+- `ADMIN_PASSWORD`：自定管理员登录密码
+- `SESSION_SECRET`：随机生成字符串，更新后会使所有现有管理员会话失效
+- `LIKE_PEPPER`：随机生成字符串
+
+3. 点击 Deploy 按钮的副选项 **Save version**，复制详情页的 URL，继续阅读下一节
+
+### 验证部署
+
+按下面顺序打开网站验证：
+
+1. 首页能打开，管理页面 `https://<你的Worker域名>/admin` 可登录
+2. 打开 `https://<你的Worker域名>/api/v1/health` 可返回 `"status":"healthy"`
+3. 添加一个群，首页点赞可正常记录
+4. 打开首页的“添加新群”，提交一个纯文本群组并看到受理回执
+
+日常更新只需向连接的 `main` 分支推送代码，Workers 会自动构建部署。若要修改密码或密钥，请在 **Settings → Variables and Secrets** 中更新并点击 **Deploy** 重新构建
+
+### 为中国大陆用户解决 DNS 污染
+
+对于中国大陆用户，Cloudflare Workers 默认域名可能被 DNS 污染，导致无法访问，可以通过购买并绑定自定义域名的方式解决。具体步骤如下：
+
+1. 在第三方平台或 Cloudflare 注册一个域名
+2. 在 Cloudflare Dashboard 搜索 **Domains → Add domain → Connect a domain**，将域名添加到 Cloudflare
+3. 添加一条 DNS 记录，类型为 AAAA，名称为 `@`，内容可为 `100::`
+4. 在域名购买处将域名的 DNS 服务器修改为 Cloudflare 提供的两个服务器地址
+5. 在 **Workers & Pages → Overview → Domains → Routes → Add a domain** 中添加自定义域名，选择刚才添加的域名，并绑定到 Worker
+
+### 定制部署
+
+修改 `site.config.ts` 以适配你的机构：
+
+```ts
+const siteConfig: SiteConfig = {
+  title: "你的网站标题",
+  faviconUrl: "/favicon.svg",
+  header: {
+    logoUrl: "/logo.svg",
+    brandLabel: "你的品牌名",
+    githubUrl: "https://github.com/你的仓库",
+  },
+  footer: {
+    name: "你的机构名称",
+    contactEmail: "admin@example.com",
+  },
+  platforms: [/* 你的平台列表 */],
+  rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
+};
+```
+
+Logo 与 Favicon 图片支持 png/jpg/svg 格式，默认放在 `public/` 文件夹（如 `public/logo.svg`），配置项以 `/` 开头引用，也可填写 `http(s)://` 绝对 URL。
+
+修改后重新构建部署即可
+
 ## 快速开始
 
-本节针对本地开发环境，若要部署到 Cloudflare，请跳过本节，直接阅读下一节
+本节是针对想要贡献此仓库的开发者，快速配置开发环境的指南，如果你想将网站部署上线，请阅读上一节
 
 ### 前置条件
 
@@ -124,54 +200,6 @@ CSRF token
 当前版本没有部署 Cron 或其他定时调度；这是管理员按需调用的人工维护入口。若后续接入
 Cloudflare Cron，应继续复用同一清理服务，并保留 D1/R2 失败可重试和实际成功计数语义
 
-## 快速部署在 Cloudflare
-
-### 四步上线
-
-1. Fork 本仓库
-2. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)，搜索 **Workers & Pages → Create application**，连接 GitHub 并选择 Fork 后的仓库
-3. 填写 Build command 为 `pnpm build`，填写 Deploy command 为 `pnpm deploy`，关闭 `Builds for non-production branches`
-4. 点击 Deploy
-
-完成后，Workers Builds 会安装依赖、构建前端、自动创建或复用 Worker `laigequnhao`、D1 `laigequnhao-prod` 和 R2 `laigequnhao-assets-prod`，执行 migrations，并发布网站
-
-此时访问 URL 应该能看见无群聊的网站首页，但点赞和管理功能尚未启用。请继续阅读下一节配置 Runtime secret 以启用
-
-### 配置密码与密钥
-
-⚠️ 所有密码和密钥在填入后无法查看，请务必保存好原值
-
-1. 使用 [1Password 随机密码生成器](https://1password.com/zh-cn/password-generator) 生成两串至少 32 位的随机字符串密码
-
-2. 回到 **Workers & Pages** 页面，在详情页找到 **Settings → Variables and Secrets**，添加三个 Type 为 `Secret` 的变量，Variable name 和 Value 如下：
-
-- `ADMIN_PASSWORD`：自定管理员登录密码
-- `SESSION_SECRET`：随机生成字符串，更新后会使所有现有管理员会话失效
-- `LIKE_PEPPER`：随机生成字符串
-
-3. 点击 Deploy 按钮的副选项 **Save version**，复制详情页的 URL，继续阅读下一节
-
-### 验证部署
-
-按下面顺序打开网站验证：
-
-1. 首页能打开，管理页面 `https://<你的Worker域名>/admin` 可登录
-2. 打开 `https://<你的Worker域名>/api/v1/health` 可返回 `"status":"healthy"`
-3. 添加一个群，首页点赞可正常记录
-4. 打开首页的“添加新群”，提交一个纯文本群组并看到受理回执
-
-日常更新只需向连接的 `main` 分支推送代码，Workers 会自动构建部署。若要修改密码或密钥，请在 **Settings → Variables and Secrets** 中更新并点击 **Deploy** 重新构建
-
-### 为中国大陆用户解决 DNS 污染
-
-对于中国大陆用户，Cloudflare Workers 默认域名可能被 DNS 污染，导致无法访问，可以通过购买并绑定自定义域名的方式解决。具体步骤如下：
-
-1. 在第三方平台或 Cloudflare 注册一个域名
-2. 在 Cloudflare Dashboard 搜索 **Domains → Add domain → Connect a domain**，将域名添加到 Cloudflare
-3. 添加一条 DNS 记录，类型为 AAAA，名称为 `@`，内容可为 `100::`
-4. 在域名购买处将域名的 DNS 服务器修改为 Cloudflare 提供的两个服务器地址
-5. 在 **Workers & Pages → Overview → Domains → Routes → Add a domain** 中添加自定义域名，选择刚才添加的域名，并绑定到 Worker
-
 ## 可用命令
 
 ### 三平台图片 E2E
@@ -206,17 +234,3 @@ pnpm test:e2e --project=image-firefox tests/e2e/image-flows.spec.ts
 | ------------- | ----------------------------------------------------------------------------------------------------- |
 | `pnpm build`  | 类型检查并生成 Vite Plugin Worker/Static Assets 产物，不访问远程资源                                  |
 | `pnpm deploy` | Workers Builds Deploy command：检查/复用资源、远程 migrations、Worker deploy，不重复 build/seed/clean |
-
-## 定制部署
-
-修改 `site.config.ts` 以适配你的机构：
-
-```ts
-const siteConfig: SiteConfig = {
-  name: "你的机构名称",
-  platforms: [/* 你的平台列表 */],
-  rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
-};
-```
-
-修改后重新构建部署即可
