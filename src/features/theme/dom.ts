@@ -19,10 +19,7 @@ export function applyThemeToDocument(
   syncThemeColorMeta(documentRef, theme);
 }
 
-function syncThemeColorMeta(
-  documentRef: Document | null | undefined,
-  theme: EffectiveTheme,
-): void {
+function syncThemeColorMeta(documentRef: Document | null | undefined, theme: EffectiveTheme): void {
   if (!documentRef?.head) return;
 
   let meta = documentRef.head.querySelector<HTMLMetaElement>(

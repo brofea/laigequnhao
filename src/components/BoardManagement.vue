@@ -63,7 +63,13 @@ const confirmDeleteId = ref<string | null>(null);
 watch(
   () => props.boards.map((board) => board.id),
   () => {
+    // 板块为异步加载：首次填充前 setup 时 boards 为空，expandedId 仍为 null。
+    // 只在首次填充时自动展开首个板块；后续重新加载不打断用户手动折叠状态。
+    const firstLoad = orderedBoards.value.length === 0;
     orderedBoards.value = [...props.boards];
+    if (firstLoad && expandedId.value === null && orderedBoards.value[0]?.id) {
+      expandedId.value = orderedBoards.value[0].id;
+    }
   },
 );
 

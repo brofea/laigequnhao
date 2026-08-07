@@ -337,6 +337,8 @@ test("板块数量为零时公开端不显示自定义板块区域", async ({ pa
   // 删除全部板块（含默认自定板块）
   await gotoAdmin(page, auth);
   await page.getByRole("button", { name: "板块管理" }).click();
+  // 等待板块异步加载完成：迁移默认板块必存在，未渲染前 count() 为 0 会让删除循环空转
+  await expect(page.locator(".board-panel").first()).toBeVisible();
   let guard = 0;
   while (guard < 50) {
     guard += 1;

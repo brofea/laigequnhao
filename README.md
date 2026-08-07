@@ -4,15 +4,20 @@
     <p>为高校或大型企业等团体提供群聊发现导航网站。</p>
     <p>一个群号，连接彼此。</p>
     <p>
+        <a href="https://github.com/brofea/laigequnhao/actions/workflows/ci.yml">
+            <img src="https://github.com/brofea/laigequnhao/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status">
+        </a>
         <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">
-            <img src="https://img.shields.io/badge/license-GPL--3.0-green" />
+            <img src="https://img.shields.io/badge/license-GPL--3.0-orange" />
+        </a>
+        <a href="https://github.com/brofea/laigequnhao/releases">
+            <img src="https://img.shields.io/github/v/tag/brofea/laigequnhao" alt="Newest Tag">
         </a>
         <a href="https://github.com/brofea">
             <img src="https://img.shields.io/badge/brofea-brofea?label=GitHub&logo=github&color=purple" alt="GitHub Profile">
         </a>
     </p>
 </div>
-
 
 在大学、企业或社区中，新成员想要快速找到新群，老成员希望发掘更多新群，但群聊往往分散在聊天记录、公告栏或私下传播中，缺少统一的发现渠道
 
@@ -28,7 +33,6 @@
 项目以 [HeroUI v3](https://heroui.com/) 的组件设计为基础，结合 [Neumorphism 新拟物主义](https://zh.wikipedia.org/wiki/%E6%96%B0%E6%93%AC%E7%89%A9%E8%A8%AD%E8%A8%88) 进行 Vue 化改造
 
 强调柔和阴影、清晰层级、圆润边界与克制的动效，保持现代感的同时兼顾可读性、操作反馈和深浅色切换下的一致体验
-
 
 ## 技术栈
 
@@ -210,7 +214,7 @@ pnpm test:e2e --project=image-firefox tests/e2e/image-flows.spec.ts
 ```ts
 const siteConfig: SiteConfig = {
   name: "你的机构名称",
-  platforms: [ /* 你的平台列表 */ ],
+  platforms: [/* 你的平台列表 */],
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
 };
 ```

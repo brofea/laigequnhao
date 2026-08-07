@@ -15,8 +15,7 @@ function getOrCreateDeviceId(): string {
 }
 
 export type LikeToggleResult =
-  | { ok: true; data: { liked: boolean; likeCount: number } }
-  | { ok: false; code: string };
+  { ok: true; data: { liked: boolean; likeCount: number } } | { ok: false; code: string };
 
 export function useLikedGroups() {
   const deviceId = getOrCreateDeviceId();

@@ -280,9 +280,7 @@ describe("POST /api/v1/submissions", () => {
 
     expect(response.status).toBe(201);
 
-    const group = await env.DB.prepare(
-      "SELECT logo_r2_key FROM groups WHERE id = ?",
-    )
+    const group = await env.DB.prepare("SELECT logo_r2_key FROM groups WHERE id = ?")
       .bind(json.data.id)
       .first<{ logo_r2_key: string | null }>();
     expect(group?.logo_r2_key).toMatch(/^logo\/submission\/[0-9a-f-]+\.png$/);
@@ -303,7 +301,11 @@ describe("POST /api/v1/submissions", () => {
     )
       .bind(qrMethod!.asset_id)
       .first<{ purpose: string; status: string; content_type: string; r2_key: string }>();
-    expect(qrAsset).toMatchObject({ purpose: "qr_code", status: "ready", content_type: "image/jpeg" });
+    expect(qrAsset).toMatchObject({
+      purpose: "qr_code",
+      status: "ready",
+      content_type: "image/jpeg",
+    });
     expect(await env.R2.head(qrAsset!.r2_key)).not.toBeNull();
     expect(await env.R2.head(group!.logo_r2_key!)).not.toBeNull();
   });

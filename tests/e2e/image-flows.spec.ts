@@ -171,13 +171,13 @@ test.describe("管理端图片上传跨浏览器流程", () => {
 
     await dialog.getByRole("combobox", { name: "加群方式" }).click();
     await dialog.getByRole("option", { name: "二维码" }).click();
+    // 加群方式为多选下拉：选中后菜单保持展开，可能盖住底部操作区，先收起
+    await dialog.getByRole("combobox", { name: "加群方式" }).click();
     await dialog.getByLabel("上传二维码").setInputFiles(images.qr);
     await expect(dialog.getByRole("status")).toContainText("二维码已准备好");
     const preview = await readImagePreview(page, "已上传的二维码预览");
     await assertPreviewJpeg(preview, { maxDimension: 1024, maxBytes: 1024 * 1024 });
-    for (let index = 3; index < preview.pixels.length; index += 4) {
-      expect(preview.pixels[index]).toBe(255);
-    }
+    expect(preview.pixels.every((value, index) => index % 4 !== 3 || value === 255)).toBe(true);
     await assertQrJpeg(Uint8Array.from(preview.bytes), QR_EXPECTED_VALUE);
 
     const assetResponses: string[] = [];
@@ -251,6 +251,8 @@ test.describe("管理端图片上传跨浏览器流程", () => {
     page.on("request", onRequest);
     await dialog.getByRole("combobox", { name: "加群方式" }).click();
     await dialog.getByRole("option", { name: "二维码" }).click();
+    // 加群方式为多选下拉：选中后菜单保持展开，会盖住下方的"移除加群方式"按钮，先收起
+    await dialog.getByRole("combobox", { name: "加群方式" }).click();
     await dialog.getByLabel("上传二维码").setInputFiles(images.invalid);
     await expect(dialog.getByRole("status")).toHaveText("图像压缩失败，请考虑裁剪图像");
     await expect(dialog.getByAltText("已上传的二维码预览")).toHaveCount(0);
