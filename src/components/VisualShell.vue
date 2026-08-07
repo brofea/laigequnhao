@@ -959,12 +959,7 @@ function removeScrollListener() {
   <div class="app-shell">
     <header class="app-header">
       <RouterLink class="app-brand" to="/" aria-label="回到公开首页">
-        <img
-          class="app-brand__logo"
-          :src="siteConfig.header.logoUrl"
-          alt=""
-          aria-hidden="true"
-        />
+        <img class="app-brand__logo" :src="siteConfig.header.logoUrl" alt="" aria-hidden="true" />
         <strong>{{ siteConfig.header.brandLabel }}</strong>
       </RouterLink>
       <div class="app-header__actions">
@@ -1289,7 +1284,9 @@ function removeScrollListener() {
       </div>
       <div class="app-footer__meta">
         <span
-          ><a :href="`mailto:${siteConfig.footer.contactEmail}`">{{ siteConfig.footer.contactEmail }}</a>
+          ><a :href="`mailto:${siteConfig.footer.contactEmail}`">{{
+            siteConfig.footer.contactEmail
+          }}</a>
           · {{ siteConfig.footer.copyright }}</span
         >
         <span
