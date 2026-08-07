@@ -7,7 +7,7 @@ export type { SiteConfig, JoinMethod, GroupKind, GroupStatus };
 /** 默认示例配置 — 部署时替换为实际机构 */
 const rawConfig: SiteConfig = {
   /** Page Title（浏览器标签页标题，见 src/main.ts） */
-  title: "来个群号",
+  title: "嗨湖工，来个群号",
   /**
    * Favicon 图片（png/jpg/svg，以 / 开头或绝对 URL）。
    * 默认图片放在 public/ 文件夹，如 public/favicon.svg → /favicon.svg。
@@ -28,15 +28,15 @@ const rawConfig: SiteConfig = {
 
   hero: {
     eyebrow: "A calmer way to find your people",
-    title: "找一个值得加入的群",
+    title: "在湖工大，找一个值得加入的群",
     description: "用清晰的标签和真实的主题，发现下一场讨论、一次漫游，或一群同频的人。",
   },
 
   footer: {
-    name: "示例机构完整名称",
-    description: "发现并加入群聊",
-    contactEmail: "admin@example.com",
-    copyright: "© 2026 示例机构",
+    name: "湖北工业大学智能学院",
+    description: "群聊均为用户上传，若有侵权请联系我们删除",
+    contactEmail: "brofea@qq.com",
+    copyright: "© 2026 brofea",
   },
 
   rotation: {
@@ -50,13 +50,11 @@ const rawConfig: SiteConfig = {
 
   platforms: [
     "QQ",
+    "QQ频道",
     "微信",
-    "钉钉",
-    "飞书",
     "小红书",
     "抖音",
     "百度贴吧",
-    "QQ频道",
     "Telegram",
     "Discord",
   ],
