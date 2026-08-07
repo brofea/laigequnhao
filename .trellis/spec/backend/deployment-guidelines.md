@@ -34,7 +34,7 @@
 | Build command 未生成 Vite Plugin Wrangler 配置 | `pnpm deploy` 立即失败，提示先完成远程 Build，不创建资源 |
 | 缺少 `ADMIN_PASSWORD` 或 `SESSION_SECRET` | 基础部署继续；管理员相关 API 返回 503 `DEPENDENCY_UNAVAILABLE` |
 | 缺少 `LIKE_PEPPER` | 基础部署继续；点赞 PUT/DELETE 返回 503 `DEPENDENCY_UNAVAILABLE` |
-| 缺少 `SUBMISSION_LIMIT_PER_HOUR` | 基础部署继续；投稿限流回退到安全默认值 1 |
+| 缺少 `SUBMISSION_LIMIT_PER_HOUR` | 基础部署继续；投稿限流回退到安全默认值 10 |
 | D1/R2 缺失且构建凭据有权限 | 按确定性名称创建资源，再建立临时非敏感 binding |
 | D1/R2 已存在 | 复用资源和 binding，不重复创建 |
 | 远程 migration 失败 | 立即停止，不执行 Worker deploy；保留 migration 元数据和已创建资源 |

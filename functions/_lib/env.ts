@@ -23,9 +23,9 @@ export interface Env {
   LOGIN_MAX_ATTEMPTS?: string;
   /** 登录限流窗口（分钟，默认 15） */
   LOGIN_WINDOW_MINUTES?: string;
-  /** 单个 IP/设备每小时可提交新群组数量（默认 1） */
+  /** 单个 IP/设备每小时可提交新群组数量（默认 10） */
   SUBMISSION_LIMIT_PER_HOUR?: string;
-  /** 单个设备每 10 分钟可执行的点赞/取消点赞次数（默认 10） */
+  /** 单个设备每 10 分钟可执行的点赞/取消点赞次数（默认 30） */
   LIKE_LIMIT_PER_TEN_MINUTE?: string;
 }
 
@@ -61,18 +61,18 @@ export function getLikePepper(
   return isConfiguredSecret(env.DEV_LIKE_PEPPER) ? env.DEV_LIKE_PEPPER : env.LIKE_PEPPER;
 }
 
-/** 投稿限流数量：单个 IP/设备每小时可提交新群组数。非法配置回退默认 1。 */
+/** 投稿限流数量：单个 IP/设备每小时可提交新群组数。非法配置回退默认 10。 */
 export function getSubmissionLimitPerHour(env: Pick<Env, "SUBMISSION_LIMIT_PER_HOUR">): number {
   const raw = env.SUBMISSION_LIMIT_PER_HOUR?.trim();
-  if (!raw) return 1;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
-}
-
-/** 点赞限流数量：单个设备每 10 分钟可执行的点赞/取消点赞次数。非法配置回退默认 10。 */
-export function getLikeLimitPerTenMinute(env: Pick<Env, "LIKE_LIMIT_PER_TEN_MINUTE">): number {
-  const raw = env.LIKE_LIMIT_PER_TEN_MINUTE?.trim();
   if (!raw) return 10;
   const parsed = Number.parseInt(raw, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 10;
+}
+
+/** 点赞限流数量：单个设备每 10 分钟可执行的点赞/取消点赞次数。非法配置回退默认 30。 */
+export function getLikeLimitPerTenMinute(env: Pick<Env, "LIKE_LIMIT_PER_TEN_MINUTE">): number {
+  const raw = env.LIKE_LIMIT_PER_TEN_MINUTE?.trim();
+  if (!raw) return 30;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 30;
 }
