@@ -23,6 +23,8 @@
 
 本项目希望打造一个部署简单，操作便捷的开源网站解决上述问题，任何新手开发者都可在 **30 分钟内** 在 Cloudflare 上线一个属于自己的版本供你的团体使用
 
+若要在 Cloudflare 部署一个属于你的版本，我们准备了 [快速部署保姆级教程](docs/cloudflare-start.md)
+
 <div align="center">
     <img width="1000" alt="image" src="https://github.com/user-attachments/assets/aae89d5a-eb20-402d-be31-e02bc6abbc71" />
     <img width="1000" alt="image" src="https://github.com/user-attachments/assets/aeb0636e-56a4-481b-8b6a-39297bc8201b" />
@@ -72,83 +74,39 @@
 
 ## 快速部署在 Cloudflare
 
-本节针对快速部署上线，想要贡献此仓库的开发者，请跳过本节，直接阅读下一节
+本节针对有经验的开发者，如果你是新手请阅读 [快速部署保姆级教程](docs/cloudflare-start.md)，如果你是为了搭建本地开发环境的开发者，请跳过本节阅读下一节
 
 ### 四步上线
 
 1. Fork 本仓库
-2. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)，搜索 **Workers & Pages → Create application**，连接 GitHub 并选择 Fork 后的仓库
-3. 填写 Build command 为 `pnpm build`，填写 Deploy command 为 `pnpm deploy`，关闭 `Builds for non-production branches`
-4. 点击 Deploy
-
-完成后，Workers Builds 会安装依赖、构建前端、自动创建或复用 Worker `laigequnhao`、D1 `laigequnhao-prod` 和 R2 `laigequnhao-assets-prod`，执行 migrations，并发布网站
-
-此时访问 URL 应该能看见无群聊的网站首页，但点赞和管理功能尚未启用。请继续阅读下一节配置 Runtime secret 以启用
+2. 在 [Cloudflare Dashboard](https://dash.cloudflare.com/) **Workers & Pages** 中连接仓库
+3. 填写 Build command 为 `pnpm build`，填写 Deploy command 为 `pnpm deploy`
+4. 点击 Deploy 并启用 URL
 
 ### 配置密码与密钥
 
-⚠️ 所有密码和密钥在填入后无法查看，请务必保存好原值
+在 Worker 详情页找到 **Settings → Variables and Secrets**，添加三个 Type 为 `Secret` 的变量：
 
-1. 使用 [1Password 随机密码生成器](https://1password.com/zh-cn/password-generator) 生成两串至少 32 位的随机字符串密码
+- `ADMIN_PASSWORD`：自定义的管理员登录密码
+- `SESSION_SECRET`：至少32位的随机字符串，可用 [1Password 随机密码生成器](https://1password.com/zh-cn/password-generator) 生成，更新会使所有管理员会话失效
+- `LIKE_PEPPER`：至少32位的随机字符串，生成方式同上
 
-2. 回到 **Workers & Pages** 页面，在详情页找到 **Settings → Variables and Secrets**，添加三个 Type 为 `Secret` 的变量，Variable name 和 Value 如下：
+### 验证部署 & 定制部署
 
-- `ADMIN_PASSWORD`：自定管理员登录密码
-- `SESSION_SECRET`：随机生成字符串，更新后会使所有现有管理员会话失效
-- `LIKE_PEPPER`：随机生成字符串
+按下面顺序验证配置：
 
-3. 点击 Deploy 按钮的副选项 **Save version**，复制详情页的 URL，继续阅读下一节
+1. 首页能打开，`/admin` 管理页面可登录
+2. 访问 `https://<你的Worker域名>/api/v1/health` 返回 `"status":"healthy"`
+3. 在首页添加新群，管理页面可以看到，将群状态改为已上架后主页可以看到
+4. 群可正常点赞
 
-### 验证部署
+日常更新只需向连接的 `main` 分支推送代码，Workers 会自动构建部署，若要修改密码或密钥，可在 **Variables and Secrets** 中更新密码
 
-按下面顺序打开网站验证：
-
-1. 首页能打开，管理页面 `https://<你的Worker域名>/admin` 可登录
-2. 打开 `https://<你的Worker域名>/api/v1/health` 可返回 `"status":"healthy"`
-3. 添加一个群，首页点赞可正常记录
-4. 打开首页的“添加新群”，提交一个纯文本群组并看到受理回执
-
-日常更新只需向连接的 `main` 分支推送代码，Workers 会自动构建部署。若要修改密码或密钥，请在 **Settings → Variables and Secrets** 中更新并点击 **Deploy** 重新构建
-
-### 为中国大陆用户解决 DNS 污染
-
-对于中国大陆用户，Cloudflare Workers 默认域名可能被 DNS 污染，导致无法访问，可以通过购买并绑定自定义域名的方式解决。具体步骤如下：
-
-1. 在第三方平台或 Cloudflare 注册一个域名
-2. 在 Cloudflare Dashboard 搜索 **Domains → Add domain → Connect a domain**，将域名添加到 Cloudflare
-3. 添加一条 DNS 记录，类型为 AAAA，名称为 `@`，内容可为 `100::`
-4. 在域名购买处将域名的 DNS 服务器修改为 Cloudflare 提供的两个服务器地址
-5. 在 **Workers & Pages → Overview → Domains → Routes → Add a domain** 中添加自定义域名，选择刚才添加的域名，并绑定到 Worker
-
-### 定制部署
-
-修改 `site.config.ts` 以适配你的机构：
-
-```ts
-const siteConfig: SiteConfig = {
-  title: "你的网站标题",
-  faviconUrl: "/favicon.svg",
-  header: {
-    logoUrl: "/logo.svg",
-    brandLabel: "你的品牌名",
-    githubUrl: "https://github.com/你的仓库",
-  },
-  footer: {
-    name: "你的机构名称",
-    contactEmail: "admin@example.com",
-  },
-  platforms: [/* 你的平台列表 */],
-  rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
-};
-```
-
-Logo 与 Favicon 图片支持 png/jpg/svg 格式，默认放在 `public/` 文件夹（如 `public/logo.svg`），配置项以 `/` 开头引用，也可填写 `http(s)://` 绝对 URL。
-
-修改后重新构建部署即可
+修改 `site.config.ts` 以适配你的机构，针对中国大陆用户 `.workers.dev` 域名被 DNS 污染，参考 [快速部署保姆级教程](docs/cloudflare-start.md)
 
 ## 快速开始
 
-本节是针对想要贡献此仓库的开发者，快速配置开发环境的指南，如果你想将网站部署上线，请阅读上一节
+本节针对想要贡献此仓库的开发者，快速配置开发环境的指南，如果你想将网站部署上线，请阅读上一节
 
 ### 前置条件
 
@@ -179,7 +137,7 @@ cp .dev.vars.example .dev.vars
 pnpm db:migrate
 ```
 
-### 4. 启动全栈开发
+### 启动全栈开发
 
 ```bash
 pnpm dev
@@ -189,7 +147,7 @@ pnpm dev
 
 如需清理本地数据，运行 `pnpm clean` 并完成二次确认。它会清理本地 D1 应用数据和本地 R2 对象，但保留 schema、数据库实例和 `d1_migrations`
 
-纯前端调试使用 `pnpm vite:dev`；只调试本地 Worker 使用 `pnpm worker:dev`
+或是使用两条命令：纯前端调试使用 `pnpm vite:dev`，只调试本地 Worker 使用 `pnpm worker:dev`
 
 ### 资源清理维护
 
