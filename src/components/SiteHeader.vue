@@ -30,7 +30,12 @@ function cycleTheme() {
 <template>
   <header class="app-header">
     <RouterLink class="app-brand" to="/" aria-label="回到公开首页">
-      <span class="app-brand__mark" aria-hidden="true">{{ siteConfig.header.brandMark }}</span>
+      <img
+        class="app-brand__logo"
+        :src="siteConfig.header.logoUrl"
+        alt=""
+        aria-hidden="true"
+      />
       <strong>{{ siteConfig.header.brandLabel }}</strong>
     </RouterLink>
 

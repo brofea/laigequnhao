@@ -6,12 +6,19 @@ export type { SiteConfig, JoinMethod, GroupKind, GroupStatus };
 
 /** 默认示例配置 — 部署时替换为实际机构 */
 const rawConfig: SiteConfig = {
-  // 标签页标题
+  /** Page Title（浏览器标签页标题，见 src/main.ts） */
   title: "来个群号",
+  /**
+   * Favicon 图片（png/jpg/svg，以 / 开头或绝对 URL）。
+   * 默认图片放在 public/ 文件夹，如 public/favicon.svg → /favicon.svg。
+   */
+  faviconUrl: "/favicon.svg",
 
   header: {
+    /** 顶栏 Logo 图片（png/jpg/svg，以 / 开头或绝对 URL）。默认图片放在 public/ 文件夹，如 public/logo.svg → /logo.svg */
+    logoUrl: "/logo.svg",
+    /** 顶栏 Logo 旁的文字 */
     brandLabel: "来个群号",
-    brandMark: "群",
     githubUrl: "https://github.com/brofea/laigequnhao",
     githubLabel: "GitHub",
     addGroup: {

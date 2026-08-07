@@ -3,9 +3,10 @@ import { siteConfigSchema } from "./config";
 
 const validConfig = {
   title: "测试站点",
+  faviconUrl: "/favicon.svg",
   header: {
+    logoUrl: "/logo.svg",
     brandLabel: "测试站点",
-    brandMark: "测",
     githubUrl: "https://github.com/example/project",
     githubLabel: "GitHub",
     addGroup: { label: "添加新群" },
@@ -110,5 +111,32 @@ describe("siteConfigSchema", () => {
 
   it("拒绝空平台列表", () => {
     expect(() => siteConfigSchema.parse({ ...validConfig, platforms: [] })).toThrow();
+  });
+
+  it("拒绝非图片扩展名", () => {
+    expect(() =>
+      siteConfigSchema.parse({
+        ...validConfig,
+        faviconUrl: "/favicon.gif",
+      }),
+    ).toThrow();
+  });
+
+  it("拒绝非绝对路径的图片地址", () => {
+    expect(() =>
+      siteConfigSchema.parse({
+        ...validConfig,
+        header: { ...validConfig.header, logoUrl: "logo.svg" },
+      }),
+    ).toThrow();
+  });
+
+  it("接受绝对 URL 图片地址", () => {
+    expect(() =>
+      siteConfigSchema.parse({
+        ...validConfig,
+        faviconUrl: "https://cdn.example.com/favicon.png",
+      }),
+    ).not.toThrow();
   });
 });

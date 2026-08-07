@@ -10,9 +10,17 @@ export type HeroConfig = z.infer<typeof heroConfigSchema>;
 
 // ─── 公共顶栏配置 ───────────────────────────────────────
 // 这些字段只描述正式前端的品牌和入口，不承载业务状态。
+const imageUrlSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (v) => /^(\/|https?:\/\/)/i.test(v) && /\.(png|jpe?g|svg)$/i.test(v),
+    "图片地址需以 / 或 http(s):// 开头，且扩展名为 png/jpg/svg",
+  );
+
 export const headerConfigSchema = z.object({
+  logoUrl: imageUrlSchema,
   brandLabel: z.string().min(1),
-  brandMark: z.string().min(1),
   githubUrl: z.string().url(),
   githubLabel: z.string().min(1),
   addGroup: z.object({
@@ -85,6 +93,7 @@ export type BoardsConfig = z.infer<typeof boardsConfigSchema>;
 // ─── 站点配置 ────────────────────────────────────────────
 export const siteConfigSchema = z.object({
   title: z.string().min(1),
+  faviconUrl: imageUrlSchema,
 
   header: headerConfigSchema,
   hero: heroConfigSchema,
