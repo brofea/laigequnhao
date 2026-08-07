@@ -15,13 +15,14 @@
         </a>
     </p>
     <p>本网站基于开源项目 <a href="https://github.com/brofea/laigequnhao">来个群号</a>，一个致力于为社区新老成员发现新群，拓展社交圈的网站</p>
+    <p>支持多种平台的群号、链接、二维码多种加群加群方式，人人可分享自己的群聊</p>
 </div>
 
 
 
 <div align="center">
-    <img width="1000" alt="image" src="https://github.com/user-attachments/assets/aae89d5a-eb20-402d-be31-e02bc6abbc71" />
-    <img width="1000" alt="image" src="https://github.com/user-attachments/assets/aeb0636e-56a4-481b-8b6a-39297bc8201b" />
+    <img width="1000" alt="image" src="https://github.com/user-attachments/assets/af8bd3ed-0a2b-4485-b20e-c04c33e3f1c3" />
+    <img width="1000" alt="image" src="https://github.com/user-attachments/assets/1a559b41-1e16-43a5-acec-9664ba561a8a" />
 </div>
 
 ## 设计语言
