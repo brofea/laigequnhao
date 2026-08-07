@@ -4,8 +4,14 @@
     <p>为高校或大型企业等团体提供群聊发现导航网站。</p>
     <p>一个群号，连接彼此。</p>
     <p>
+        <a href="https://github.com/brofea/laigequnhao/actions/workflows/ci.yml">
+            <img src="https://github.com/brofea/laigequnhao/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status">
+        </a>
         <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">
-            <img src="https://img.shields.io/badge/license-GPL--3.0-green" />
+            <img src="https://img.shields.io/badge/license-GPL--3.0-orange" />
+        </a>
+        <a href="https://github.com/brofea/laigequnhao/releases">
+            <img src="https://img.shields.io/github/v/tag/brofea/laigequnhao" alt="Newest Tag">
         </a>
         <a href="https://github.com/brofea">
             <img src="https://img.shields.io/badge/brofea-brofea?label=GitHub&logo=github&color=purple" alt="GitHub Profile">
