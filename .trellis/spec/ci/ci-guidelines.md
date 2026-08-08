@@ -26,7 +26,7 @@
 - `quality`/`unit`/`workers`/`build` 相互独立、并行执行；6 个 E2E 执行单元与它们**完全并行，无 `needs` 依赖**。任一 step 失败即该 job 失败，合并检查整体失败。
 - concurrency 按 `github.ref` 分组并 `cancel-in-progress`，避免同一分支重复推送排队浪费。
 - **E2E 分片（按内容）**：首轮实测（2026-08-06）发现 `--shard` 按 spec 文件切分使 image-flows 整组失衡（44s / 78s / 210s），故拆为两个 job：`e2e-main`（轻量文件 3 分片）与 `e2e-image`（重操作 image-flows 按浏览器 project 拆 3 个并行 job）。所有执行单元运行于独立 runner，各自初始化独立 webServer 与 `.e2e-state`（API/D1/R2 状态天然隔离）；`fail-fast: false`；**`workers: 1` 固定不变**——测试共享同一 API DB，分片内多 worker 会破坏状态隔离，并行完全来自 runner 分片。
-- **报告与 artifact**：CI reporter 为 `line + html + json`（JSON 输出 `playwright-report/results.json` 供机器解析，不依赖 line 文本）；HTML 报告、分片日志、汇总（`$GITHUB_STEP_SUMMARY`）上传均 `if: always()`，artifact 命名 `playwright-report-main-<N>-of-3` / `playwright-report-image-<project>`（名称不含 `/`），保留 7 天；失败时另传 `test-results-main-<N>-of-3` / `test-results-image-<project>`。
+- **报告与 artifact**：CI reporter 为 `line + html + json`（JSON 输出 `playwright-report/results.json` 供机器解析，不依赖 line 文本）；HTML 报告、分片日志、E2E Worker 生命周期与 Wrangler 诊断日志、汇总（`$GITHUB_STEP_SUMMARY`）上传均 `if: always()`，artifact 命名 `playwright-report-main-<N>-of-3` / `playwright-report-image-<project>`（名称不含 `/`），保留 7 天；失败时另传 `test-results-main-<N>-of-3` / `test-results-image-<project>`。
 - action 版本必须固定到 major 标签（`@v4` 等），升级需单独提交并说明。
 
 ## 浏览器缓存约定
@@ -93,11 +93,11 @@ CI 覆盖全部 41 个门禁测试文件：vitest（`src/**`、`shared/**`）、
 - `R2_PUBLIC_BASE_URL` 为空时 `r2-adapter` 回退同源 `/api/v1/assets`（worker 公开服务），E2E 依赖该回退；**不要**在 E2E 环境恢复 `assets.*.invalid` 之类的不可解析域名（保留 TLD 任何机器都无法解析，会导致图片断言全挂）。
 - 本地新增必填变量时，必须同步更新 workflow heredoc；否则 CI 会在启动阶段失败并指向本文件。
 
-## 已知环境差异（Windows 本地 vs CI/Linux）
+## 已知环境差异与 E2E 诊断
 
-以下问题仅出现在 Windows 本地开发机，**CI（ubuntu-latest）不受影响**，不得为此修改产品代码或测试：
+以下问题中，除 E2E 生命周期诊断外，仅出现在 Windows 本地开发机；不得为此修改产品代码或测试：
 
-1. **E2E API 中途崩溃**：本地 `wrangler dev`（miniflare/workerd）偶发中途崩溃，导致后续测试批量 `ECONNREFUSED :8788` 失败。处理：清理残留 node 进程与 `.e2e-state` 后重跑。
+1. **E2E API 生命周期诊断**：`scripts/start-e2e-api.mjs` 会在每次运行前重建 `.e2e-state` 和 `.e2e-runtime-logs`，并将 Wrangler stdout/stderr、`WRANGLER_LOG_PATH` 诊断日志与 `lifecycle.jsonl` 保留在后者。Worker 非受控退出会以非零状态结束并指出日志目录；Playwright 正常清理所转发的 `SIGINT`/`SIGTERM` 才视为正常停止。CI 的 E2E report artifact 始终包含该目录，摘要以 `worker-lifecycle-failure` 区分基础设施退出、以 `test-failure` 区分断言失败，并将缺失 JSON 报告标为 `report-missing`。不得以增加重试掩盖 `socket hang up` 或 `ECONNREFUSED`，应先读取此目录定位根因。
 2. **`.e2e-state` 清空失败**：Windows 文件锁导致 `start-e2e-api.mjs` 的 `rmSync` 无法删除 sqlite 文件，跨轮次数据累积污染断言（如板块/群组重复）。处理：先 `Stop-Process` 杀净 `laigequnhao` 相关 node 进程再删除。
 3. **`pnpm format:check` 本地假阳性**：`core.autocrlf=true` 且仓库无 `.gitattributes`，工作区文件为 CRLF，Prettier（`endOfLine: lf`）全部报错；CI 检出为 LF，不受影响。**长期治理（未执行）**：评估新增 `.gitattributes` 强制 LF（`* text=auto eol=lf`）根治假阳性；该治理会触发全仓 renormalize，须另开任务单独评估，不得顺带制造无关行尾 diff。
 4. **`pnpm build` 脚本本体**：`scripts/build.mjs` 的 `spawn("pnpm")` 在 Windows 因 pnpm 是 shim 报 `ENOENT`；其组成命令（vue-tsc + vite build）本地已验证通过，CI 为 Linux 无此问题。

@@ -14,6 +14,7 @@ Thumbs.db
 playwright-report/
 test-results/
 .e2e-state/
+.e2e-runtime-logs/
 seed-local.sql
 .references
 output
