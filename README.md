@@ -20,6 +20,8 @@
 
 
 
+若要在 Cloudflare 部署一个属于你的版本，我们准备了 [快速部署保姆级教程](docs/cloudflare-start.md)
+
 <div align="center">
     <img width="1000" alt="image" src="https://github.com/user-attachments/assets/af8bd3ed-0a2b-4485-b20e-c04c33e3f1c3" />
     <img width="1000" alt="image" src="https://github.com/user-attachments/assets/1a559b41-1e16-43a5-acec-9664ba561a8a" />

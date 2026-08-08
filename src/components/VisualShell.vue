@@ -1054,7 +1054,6 @@ function removeScrollListener() {
             v-for="board in boards"
             :key="board.id"
             class="app-section app-section--carousel"
-            :class="{ 'app-section--empty-board': !board.enabled }"
             :aria-labelledby="`board-${board.id}`"
           >
             <div class="section-heading">

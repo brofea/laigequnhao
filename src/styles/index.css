@@ -643,9 +643,6 @@ h3 {
 .app-section--carousel .section-heading__hint {
   transform: translateY(20px);
 }
-.app-section--empty-board .section-heading__hint {
-  transform: translateY(8px);
-}
 .app-section--carousel .carousel-controls {
   top: -54px;
 }
@@ -2734,12 +2731,6 @@ h3 {
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 0 2px;
-  /* 编辑表单在对话框滚动容器内：操作区 sticky 固定于底部，避免长内容下
-         保存/取消按钮滚出视口导致点击不稳定（WebKit CI 稳定复现超时） */
-  position: sticky;
-  bottom: 0;
-  background: var(--surface-raised);
-  z-index: 1;
 }
 .admin-edit-form__footer-spacer {
   flex: 1;
@@ -3037,9 +3028,6 @@ h3 {
   }
   .app-section--carousel .section-heading__hint {
     transform: translateY(34px);
-  }
-  .app-section--empty-board .section-heading__hint {
-    transform: translateY(18px);
   }
   .app-section--carousel .carousel-controls {
     top: -66px;
