@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-0.md`
-- **Total Sessions**: 14
+- **Total Sessions**: 15
 - **Last Active**: 2026-08-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-0.md` | ~470 | Active |
+| `journal-0.md` | ~503 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 15 | 2026-08-08 | 完成群组性质配置与数据库迁移 | `419f6ec` | `feat/nature` |
 | 14 | 2026-08-08 | 修复 Dialog footer 与空板块提示 | `902d4f5` | `fix/uiux3` |
 | 13 | 2026-08-05 | 点赞按钮排版修复定稿（卡片+Diaog） | `b48ce93`, `48882ef` | `fix/button-feedback` |
 | 12 | 2026-08-05 | 完成跨平台图片压缩与 E2E 验收 | `a1119ad` | `fix/button-feedback` |
