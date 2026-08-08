@@ -1,0 +1,3 @@
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"约束 Dialog 结构、滚动和可访问性，防止视觉修复破坏既有交互契约。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"定义前端样式改动的质量门禁和回归测试要求。"}
+{"file":".trellis/tasks/08-08-plan-issues-27-28/prd.md","reason":"本任务已批准的范围、验收标准和风险说明。"}

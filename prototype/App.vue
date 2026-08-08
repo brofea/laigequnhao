@@ -502,7 +502,6 @@ function addGroupToBoard(group: DemoGroup) {
             v-for="board in demoBoards"
             :key="board.id"
             class="proto-section proto-section--carousel"
-            :class="{ 'proto-section--empty-board': !board.enabled }"
             :aria-labelledby="`board-${board.id}`"
           >
             <div class="section-heading">

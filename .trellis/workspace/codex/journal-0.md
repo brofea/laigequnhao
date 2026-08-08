@@ -435,3 +435,36 @@ T06 完成全量验收：Unit 82 / Workers 104 / E2E 68（新增 public/admin/a1
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 修复 Dialog footer 与空板块提示
+
+**Date**: 2026-08-08
+**Task**: 修复 Dialog footer 与空板块提示
+**Branch**: `fix/uiux3`
+
+### Summary
+
+完成 GitHub #27 与 #28：取消 Dialog 表单 footer 的粘底叠层，移除正式端和原型的空板块 hint 偏移，补充视觉回归测试和组件规范。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `902d4f5` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
