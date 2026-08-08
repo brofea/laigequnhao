@@ -649,9 +649,6 @@ h3 {
 .proto-section--carousel .section-heading__hint {
   transform: translateY(20px);
 }
-.proto-section--empty-board .section-heading__hint {
-  transform: translateY(8px);
-}
 .proto-section--carousel .carousel-controls {
   top: -54px;
 }
@@ -2885,9 +2882,6 @@ h3 {
   }
   .proto-section--carousel .section-heading__hint {
     transform: translateY(34px);
-  }
-  .proto-section--empty-board .section-heading__hint {
-    transform: translateY(18px);
   }
   .proto-section--carousel .carousel-controls {
     top: -66px;

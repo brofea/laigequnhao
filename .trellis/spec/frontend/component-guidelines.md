@@ -70,6 +70,17 @@ Props 是只读输入。组件应发出用户意图事件；子组件不得修�
 - `eyebrow` 是可选 prop（`eyebrow?: string`），不传则不渲染副标题元素；调用方按语义传入，禁止在 Dialog 内部硬编码样例文案。
 - **文案语言约定**（2026-08）：Dialog 大标题（`title`）使用中文，eyebrow 一律使用英文（如 "Group details"、"Edit group"、"Add group"），避免与中文标题重复；eyebrow 与标题语义重复时（如表单内部已有同义 eyebrow 的 `BoardAddGroupForm`），Dialog 层不传 eyebrow。Dialog 标题不得携带"样例/抽屉"等开发标记后缀。
 - 滚动条与圆角冲突的统一解法（issue #2，2026-08）：外壳 `.app-dialog` 负责圆角裁切（`border-radius` + `overflow: hidden`），内层 `.app-dialog__body` 独立滚动（`flex: 1; min-height: 0; overflow-y: auto`）。保留原生滚动条，不隐藏、不自定义外观。
+- **表单 footer 与滚动职责**（issues #27、#28，2026-08）：`.app-dialog__body` 是 Dialog 内容唯一的滚动容器；其内的 `.admin-edit-form__footer` 必须按 DOM 顺序处于最后一个表单 section 之后，不能使用 `position: sticky`/`fixed`、`bottom` 或额外叠层背景遮盖内容。否则 footer 会在带圆角的 Dialog 中覆盖边缘文字。空板块标题 hint 同样不得用仅针对空状态的 `transform` 补偿；让它与普通板块标题共享同一基线。
+
+  ```css
+  /* 正确：footer 随 .app-dialog__body 的内容自然滚动。 */
+  .admin-edit-form__footer {
+    display: flex;
+    justify-content: flex-end;
+  }
+  ```
+
+  对此类视觉回归，`src/styles/visual-regressions.spec.ts` 必须断言旧的 footer 叠层属性和空板块专用 class/style 均不存在；正式端与独立 `prototype/` 的对应空板块规则保持一致。
 
 点赞是明确的非乐观例外：响应返回前不改变数字或 `aria-pressed`，慢请求只在 150ms 后把数字位置替换为 Spinner，成功或失败后再更新/保留状态并显示对应 Toast。
 
