@@ -51,7 +51,7 @@ export function toDemoGroup(
     id: group.id,
     title: group.title,
     platform: group.platform,
-    kind: group.kind === "official" ? "工具" : "兴趣",
+    kind: group.kind,
     description: group.description,
     tags: group.tags,
     likes: local?.likes ?? group.likeCount,

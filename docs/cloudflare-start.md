@@ -141,6 +141,7 @@ const siteConfig: SiteConfig = {
     contactEmail: "admin@example.com",
   },
   platforms: [/* 你的平台列表 */],
+  groupKinds: [/* 你的群组性质候选项 */],
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
 };
 ```

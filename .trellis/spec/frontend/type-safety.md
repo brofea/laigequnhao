@@ -4,10 +4,11 @@
 
 使用严格模式 TypeScript 和 `vue-tsc`。不得为了让失败的功能通过编译而降低严格程度。Vite 转译不能代替类型检查门禁。
 
-领域判别字段使用封闭联合类型：
+业务状态和加群方式等领域判别字段使用封闭联合类型；群组性质是由共享 schema
+校验的开放文本（非空、非纯空白且不超过 50 个字符），不应再假定固定枚举：
 
 ```ts
-type GroupKind = "official" | "interest";
+type GroupKind = string; // groupKindSchema 负责运行时长度与空白校验
 type GroupStatus = "pending" | "published" | "rejected" | "delisted";
 type JoinMethodType = "group_number" | "qr_code" | "url";
 ```

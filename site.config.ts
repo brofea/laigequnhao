@@ -48,6 +48,9 @@ const rawConfig: SiteConfig = {
     timezone: "Asia/Shanghai",
   },
 
+  /** 群组性质候选项；管理表单从这里生成选择项，API 仍允许其他文本值。 */
+  groupKinds: ["官方", "非官方", "社区", "活动", "关系"],
+
   platforms: [
     "QQ",
     "微信",

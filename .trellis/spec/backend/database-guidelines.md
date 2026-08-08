@@ -154,3 +154,60 @@ delete_pending/delete_failed → (人工 cleanup 重试) → D1 行移除 / 保�
 - 每张群聊卡片产生 N+1 查询
 - 没有不变量测试就假设缓存的 `like_count` 始终正确
 - 本地测试访问生产 D1
+
+## 场景：群组性质文本化与可重复部署迁移
+
+### 1. Scope / Trigger
+
+- 触发：群组性质从固定枚举改为站点配置候选项，并需要将旧 D1 数据迁移为中文文本。
+- 适用范围：`site.config.ts`、`groupKindSchema`、群组 API/D1 `groups.kind`、`migrations/0005_group_kind_text.sql` 和生产部署。
+- 目标：前端只提供配置候选项，API/D1 原样保存合规文本；旧库升级不丢失群组或任何子表关联。
+
+### 2. Signatures
+
+- `siteConfig.groupKinds: string[]`：至少一项、每项非空且不重复；默认候选项为“官方、非官方、社区、活动、关系”。
+- `groupKindSchema: z.string().min(1).max(50)`：拒绝空白文本，但不对合法值执行 `trim` 或枚举映射。
+- `migrations/0005_group_kind_text.sql`：将 `groups.kind` 变为 `TEXT NOT NULL`，旧值 `official → 官方`、`interest → 兴趣`。
+- `pnpm deploy`：先执行 `wrangler d1 migrations apply <database> --remote`，成功后才执行 `wrangler deploy`。
+
+### 3. Contracts
+
+- 配置只决定浏览器 `Select` 的选项；后端不把 `kind` 限制为当前站点配置，以便保留历史值和受信任管理工具的自定义文本。
+- `kind` 在创建/更新请求、公开/管理员 DTO、repository 绑定和 D1 行之间保持同一文本值；API 不得静默改写中文或空白边界。
+- D1 migration 依赖 `d1_migrations`：全新数据库由完整 migration 链建表；旧 `0001`–`0004` 数据库只执行 `0005` 并重建/迁移；已记录 `0005` 且结构正确的数据库跳过，不触碰表或数据。
+- 表重建必须显式复制 `groups` 全部现有列，并保留 `group_tags`、`join_methods`、`submission_details`、`likes`、`board_groups` 行、索引和外键；若 D1 事务内 `PRAGMA foreign_keys = OFF` 不生效，先备份/清空子表，交换父表后恢复子表。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+| --- | --- |
+| `groupKinds` 为空、含空项或重复项 | 配置 schema 解析失败，部署构建停止 |
+| `kind` 为空白或超过 50 个字符 | 共享 Zod 请求/响应校验失败 |
+| 旧值为 `official` / `interest` | migration 分别写入“官方”/“兴趣” |
+| 旧库子表或板块关联存在 | migration 保留关联，`PRAGMA foreign_key_check` 无错误 |
+| `0005` 已记录 | Wrangler 跳过 migration，数据库内容不变 |
+| 远程 migration 失败 | `pnpm deploy` 非零退出，不执行 Worker 发布 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：新增“开发者社区”候选后，表单可选择并保存；公开 DTO 和卡片继续显示“开发者社区”。
+- Base：旧库升级后旧值变为中文，标签、加群方式、点赞和板块成员仍可按原 ID 查询。
+- Bad：在适配器中把任意性质映射为“兴趣”，或每次部署都重建已经记录为最新的 `groups` 表。
+
+### 6. Tests Required
+
+- 配置/契约单测：断言五项默认值、空/重复拒绝、中文/自定义值接受以及原字符串保留。
+- Worker migration：从空库完整 apply、从 `0001`–`0004` 插入旧记录后升级、再次 apply 不变；断言旧值映射、全部列、五类子表、板块关联、FK 检查和新中文插入。
+- Worker API：创建/更新/公开投稿的 `kind` 请求、D1 行和响应值一致。
+- 部署检查：断言 `scripts/deploy.mjs` 中远程 migration 在 `wrangler deploy` 之前，migration 失败阻断发布。
+
+### 7. Wrong vs Correct
+
+```sql
+-- Wrong：假设关闭外键在每个 D1 migration 事务中都生效，直接 DROP 父表。
+DROP TABLE groups;
+
+-- Correct：迁移前备份/清空子表，交换父表后按原列恢复并执行 FK 检查。
+CREATE TABLE _groups_child_backup_0005_group_tags AS SELECT id, group_id, tag, sort_order FROM group_tags;
+-- ...重建 groups、恢复子表、删除备份表、验证 PRAGMA foreign_key_check...
+```

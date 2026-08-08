@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/shared/browser/image-compression", () => mocks);
 
 import AdminEditForm from "./AdminEditForm.vue";
+import siteConfig from "../../site.config";
 
 const group: DemoGroup = {
   id: "compression-failure-group",
@@ -82,6 +83,22 @@ describe("AdminEditForm 图片压缩失败反馈", () => {
     await wrapper.get("form").trigger("submit");
     const save = wrapper.emitted("save")?.[0];
     expect(save?.[1]).toEqual({ logo: undefined, qr: [] });
+    wrapper.unmount();
+  });
+});
+
+describe("AdminEditForm 群组性质候选项", () => {
+  it("只渲染站点配置中的 Select 选项，不提供自由输入", async () => {
+    const wrapper = mount(AdminEditForm, { props: { group } });
+    const kindTrigger = wrapper.get('button[aria-label="群组性质"]');
+    await kindTrigger.trigger("click");
+    const options = wrapper.findAll(".app-select__option").map((option) => option.text());
+    expect(options).toEqual(expect.arrayContaining(siteConfig.groupKinds));
+    expect(
+      wrapper
+        .findAll('input[type="text"]')
+        .some((input) => input.attributes("placeholder")?.includes("性质")),
+    ).toBe(false);
     wrapper.unmount();
   });
 });

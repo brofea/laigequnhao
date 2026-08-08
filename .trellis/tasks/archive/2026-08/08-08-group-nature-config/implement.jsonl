@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"定义 Worker、共享 Zod 契约与 D1 变更的后端边界。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"规定 D1 有序 migration、表重建、外键、索引与升级测试要求。"}
+{"file":".trellis/spec/backend/deployment-guidelines.md","reason":"规定 pnpm deploy 先应用远程 migration、失败时阻断 Worker 发布的部署时序。"}
+{"file":".trellis/spec/backend/api-guidelines.md","reason":"规定公开与管理群组 DTO、请求校验和兼容性边界。"}
+{"file":".trellis/spec/frontend/index.md","reason":"定义 Vue 前端分层和测试工具。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"约束表单组件、可访问性和用户交互。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"约束共享领域类型和运行时 Zod 校验边界。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"指导配置、API、数据库与展示层之间的性质数据流一致性。"}

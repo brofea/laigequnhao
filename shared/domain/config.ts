@@ -100,6 +100,10 @@ export const siteConfigSchema = z.object({
   footer: footerConfigSchema,
   rotation: rotationConfigSchema,
   boards: boardsConfigSchema,
+  groupKinds: z
+    .array(z.string().trim().min(1, "群组性质不能为空").max(50, "群组性质不能超过 50 个字符"))
+    .min(1, "至少配置一个群组性质")
+    .refine((kinds) => new Set(kinds).size === kinds.length, "群组性质不可重复"),
   platforms: z
     .array(z.string().min(1))
     .min(1)

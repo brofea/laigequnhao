@@ -207,7 +207,15 @@ const DESCRIPTIONS = [
   "日常水群，快乐摸鱼。",
   "不定期举办线下活动，欢迎参与。",
 ];
-const KINDS = ["official", "interest"];
+// 与 site.config.ts 的默认候选项保持一致；API 仍允许历史或自定义文本性质。
+const KINDS = ["官方", "非官方", "社区", "活动", "关系"];
+const TITLE_TEMPLATE_GROUP = {
+  官方: "official",
+  非官方: "interest",
+  社区: "interest",
+  活动: "interest",
+  关系: "interest",
+};
 
 // ─── 图片压缩（logo 单次 PNG；QR 固定 JPEG quality ladder）────────
 async function compressToSize(buf, w, h, opts) {
@@ -493,7 +501,7 @@ function generateSQL(groups, { logos, qrCodes }) {
     const kind = pick(KINDS);
     const rotKey = uuid();
 
-    let title = pick(kind === "official" ? TITLES.official : TITLES.interest)
+    let title = pick(TITLES[TITLE_TEMPLATE_GROUP[kind]])
       .replace("{平台}", platform)
       .replace("{院系}", pick(["计算机", "电子", "机械", "经管", "外语", "数学"]));
     const tags = pickN(TAG_POOL, 0, 5);

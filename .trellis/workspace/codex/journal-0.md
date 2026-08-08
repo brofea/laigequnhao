@@ -468,3 +468,36 @@ T06 完成全量验收：Unit 82 / Workers 104 / E2E 68（新增 public/admin/a1
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 完成群组性质配置与数据库迁移
+
+**Date**: 2026-08-08
+**Task**: 完成群组性质配置与数据库迁移
+**Branch**: `feat/nature`
+
+### Summary
+
+将群组性质改为站点配置候选项和可持久化中文文本，新增 D1 迁移保留旧数据与子表关联，seed 同步五项默认性质；完成测试、类型检查、lint、格式检查和构建，并归档 Trellis 任务。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `419f6ec` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

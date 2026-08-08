@@ -289,7 +289,7 @@ function buildAdminOrderBy(
     case "title":
       return `g.title COLLATE NOCASE ${sortDir}, g.id ${sortDir}`;
     case "kind":
-      return `CASE g.kind WHEN 'official' THEN 0 ELSE 1 END ${sortDir}, g.id ${sortDir}`;
+      return `g.kind COLLATE NOCASE ${sortDir}, g.id ${sortDir}`;
     case "status":
       return `CASE g.status WHEN 'pending' THEN 0 WHEN 'published' THEN 1 WHEN 'rejected' THEN 2 WHEN 'delisted' THEN 3 END ${sortDir}, g.id ${sortDir}`;
     case "platform":

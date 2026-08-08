@@ -1,6 +1,9 @@
+import type { GroupKind } from "@shared/domain";
+
 export type AvatarState = "ready" | "missing" | "error";
 export type GroupStatus = "published" | "delisted" | "pending" | "rejected";
 export type JoinMethodType = "link" | "qr" | "number";
+export type { GroupKind } from "@shared/domain";
 
 export const groupStatusLabels: Record<GroupStatus, string> = {
   published: "已发布",
@@ -33,7 +36,7 @@ export interface DemoGroup {
   id: string;
   title: string;
   platform: string;
-  kind: "兴趣" | "工具" | "同城";
+  kind: GroupKind;
   description: string;
   tags: string[];
   likes: number;

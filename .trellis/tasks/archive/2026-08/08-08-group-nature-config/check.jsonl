@@ -1,0 +1,6 @@
+{"file":".trellis/spec/guides/testing-strategy.md","reason":"要求配置、契约、Worker migration 与端到端数据流的分层验证。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核验表重建 migration 的列、索引、外键和旧库升级安全性。"}
+{"file":".trellis/spec/backend/deployment-guidelines.md","reason":"核验部署时远程 migration 先于 Worker 发布且已迁移数据库不重复改表。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"定义 Worker 变更的质量门禁。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"定义前端配置与表单变更的质量门禁。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核验同一性质值在配置、契约、存储与展示间不被改写。"}
