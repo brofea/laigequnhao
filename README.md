@@ -231,11 +231,18 @@ Finish：提交、归档 Task、记录会话
 此仓库已经为 Codex、OpenCode 以及所有适配 `.agents` 和 `.claude` 目录的 Agent 配置了 Trellis Skill 以及脚本插件 Hook 等内容，你可以直接使用 Trellis 开始开发，参考提示词如下：
 
 1. Start：`/trellis:start` 或 `读取项目上下文和 Spec`
-2. Plan：`创建一个任务，形成 PRD，（这里写你的需求），如果还有不明确的和我 Brainstorm`
+2. Plan：`创建一个任务，形成 PRD，（这里写你的需求），有不明确的地方和我 Brainstorm`
 3. Execute：`/trellis:continue` 或 `开始实现`
 4. Check：`/trellis:continue` 或 `开始验收`
 5. Finish：`/trellis:finish` 或 `归档并结束任务`
 
 ⚠️ 此仓库 CI 要求所有无未归档任务文件夹，请归档所有任务后再提交 PR
+
+此外搭配 [GitHub CLI](https://cli.github.com/) 使用效果更佳，例如要解决某个 Issue，Plan 提示词可以是：
+
+```
+执行 gh issue view <Issue 编号> -c 了解开发任务
+创建一个任务，形成 PRD，不明确的地方和我 Brainstorm
+```
 
 更多信息请参考 [Trellis 官方中文文档](https://docs.trytrellis.app/zh)
