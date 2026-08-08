@@ -10,6 +10,7 @@ export default tseslint.config(
       ".wrangler",
       "node_modules",
       "functions",
+      "logs",
       ".opencode",
       ".trellis",
       ".codex",

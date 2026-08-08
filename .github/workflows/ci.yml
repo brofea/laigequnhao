@@ -242,7 +242,7 @@ jobs:
             echo "| browser-prep-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.browser-prep-start.outputs.ts }} )) |"
             echo "| browser-prep-total-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.cache-restore-start.outputs.ts }} )) |"
             echo "| browsers-size | $(du -sh ~/.cache/ms-playwright 2>/dev/null | cut -f1 || echo n/a) |"
-            node -e "const fs=require('fs');const p='./playwright-report/results.json';if(!fs.existsSync(p)){console.log('| json-report | missing |');process.exit(0)}const r=JSON.parse(fs.readFileSync(p,'utf8'));const s=r.stats||{};for(const [k,v] of Object.entries({passed:s.expected,failed:s.unexpected,skipped:s.skipped,duration_ms:s.duration}))console.log('| '+k+' | '+(v??'n/a')+' |')"
+            node -e "const fs=require('fs');const report='./playwright-report/results.json';const lifecycle='./.e2e-runtime-logs/lifecycle.jsonl';let failed;let reportMissing=false;if(fs.existsSync(report)){const s=JSON.parse(fs.readFileSync(report,'utf8')).stats||{};failed=s.unexpected;for(const [k,v] of Object.entries({passed:s.expected,failed,skipped:s.skipped,duration_ms:s.duration}))console.log('| '+k+' | '+(v??'n/a')+' |')}else{reportMissing=true;console.log('| json-report | missing |')}if(!fs.existsSync(lifecycle)){console.log('| worker-lifecycle | missing |');process.exit(0)}const records=fs.readFileSync(lifecycle,'utf8').trim().split('\\n').filter(Boolean).map(JSON.parse);const last=records.at(-1)||{};const lifecycleFailure=/\\.failed$/.test(last.event||'');console.log('| worker-lifecycle | '+(last.event||'unknown')+' |');console.log('| worker-log-path | '+(last.logPath||'n/a')+' |');console.log('| failure-classification | '+(lifecycleFailure?'worker-lifecycle-failure':reportMissing?'report-missing':failed?'test-failure':'passed')+' |')"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -254,6 +254,7 @@ jobs:
           path: |
             playwright-report/
             playwright-main-${{ matrix.shard }}.log
+            .e2e-runtime-logs/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -382,7 +383,7 @@ jobs:
             echo "| browser-prep-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.browser-prep-start.outputs.ts }} )) |"
             echo "| browser-prep-total-seconds | $(( ${{ steps.browser-prep-end.outputs.ts }} - ${{ steps.cache-restore-start.outputs.ts }} )) |"
             echo "| browsers-size | $(du -sh ~/.cache/ms-playwright 2>/dev/null | cut -f1 || echo n/a) |"
-            node -e "const fs=require('fs');const p='./playwright-report/results.json';if(!fs.existsSync(p)){console.log('| json-report | missing |');process.exit(0)}const r=JSON.parse(fs.readFileSync(p,'utf8'));const s=r.stats||{};for(const [k,v] of Object.entries({passed:s.expected,failed:s.unexpected,skipped:s.skipped,duration_ms:s.duration}))console.log('| '+k+' | '+(v??'n/a')+' |')"
+            node -e "const fs=require('fs');const report='./playwright-report/results.json';const lifecycle='./.e2e-runtime-logs/lifecycle.jsonl';let failed;let reportMissing=false;if(fs.existsSync(report)){const s=JSON.parse(fs.readFileSync(report,'utf8')).stats||{};failed=s.unexpected;for(const [k,v] of Object.entries({passed:s.expected,failed,skipped:s.skipped,duration_ms:s.duration}))console.log('| '+k+' | '+(v??'n/a')+' |')}else{reportMissing=true;console.log('| json-report | missing |')}if(!fs.existsSync(lifecycle)){console.log('| worker-lifecycle | missing |');process.exit(0)}const records=fs.readFileSync(lifecycle,'utf8').trim().split('\\n').filter(Boolean).map(JSON.parse);const last=records.at(-1)||{};const lifecycleFailure=/\\.failed$/.test(last.event||'');console.log('| worker-lifecycle | '+(last.event||'unknown')+' |');console.log('| worker-log-path | '+(last.logPath||'n/a')+' |');console.log('| failure-classification | '+(lifecycleFailure?'worker-lifecycle-failure':reportMissing?'report-missing':failed?'test-failure':'passed')+' |')"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -394,6 +395,7 @@ jobs:
           path: |
             playwright-report/
             playwright-image-${{ matrix.project }}.log
+            .e2e-runtime-logs/
           if-no-files-found: ignore
           retention-days: 7
 
