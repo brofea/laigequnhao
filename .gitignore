@@ -18,3 +18,4 @@ seed-local.sql
 .references
 output
 .playwright-cli
+.logs
