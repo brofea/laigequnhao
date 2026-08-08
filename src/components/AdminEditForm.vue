@@ -98,11 +98,10 @@ const activeUploadKey = ref<string | null>(null);
 const submissionLimitPerHour = ref<number | null>(null);
 const logoR2Key = ref<string | null>(props.group.logoR2Key ?? null);
 const avatarInput = ref<HTMLInputElement | null>(null);
-const kindOptions = [
-  { value: "兴趣", label: "兴趣" },
-  { value: "工具", label: "工具" },
-  { value: "同城", label: "同城" },
-];
+const kindOptions = siteConfig.groupKinds.map((kind) => ({
+  value: kind,
+  label: kind,
+}));
 const statusOptions = [
   { value: "published", label: "已发布" },
   { value: "delisted", label: "已下架" },

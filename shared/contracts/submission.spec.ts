@@ -17,6 +17,15 @@ describe("submissionRequestSchema · 群号 / 链接 / 二维码 refine", () => 
     expect(() => submissionRequestSchema.parse(validBody)).not.toThrow();
   });
 
+  it("接受中文自定义性质投稿", () => {
+    expect(submissionRequestSchema.parse({ ...validBody, kind: "社区" }).kind).toBe("社区");
+  });
+
+  it("拒绝空或超长性质投稿", () => {
+    expect(() => submissionRequestSchema.parse({ ...validBody, kind: "   " })).toThrow();
+    expect(() => submissionRequestSchema.parse({ ...validBody, kind: "x".repeat(51) })).toThrow();
+  });
+
   it("接受仅 HTTPS 链接提交", () => {
     expect(() =>
       submissionRequestSchema.parse({

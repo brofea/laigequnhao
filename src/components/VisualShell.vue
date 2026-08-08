@@ -38,6 +38,8 @@ import { groupStatusLabels, type DemoBoard, type DemoGroup } from "../data/fixtu
 import { useTheme, type ThemePreference } from "@/features/theme/useTheme";
 import { usePendingActions } from "@/shared/composables/usePendingActions";
 
+const defaultGroupKind = siteConfig.groupKinds[0] ?? "官方";
+
 type ViewName = "home" | "admin";
 type AdminTab = "groups" | "boards" | "stats";
 type AdminSortField = "title" | "status" | "tags" | "kind" | "likes" | "platform";
@@ -386,7 +388,7 @@ function openPublicSubmitDialog() {
     id: "public-submit-sample",
     title: "",
     platform: "微信",
-    kind: "兴趣",
+    kind: defaultGroupKind,
     description: "",
     tags: [],
     likes: 0,
@@ -410,7 +412,7 @@ function openAdminCreateDialog() {
     id: `admin-create-${String(Date.now())}`,
     title: "",
     platform: "",
-    kind: "兴趣",
+    kind: defaultGroupKind,
     description: "",
     tags: [],
     likes: 0,
@@ -434,7 +436,7 @@ async function submitPublicGroup(next: DemoGroup, pendingImages: PendingAdminIma
     const result = await submitGroup(
       {
         title: next.title,
-        kind: next.kind === "工具" ? "official" : "interest",
+        kind: next.kind,
         platform: next.platform,
         groupNumber: groupNumber || undefined,
         url: url || undefined,
@@ -656,7 +658,7 @@ function toAdminPayload(
   const payload: {
     title: string;
     description: string;
-    kind: "official" | "interest";
+    kind: string;
     platform: string;
     status: import("@shared/domain").GroupStatus;
     tags: string[];
@@ -666,7 +668,7 @@ function toAdminPayload(
   } = {
     title: group.title.trim(),
     description: group.description,
-    kind: group.kind === "工具" ? "official" : "interest",
+    kind: group.kind,
     platform: group.platform,
     status: group.status,
     tags: group.tags,

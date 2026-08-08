@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { siteConfigSchema } from "./config";
+import siteConfig from "../../site.config";
 
 const validConfig = {
   title: "测试站点",
@@ -24,10 +25,15 @@ const validConfig = {
   },
   rotation: { timezone: "Asia/Shanghai", times: ["04:01", "16:01"] },
   boards: { timezone: "Asia/Shanghai" },
+  groupKinds: ["官方", "社区"],
   platforms: ["QQ"],
 };
 
 describe("siteConfigSchema", () => {
+  it("默认站点配置提供五项群组性质候选", () => {
+    expect(siteConfig.groupKinds).toEqual(["官方", "非官方", "社区", "活动", "关系"]);
+  });
+
   it("接受合法配置", () => {
     expect(() => siteConfigSchema.parse(validConfig)).not.toThrow();
   });
@@ -111,6 +117,20 @@ describe("siteConfigSchema", () => {
 
   it("拒绝空平台列表", () => {
     expect(() => siteConfigSchema.parse({ ...validConfig, platforms: [] })).toThrow();
+  });
+
+  it("接受自定义群组性质候选项", () => {
+    expect(
+      siteConfigSchema.parse({ ...validConfig, groupKinds: ["官方", "兴趣", "自定义性质"] }),
+    ).toMatchObject({ groupKinds: ["官方", "兴趣", "自定义性质"] });
+  });
+
+  it("拒绝空、重复的群组性质候选项", () => {
+    expect(() => siteConfigSchema.parse({ ...validConfig, groupKinds: [] })).toThrow();
+    expect(() => siteConfigSchema.parse({ ...validConfig, groupKinds: ["官方", ""] })).toThrow();
+    expect(() =>
+      siteConfigSchema.parse({ ...validConfig, groupKinds: ["官方", "官方"] }),
+    ).toThrow();
   });
 
   it("拒绝非图片扩展名", () => {

@@ -27,6 +27,23 @@ describe("publicGroupDtoSchema", () => {
     expect(() => publicGroupDtoSchema.parse(validPublicGroup)).not.toThrow();
   });
 
+  it("保留性质文本原样，不自动 trim", () => {
+    const parsed = publicGroupDtoSchema.parse({ ...validPublicGroup, kind: " 社区 " });
+    expect(parsed.kind).toBe(" 社区 ");
+  });
+
+  it("接受中文自定义性质并保留原值", () => {
+    const parsed = publicGroupDtoSchema.parse({ ...validPublicGroup, kind: "开发者社区" });
+    expect(parsed.kind).toBe("开发者社区");
+  });
+
+  it("拒绝空或超长性质", () => {
+    expect(() => publicGroupDtoSchema.parse({ ...validPublicGroup, kind: "   " })).toThrow();
+    expect(() =>
+      publicGroupDtoSchema.parse({ ...validPublicGroup, kind: "x".repeat(51) }),
+    ).toThrow();
+  });
+
   it("拒绝包含 submissionContact 的 DTO", () => {
     expect(() =>
       publicGroupDtoSchema.parse({ ...validPublicGroup, submissionContact: "test@qq.com" }),
@@ -103,6 +120,10 @@ const validCreateInput = {
 describe("groupCreateSchema", () => {
   it("接受完整的创建输入", () => {
     expect(() => groupCreateSchema.parse(validCreateInput)).not.toThrow();
+  });
+
+  it("接受中文自定义性质", () => {
+    expect(groupCreateSchema.parse({ ...validCreateInput, kind: "活动" }).kind).toBe("活动");
   });
 
   it("拒绝空标题", () => {
@@ -230,6 +251,10 @@ describe("groupUpdateSchema", () => {
         version: 2,
       }),
     ).not.toThrow();
+  });
+
+  it("接受中文自定义性质更新", () => {
+    expect(groupUpdateSchema.parse({ version: 2, kind: "关系" }).kind).toBe("关系");
   });
 
   it("接受空平台更新（平台可为空）", () => {
