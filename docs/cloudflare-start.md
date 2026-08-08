@@ -31,7 +31,6 @@
 
 <img width="610" alt="image" src="https://github.com/user-attachments/assets/dec3c10a-9e2d-413c-ac83-85ff79667698" />
 
-
 Build command 填写：
 
 ```bash
