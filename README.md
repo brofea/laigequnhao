@@ -192,3 +192,50 @@ pnpm test:e2e --project=image-firefox tests/e2e/image-flows.spec.ts
 | ------------- | ----------------------------------------------------------------------------------------------------- |
 | `pnpm build`  | 类型检查并生成 Vite Plugin Worker/Static Assets 产物，不访问远程资源                                  |
 | `pnpm deploy` | Workers Builds Deploy command：检查/复用资源、远程 migrations、Worker deploy，不重复 build/seed/clean |
+
+## Trellis 工作流
+
+本项目使用 [Trellis](https://github.com/mindfold-ai/Trellis) Harness 框架来协调 Agent 之间、开发者之间以及 Agent 和开发者之间的交互，具体使用方式如下：
+
+### Task 概念
+
+Trellis 将一次开发工作抽象为一个 Task，一个 Task 的工作流程如下
+
+```
+Start：读取项目上下文和 Spec
+        ↓
+Plan：澄清需求，形成 Task 和 PRD
+        ↓
+Execute：按 PRD 和 Spec 实现
+        ↓
+Check：验证代码、测试和规范
+        ↓
+Finish：提交、归档 Task、记录会话
+```
+
+项目的 `.trellis` 文件夹中是 Trellis 的核心工作文件夹，最主要的目录如下
+
+```
+.trellis/
+├── spec/                          # 项目规范
+└── tasks/                         # 任务目录
+    ├── {MM-DD-task-name}/         # 活跃任务
+    │   ├── prd.md                 # 需求文档
+    │   ├── design.md              # 复杂任务的技术设计
+    │   └── implement.md           # 复杂任务的实施计划
+    └── archive/                   # 已经结束的任务归档
+```
+
+### 使用 Trellis 开发
+
+此仓库已经为 Codex、OpenCode 以及所有适配 `.agents` 和 `.claude` 目录的 Agent 配置了 Trellis Skill 以及脚本插件 Hook 等内容，你可以直接使用 Trellis 开始开发，参考提示词如下：
+
+1. Start：`/trellis:start` 或 `读取项目上下文和 Spec`
+2. Plan：`创建一个任务，形成 PRD，（这里写你的需求），如果还有不明确的和我 Brainstorm`
+3. Execute：`/trellis:continue` 或 `开始实现`
+4. Check：`/trellis:continue` 或 `开始验收`
+5. Finish：`/trellis:finish` 或 `归档并结束任务`
+
+⚠️ 此仓库 CI 要求所有无未归档任务文件夹，请归档所有任务后再提交 PR
+
+更多信息请参考 [Trellis 官方中文文档](https://docs.trytrellis.app/zh)
